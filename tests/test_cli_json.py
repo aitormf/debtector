@@ -8,10 +8,13 @@ from pathlib import Path
 import pytest
 
 from codeindex.cli import (
+    _HOOK_MARKER,
     _codeindex_dir,
+    _find_git_hooks,
     _get_store,
     cmd_imports,
     cmd_index,
+    cmd_install_hook,
     cmd_install_skill,
     cmd_search,
     cmd_status,
@@ -253,3 +256,115 @@ class TestInstallSkill:
         assert "installed" in out
         assert "dest" in out
         assert len(out["installed"]) >= 2
+
+
+# ──────────────────────────────────────────────
+# install-hook
+# ──────────────────────────────────────────────
+
+
+def _fake_git_repo(base: Path) -> Path:
+    """Create a minimal .git/hooks/ structure and return the hooks dir."""
+    hooks = base / ".git" / "hooks"
+    hooks.mkdir(parents=True)
+    return hooks
+
+
+class TestFindGitHooks:
+    """_find_git_hooks walks up to find .git/hooks/."""
+
+    def test_finds_in_current_dir(self, tmp_path: Path) -> None:
+        _fake_git_repo(tmp_path)
+        result = _find_git_hooks(str(tmp_path))
+        assert result is not None
+        assert result.name == "hooks"
+
+    def test_finds_in_parent(self, tmp_path: Path) -> None:
+        _fake_git_repo(tmp_path)
+        subdir = tmp_path / "src" / "deep"
+        subdir.mkdir(parents=True)
+        result = _find_git_hooks(str(subdir))
+        assert result is not None
+
+    def test_returns_none_when_no_git(self, tmp_path: Path) -> None:
+        result = _find_git_hooks(str(tmp_path))
+        assert result is None
+
+
+class TestInstallHook:
+    """cmd_install_hook installs a pre-commit hook."""
+
+    def test_creates_hook_file(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        _fake_git_repo(tmp_path)
+        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
+        hook = tmp_path / ".git" / "hooks" / "pre-commit"
+        assert hook.exists()
+
+    def test_hook_contains_marker(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        _fake_git_repo(tmp_path)
+        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
+        hook = tmp_path / ".git" / "hooks" / "pre-commit"
+        assert _HOOK_MARKER in hook.read_text(encoding="utf-8")
+
+    def test_hook_is_executable(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        _fake_git_repo(tmp_path)
+        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
+        hook = tmp_path / ".git" / "hooks" / "pre-commit"
+        assert hook.stat().st_mode & 0o111
+
+    def test_hook_has_shebang(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        _fake_git_repo(tmp_path)
+        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
+        hook = tmp_path / ".git" / "hooks" / "pre-commit"
+        assert hook.read_text(encoding="utf-8").startswith("#!/bin/sh")
+
+    def test_idempotent(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        _fake_git_repo(tmp_path)
+        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
+        content_first = (tmp_path / ".git" / "hooks" / "pre-commit").read_text()
+        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
+        content_second = (tmp_path / ".git" / "hooks" / "pre-commit").read_text()
+        assert content_first == content_second
+        # Marker appears exactly once
+        assert content_first.count(_HOOK_MARKER) == 1
+
+    def test_appends_to_existing_hook(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        hooks = _fake_git_repo(tmp_path)
+        existing = hooks / "pre-commit"
+        existing.write_text("#!/bin/sh\necho 'existing hook'\n", encoding="utf-8")
+        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
+        content = existing.read_text(encoding="utf-8")
+        assert "existing hook" in content
+        assert _HOOK_MARKER in content
+
+    def test_add_to_stage_includes_git_add(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        _fake_git_repo(tmp_path)
+        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=True))
+        hook = tmp_path / ".git" / "hooks" / "pre-commit"
+        assert "git add .codeindex/index.db" in hook.read_text(encoding="utf-8")
+
+    def test_json_output_created(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        _fake_git_repo(tmp_path)
+        cmd_install_hook(_args(project=str(tmp_path), json=True, add_to_stage=False))
+        out = json.loads(capsys.readouterr().out)
+        assert out["status"] == "created"
+        assert "path" in out
+
+    def test_json_output_already_installed(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        _fake_git_repo(tmp_path)
+        cmd_install_hook(_args(project=str(tmp_path), json=True, add_to_stage=False))
+        capsys.readouterr()
+        cmd_install_hook(_args(project=str(tmp_path), json=True, add_to_stage=False))
+        out = json.loads(capsys.readouterr().out)
+        assert out["status"] == "already_installed"
+
+    def test_error_when_no_git(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        with pytest.raises(SystemExit) as exc:
+            cmd_install_hook(_args(project=str(tmp_path), json=True, add_to_stage=False))
+        assert exc.value.code == 1
+        out = json.loads(capsys.readouterr().out)
+        assert "error" in out

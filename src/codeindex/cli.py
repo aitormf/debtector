@@ -9,6 +9,7 @@ Uso:
     codeindex imports flask
     codeindex status
     codeindex install-skill --global
+    codeindex install-hook [--add-to-stage]
 """
 
 from __future__ import annotations
@@ -353,6 +354,114 @@ def cmd_install_skill(args) -> None:
 
 
 # ──────────────────────────────────────────────
+# Git hook
+# ──────────────────────────────────────────────
+
+# Marker used to detect whether the hook is already installed
+_HOOK_MARKER = "# codeindex-hook"
+
+# Shell snippet appended to (or used as) the pre-commit hook
+_HOOK_SNIPPET_BASE = """\
+{marker}
+# Re-index changed files before every commit (incremental, fast).
+# Logs go to .codeindex/codeindex.log — never blocks the commit.
+codeindex index . >/dev/null 2>&1 || true
+"""
+
+_HOOK_SNIPPET_STAGE = """\
+{marker}
+# Re-index changed files and stage the updated index before every commit.
+codeindex index . >/dev/null 2>&1 || true
+git add .codeindex/index.db 2>/dev/null || true
+"""
+
+_HOOK_SHEBANG = "#!/bin/sh\n"
+
+
+def _find_git_hooks(start: str) -> Path | None:
+    """Walk up from *start* to find the ``.git/hooks/`` directory.
+
+    Args:
+        start: Starting directory path (typically the project root).
+
+    Returns:
+        The :class:`~pathlib.Path` to the ``.git/hooks/`` directory, or
+        ``None`` if no ``.git/`` directory is found in any ancestor.
+    """
+    current = Path(start).resolve()
+    while True:
+        hooks = current / ".git" / "hooks"
+        if hooks.is_dir():
+            return hooks
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
+
+
+def cmd_install_hook(args) -> None:
+    """Install a git pre-commit hook that re-indexes files before every commit.
+
+    If a pre-commit hook already exists and does not contain the codeindex
+    marker, the snippet is appended rather than overwriting.  Calling this
+    command twice is idempotent.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Project root used to locate ``.git/``.
+            - ``add_to_stage`` (bool): When ``True``, the hook also runs
+              ``git add .codeindex/index.db`` so the updated index is included
+              in the commit.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
+    """
+    hooks_dir = _find_git_hooks(args.project)
+    if hooks_dir is None:
+        msg = f"no .git/ directory found from '{args.project}'"
+        if args.json:
+            _json_out({"error": msg})
+        else:
+            print(f"Error: {msg}", file=sys.stderr)
+        sys.exit(1)
+
+    hook_path = hooks_dir / "pre-commit"
+    template = _HOOK_SNIPPET_STAGE if args.add_to_stage else _HOOK_SNIPPET_BASE
+    snippet = template.format(marker=_HOOK_MARKER)
+
+    # Idempotency: skip if already installed
+    if hook_path.exists() and _HOOK_MARKER in hook_path.read_text(encoding="utf-8"):
+        msg = f"hook already installed at {hook_path}"
+        if args.json:
+            _json_out({"status": "already_installed", "path": str(hook_path)})
+        else:
+            print(f"  Ya instalado: {hook_path}")
+        return
+
+    if hook_path.exists():
+        # Append to existing hook
+        existing = hook_path.read_text(encoding="utf-8")
+        if not existing.endswith("\n"):
+            existing += "\n"
+        hook_path.write_text(existing + "\n" + snippet, encoding="utf-8")
+        action = "appended"
+    else:
+        # Create new hook with shebang
+        hook_path.write_text(_HOOK_SHEBANG + "\n" + snippet, encoding="utf-8")
+        action = "created"
+
+    # Make executable
+    hook_path.chmod(hook_path.stat().st_mode | 0o111)
+
+    if args.json:
+        _json_out({"status": action, "path": str(hook_path)})
+    else:
+        print(f"  Hook {action}: {hook_path}")
+        print("\nEl índice se actualizará automáticamente antes de cada commit.")
+        if args.add_to_stage:
+            print("El fichero .codeindex/index.db se añadirá al stage automáticamente.")
+
+
+# ──────────────────────────────────────────────
 # Entry point
 # ──────────────────────────────────────────────
 
@@ -418,6 +527,18 @@ def main() -> None:
         help="Instalar en ~/.claude/skills/ (global) en lugar de .claude/skills/ (proyecto)",
     )
 
+    # install-hook
+    p_hook = sub.add_parser(
+        "install-hook", help="Instalar hook git pre-commit para auto-indexado"
+    )
+    p_hook.add_argument(
+        "--add-to-stage",
+        dest="add_to_stage",
+        action="store_true",
+        default=False,
+        help="El hook también hace 'git add .codeindex/index.db' para commitear el índice",
+    )
+
     args = parser.parse_args()
 
     # Configure logging after parsing so the project path is known
@@ -436,6 +557,7 @@ def main() -> None:
         "status": cmd_status,
         "callers": cmd_callers,
         "install-skill": cmd_install_skill,
+        "install-hook": cmd_install_hook,
     }
     cmds[args.command](args)
 
