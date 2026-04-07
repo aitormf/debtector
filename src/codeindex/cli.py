@@ -21,6 +21,15 @@ from .logging import configure_logging
 
 
 def _get_store(project: str) -> GraphStore:
+    """Open the :class:`~codeindex.graph_store.GraphStore` for *project*.
+
+    Args:
+        project: Path to the project root directory.  The SQLite database is
+            expected at ``<project>/.codeindex.db``.
+
+    Returns:
+        An open :class:`~codeindex.graph_store.GraphStore` instance.
+    """
     import os
 
     db_path = os.path.join(project, ".codeindex.db")
@@ -28,6 +37,13 @@ def _get_store(project: str) -> GraphStore:
 
 
 def cmd_index(args):
+    """Run the indexer on a project directory and print a summary.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``path`` (str): Path to the project directory to index.
+    """
     store = _get_store(args.path)
     indexer = Indexer(store)
 
@@ -43,6 +59,15 @@ def cmd_index(args):
 
 
 def cmd_search(args):
+    """Search the index for symbols matching a query and print results.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Path to the project root.
+            - ``query`` (str): Free-text search query.
+            - ``kind`` (str | None): Optional node kind filter (e.g. ``"Class"``).
+    """
     store = _get_store(args.project)
     results = store.search_nodes(args.query, kind=args.kind)
 
@@ -58,6 +83,16 @@ def cmd_search(args):
 
 
 def cmd_summary(args):
+    """Print a structural summary (symbols and edges) for a single file.
+
+    Exits with status 1 if the file is not found in the index.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Path to the project root.
+            - ``file`` (str): Relative path of the file to summarise.
+    """
     store = _get_store(args.project)
     summary = store.get_file_summary(args.file)
 
@@ -84,6 +119,15 @@ def cmd_summary(args):
 
 
 def cmd_impact(args):
+    """Perform an impact-radius analysis and print affected files and nodes.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Path to the project root.
+            - ``files`` (list[str]): List of changed file paths (seeds).
+            - ``depth`` (int): Maximum traversal depth.
+    """
     store = _get_store(args.project)
     result = store.get_impact_radius(args.files, max_depth=args.depth)
 
@@ -110,6 +154,14 @@ def cmd_impact(args):
 
 
 def cmd_imports(args):
+    """Search for files that import a given module and print results.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Path to the project root.
+            - ``module`` (str): Module name substring to search for.
+    """
     store = _get_store(args.project)
     results = store.search_imports(args.module)
 
@@ -122,6 +174,13 @@ def cmd_imports(args):
 
 
 def cmd_status(args):
+    """Print index statistics (file count, node/edge counts, breakdown by kind).
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Path to the project root.
+    """
     store = _get_store(args.project)
     stats = store.get_stats()
 
@@ -146,6 +205,14 @@ def cmd_status(args):
 
 
 def cmd_callers(args):
+    """Print all callers of a given symbol (by qualified name).
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Path to the project root.
+            - ``qualified_name`` (str): The qualified name of the target symbol.
+    """
     store = _get_store(args.project)
     callers = store.callers_of(args.qualified_name)
 
@@ -159,6 +226,12 @@ def cmd_callers(args):
 
 
 def main():
+    """Entry point for the ``codeindex`` CLI.
+
+    Configures structured logging, builds the argument parser, dispatches to
+    the appropriate sub-command handler, and exits.  Prints help and exits
+    with status 0 if no sub-command is provided.
+    """
     configure_logging()
     parser = argparse.ArgumentParser(
         prog="codeindex",
