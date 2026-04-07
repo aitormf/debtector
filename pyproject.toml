@@ -29,6 +29,9 @@ codeindex = "codeindex.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"codeindex" = ["skills/*.md"]
+
 # ---------------------------------------------------------------------------
 # Ruff — linter + formatter
 # ---------------------------------------------------------------------------

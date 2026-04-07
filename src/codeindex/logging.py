@@ -3,14 +3,14 @@
 Usage:
     from codeindex.logging import configure_logging, get_logger
 
-    configure_logging()  # call once at startup (reads CODEINDEX_LOG_JSON)
+    configure_logging(project=".")  # call once after arg parse
     log = get_logger()
     log = log.bind(file_path="src/app.py", operation="index")
     log.info("indexing_started")
 
 Environment:
-    CODEINDEX_LOG_JSON=false  → colored console output (default, dev)
-    CODEINDEX_LOG_JSON=true   → JSON lines output (prod)
+    CODEINDEX_LOG_JSON=false  → human-readable log lines (default)
+    CODEINDEX_LOG_JSON=true   → JSON lines
 """
 
 from __future__ import annotations
@@ -18,24 +18,34 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from pathlib import Path
 
 import structlog
 
 
-def configure_logging(json_output: bool | None = None) -> None:
-    """Configure structlog for the application.
+def configure_logging(project: str = ".", json_output: bool | None = None) -> None:
+    """Configure structlog to write to ``.codeindex/codeindex.log`` inside *project*.
 
-    Reads CODEINDEX_LOG_JSON from the environment when json_output is None.
-    Should be called once at application startup (e.g., in cli.main()).
+    Creates the ``.codeindex/`` directory if it does not exist.  Falls back to
+    ``stderr`` if the log file cannot be opened (e.g. read-only filesystem).
+
+    Should be called once at application startup, after argument parsing so
+    that the correct *project* path is known.
 
     Args:
-        json_output: True for JSON lines (prod), False for colored console (dev).
-            When None, reads the CODEINDEX_LOG_JSON environment variable.
-            Defaults to False (console) when the variable is absent.
+        project: Path to the project root.  Logs are written to
+            ``{project}/.codeindex/codeindex.log``.  Defaults to the current
+            working directory.
+        json_output: ``True`` for JSON lines, ``False`` for human-readable
+            lines.  When ``None``, reads the ``CODEINDEX_LOG_JSON`` environment
+            variable (defaults to ``False`` when absent).
     """
     if json_output is None:
         env_val = os.environ.get("CODEINDEX_LOG_JSON", "false").strip().lower()
         json_output = env_val == "true"
+
+    # Resolve log file path
+    log_file = _open_log_file(project)
 
     shared_processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
@@ -47,7 +57,7 @@ def configure_logging(json_output: bool | None = None) -> None:
     if json_output:
         renderer: structlog.types.Processor = structlog.processors.JSONRenderer()
     else:
-        renderer = structlog.dev.ConsoleRenderer(colors=sys.stderr.isatty())
+        renderer = structlog.dev.ConsoleRenderer(colors=False)
 
     structlog.configure(
         processors=[
@@ -57,15 +67,33 @@ def configure_logging(json_output: bool | None = None) -> None:
         ],
         wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG),
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(),
-        cache_logger_on_first_use=True,
+        logger_factory=structlog.PrintLoggerFactory(file=log_file),
+        cache_logger_on_first_use=False,
     )
+
+
+def _open_log_file(project: str):
+    """Open (or create) the log file, falling back to stderr on error.
+
+    Args:
+        project: Path to the project root directory.
+
+    Returns:
+        A writable file-like object.
+    """
+    try:
+        codeindex_dir = Path(project) / ".codeindex"
+        codeindex_dir.mkdir(parents=True, exist_ok=True)
+        log_path = codeindex_dir / "codeindex.log"
+        return open(log_path, "a", encoding="utf-8")  # noqa: SIM115
+    except OSError:
+        return sys.stderr
 
 
 def get_logger() -> structlog.BoundLogger:
     """Return a structlog BoundLogger instance.
 
     Returns:
-        A structlog BoundLogger ready to use with .bind() and log methods.
+        A structlog BoundLogger ready to use with ``.bind()`` and log methods.
     """
     return structlog.get_logger()

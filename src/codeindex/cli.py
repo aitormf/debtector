@@ -2,63 +2,106 @@
 CLI para CodeIndex.
 
 Uso:
-    python -m codeindex index ./mi-proyecto
-    python -m codeindex search "UserService"
-    python -m codeindex summary src/auth/service.py
-    python -m codeindex impact src/auth/service.py
-    python -m codeindex imports flask
-    python -m codeindex status
+    codeindex index ./mi-proyecto
+    codeindex --json search "UserService"
+    codeindex summary src/auth/service.py
+    codeindex impact src/auth/service.py
+    codeindex imports flask
+    codeindex status
+    codeindex install-skill --global
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import shutil
 import sys
+from pathlib import Path
 
 from .graph_store import GraphStore
 from .indexer import Indexer
 from .logging import configure_logging
+from .models import node_to_dict
+
+# ──────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────
+
+
+def _codeindex_dir(project: str) -> Path:
+    """Return the ``.codeindex/`` directory for *project*, creating it if needed.
+
+    Args:
+        project: Path to the project root.
+
+    Returns:
+        A :class:`~pathlib.Path` pointing to ``{project}/.codeindex/``.
+    """
+    d = Path(project) / ".codeindex"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 def _get_store(project: str) -> GraphStore:
     """Open the :class:`~codeindex.graph_store.GraphStore` for *project*.
 
+    The SQLite database lives at ``{project}/.codeindex/index.db``.
+
     Args:
-        project: Path to the project root directory.  The SQLite database is
-            expected at ``<project>/.codeindex.db``.
+        project: Path to the project root directory.
 
     Returns:
         An open :class:`~codeindex.graph_store.GraphStore` instance.
     """
-    import os
-
-    db_path = os.path.join(project, ".codeindex.db")
-    return GraphStore(db_path)
+    db_path = _codeindex_dir(project) / "index.db"
+    return GraphStore(str(db_path))
 
 
-def cmd_index(args):
+def _json_out(data) -> None:
+    """Print *data* as compact JSON to stdout.
+
+    Args:
+        data: Any JSON-serialisable object.
+    """
+    print(json.dumps(data, default=str))
+
+
+# ──────────────────────────────────────────────
+# Subcomandos
+# ──────────────────────────────────────────────
+
+
+def cmd_index(args) -> None:
     """Run the indexer on a project directory and print a summary.
 
     Args:
         args: Parsed argument namespace.  Expected attributes:
 
-            - ``path`` (str): Path to the project directory to index.
+            - ``project`` (str): Root directory where ``.codeindex/`` is stored.
+            - ``path`` (str): Directory tree to scan and index.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
     """
-    store = _get_store(args.path)
+    store = _get_store(args.project)
     indexer = Indexer(store)
 
-    print(f"Indexando {args.path}...")
-    stats = indexer.index(args.path)
+    if not args.json:
+        print(f"Indexando {args.path}...")
 
-    print(f"\n  Archivos escaneados:  {stats['scanned']}")
-    print(f"  Indexados:            {stats['indexed']}")
-    print(f"  Sin cambios:          {stats['skipped']}")
-    print(f"  Errores:              {stats['errors']}")
-    print(f"  Eliminados:           {stats['removed']}")
+    stats = indexer.index(args.path)
     store.close()
 
+    if args.json:
+        _json_out(stats)
+    else:
+        print(f"\n  Archivos escaneados:  {stats['scanned']}")
+        print(f"  Indexados:            {stats['indexed']}")
+        print(f"  Sin cambios:          {stats['skipped']}")
+        print(f"  Errores:              {stats['errors']}")
+        print(f"  Eliminados:           {stats['removed']}")
 
-def cmd_search(args):
+
+def cmd_search(args) -> None:
     """Search the index for symbols matching a query and print results.
 
     Args:
@@ -67,22 +110,26 @@ def cmd_search(args):
             - ``project`` (str): Path to the project root.
             - ``query`` (str): Free-text search query.
             - ``kind`` (str | None): Optional node kind filter (e.g. ``"Class"``).
+            - ``json`` (bool): Emit JSON instead of human-readable text.
     """
     store = _get_store(args.project)
     results = store.search_nodes(args.query, kind=args.kind)
-
-    print(f"\nResultados para: '{args.query}'")
-    print("─" * 60)
-    for n in results:
-        print(f"  {n.kind:10s} {n.qualified_name}")
-        if n.signature:
-            print(f"             {n.signature}")
-        print()
-    print(f"Total: {len(results)}")
     store.close()
 
+    if args.json:
+        _json_out([node_to_dict(n) for n in results])
+    else:
+        print(f"\nResultados para: '{args.query}'")
+        print("─" * 60)
+        for n in results:
+            print(f"  {n.kind:10s} {n.qualified_name}")
+            if n.signature:
+                print(f"             {n.signature}")
+            print()
+        print(f"Total: {len(results)}")
 
-def cmd_summary(args):
+
+def cmd_summary(args) -> None:
     """Print a structural summary (symbols and edges) for a single file.
 
     Exits with status 1 if the file is not found in the index.
@@ -92,33 +139,36 @@ def cmd_summary(args):
 
             - ``project`` (str): Path to the project root.
             - ``file`` (str): Relative path of the file to summarise.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
     """
     store = _get_store(args.project)
     summary = store.get_file_summary(args.file)
-
-    if not summary:
-        print(f"Archivo no encontrado: {args.file}")
-        store.close()
-        sys.exit(1)
-
-    print(f"\n📄 {summary['path']} ({summary['language']})")
-    print("─" * 60)
-
-    if summary["nodes"]:
-        print("\n  Símbolos:")
-        for s in summary["nodes"]:
-            parent = "  └─ " if s["parent"] else "  "
-            print(f"    {parent}{s['kind']:10s} {s.get('signature') or s['name']}")
-
-    if summary["edges"]:
-        print("\n  Relaciones:")
-        for e in summary["edges"]:
-            print(f"    {e['kind']:15s} {e['source']} → {e['target']}")
-
     store.close()
 
+    if not summary:
+        if args.json:
+            _json_out({"error": f"file not found: {args.file}"})
+        else:
+            print(f"Archivo no encontrado: {args.file}")
+        sys.exit(1)
 
-def cmd_impact(args):
+    if args.json:
+        _json_out(summary)
+    else:
+        print(f"\n{summary['path']} ({summary['language']})")
+        print("─" * 60)
+        if summary["nodes"]:
+            print("\n  Símbolos:")
+            for s in summary["nodes"]:
+                parent = "  └─ " if s["parent"] else "  "
+                print(f"    {parent}{s['kind']:10s} {s.get('signature') or s['name']}")
+        if summary["edges"]:
+            print("\n  Relaciones:")
+            for e in summary["edges"]:
+                print(f"    {e['kind']:15s} {e['source']} → {e['target']}")
+
+
+def cmd_impact(args) -> None:
     """Perform an impact-radius analysis and print affected files and nodes.
 
     Args:
@@ -127,33 +177,39 @@ def cmd_impact(args):
             - ``project`` (str): Path to the project root.
             - ``files`` (list[str]): List of changed file paths (seeds).
             - ``depth`` (int): Maximum traversal depth.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
     """
     store = _get_store(args.project)
     result = store.get_impact_radius(args.files, max_depth=args.depth)
-
-    print(f"\nAnálisis de impacto (profundidad {args.depth}):")
-    print("─" * 60)
-
-    print(f"\n  Nodos cambiados:   {len(result['changed_nodes'])}")
-    print(f"  Nodos impactados:  {len(result['impacted_nodes'])}")
-    print(f"  Archivos afectados: {len(result['impacted_files'])}")
-
-    if result["impacted_files"]:
-        print("\n  Archivos impactados:")
-        for f in sorted(result["impacted_files"]):
-            print(f"    📁 {f}")
-
-    if result["impacted_nodes"]:
-        print("\n  Nodos impactados:")
-        for n in result["impacted_nodes"][:20]:
-            print(f"    {n.kind:10s} {n.qualified_name}")
-        if len(result["impacted_nodes"]) > 20:
-            print(f"    ... y {len(result['impacted_nodes']) - 20} más")
-
     store.close()
 
+    if args.json:
+        _json_out(
+            {
+                "changed_nodes": [n.qualified_name for n in result["changed_nodes"]],
+                "impacted_nodes": [node_to_dict(n) for n in result["impacted_nodes"]],
+                "impacted_files": sorted(result["impacted_files"]),
+            }
+        )
+    else:
+        print(f"\nAnálisis de impacto (profundidad {args.depth}):")
+        print("─" * 60)
+        print(f"\n  Nodos cambiados:    {len(result['changed_nodes'])}")
+        print(f"  Nodos impactados:   {len(result['impacted_nodes'])}")
+        print(f"  Archivos afectados: {len(result['impacted_files'])}")
+        if result["impacted_files"]:
+            print("\n  Archivos impactados:")
+            for f in sorted(result["impacted_files"]):
+                print(f"    {f}")
+        if result["impacted_nodes"]:
+            print("\n  Nodos impactados:")
+            for n in result["impacted_nodes"][:20]:
+                print(f"    {n.kind:10s} {n.qualified_name}")
+            if len(result["impacted_nodes"]) > 20:
+                print(f"    ... y {len(result['impacted_nodes']) - 20} más")
 
-def cmd_imports(args):
+
+def cmd_imports(args) -> None:
     """Search for files that import a given module and print results.
 
     Args:
@@ -161,50 +217,64 @@ def cmd_imports(args):
 
             - ``project`` (str): Path to the project root.
             - ``module`` (str): Module name substring to search for.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
     """
     store = _get_store(args.project)
     results = store.search_imports(args.module)
-
-    print(f"\nArchivos que importan '{args.module}':")
-    print("─" * 60)
-    for r in results:
-        print(f"  📁 {r['file_path']}  (línea {r['line']})")
-    print(f"\nTotal: {len(results)}")
     store.close()
 
+    if args.json:
+        _json_out(results)
+    else:
+        print(f"\nArchivos que importan '{args.module}':")
+        print("─" * 60)
+        for r in results:
+            print(f"  {r['file_path']}  (línea {r['line']})")
+        print(f"\nTotal: {len(results)}")
 
-def cmd_status(args):
+
+def cmd_status(args) -> None:
     """Print index statistics (file count, node/edge counts, breakdown by kind).
 
     Args:
         args: Parsed argument namespace.  Expected attributes:
 
             - ``project`` (str): Path to the project root.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
     """
     store = _get_store(args.project)
     stats = store.get_stats()
-
-    print("\nEstado del índice:")
-    print("─" * 40)
-    print(f"  Archivos:    {stats.files_count}")
-    print(f"  Nodos:       {stats.total_nodes}")
-    print(f"  Aristas:     {stats.total_edges}")
-    print(f"  Lenguajes:   {', '.join(stats.languages)}")
-
-    if stats.nodes_by_kind:
-        print("\n  Nodos por tipo:")
-        for k, v in stats.nodes_by_kind.items():
-            print(f"    {k:12s} {v}")
-
-    if stats.edges_by_kind:
-        print("\n  Aristas por tipo:")
-        for k, v in stats.edges_by_kind.items():
-            print(f"    {k:15s} {v}")
-
     store.close()
 
+    if args.json:
+        _json_out(
+            {
+                "files": stats.files_count,
+                "total_nodes": stats.total_nodes,
+                "total_edges": stats.total_edges,
+                "languages": stats.languages,
+                "nodes_by_kind": stats.nodes_by_kind,
+                "edges_by_kind": stats.edges_by_kind,
+            }
+        )
+    else:
+        print("\nEstado del índice:")
+        print("─" * 40)
+        print(f"  Archivos:    {stats.files_count}")
+        print(f"  Nodos:       {stats.total_nodes}")
+        print(f"  Aristas:     {stats.total_edges}")
+        print(f"  Lenguajes:   {', '.join(stats.languages)}")
+        if stats.nodes_by_kind:
+            print("\n  Nodos por tipo:")
+            for k, v in stats.nodes_by_kind.items():
+                print(f"    {k:12s} {v}")
+        if stats.edges_by_kind:
+            print("\n  Aristas por tipo:")
+            for k, v in stats.edges_by_kind.items():
+                print(f"    {k:15s} {v}")
 
-def cmd_callers(args):
+
+def cmd_callers(args) -> None:
     """Print all callers of a given symbol (by qualified name).
 
     Args:
@@ -212,38 +282,97 @@ def cmd_callers(args):
 
             - ``project`` (str): Path to the project root.
             - ``qualified_name`` (str): The qualified name of the target symbol.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
     """
     store = _get_store(args.project)
     callers = store.callers_of(args.qualified_name)
-
-    print(f"\n¿Quién llama a {args.qualified_name}?")
-    print("─" * 60)
-    for n in callers:
-        print(f"  {n.kind:10s} {n.qualified_name}")
-        print(f"             📁 {n.file_path}:{n.line_start}")
-    print(f"\nTotal: {len(callers)}")
     store.close()
 
+    if args.json:
+        _json_out([node_to_dict(n) for n in callers])
+    else:
+        print(f"\n¿Quién llama a {args.qualified_name}?")
+        print("─" * 60)
+        for n in callers:
+            print(f"  {n.kind:10s} {n.qualified_name}")
+            print(f"             {n.file_path}:{n.line_start}")
+        print(f"\nTotal: {len(callers)}")
 
-def main():
+
+def cmd_install_skill(args) -> None:
+    """Copy CodeIndex skill files to the Claude Code skills directory.
+
+    Installs ``codeindex.md`` and ``codeindex-bootstrap.md`` to either the
+    global (``~/.claude/skills/``) or project-level (``.claude/skills/``)
+    skills directory.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Path to the project root (used for project-level install).
+            - ``global_install`` (bool): Install to ``~/.claude/skills/`` when ``True``.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
+    """
+    skills_src = Path(__file__).parent / "skills"
+    if not skills_src.exists():
+        msg = "skills directory not found in package"
+        if args.json:
+            _json_out({"error": msg})
+        else:
+            print(f"Error: {msg}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.global_install:
+        dest = Path.home() / ".claude" / "skills"
+    else:
+        dest = Path(args.project) / ".claude" / "skills"
+
+    dest.mkdir(parents=True, exist_ok=True)
+
+    installed = []
+    for skill_file in sorted(skills_src.glob("*.md")):
+        target = dest / skill_file.name
+        shutil.copy2(skill_file, target)
+        installed.append(str(target))
+
+    if args.json:
+        _json_out({"installed": installed, "dest": str(dest)})
+    else:
+        for path in installed:
+            print(f"  Instalado: {path}")
+        print(f"\nSkills instalados en: {dest}")
+
+
+# ──────────────────────────────────────────────
+# Entry point
+# ──────────────────────────────────────────────
+
+
+def main() -> None:
     """Entry point for the ``codeindex`` CLI.
 
-    Configures structured logging, builds the argument parser, dispatches to
-    the appropriate sub-command handler, and exits.  Prints help and exits
-    with status 0 if no sub-command is provided.
+    Parses arguments first, then configures structured logging so that the
+    correct project path (and therefore log file location) is known.
+    Dispatches to the appropriate sub-command handler and exits.
+    Prints help and exits with status 0 if no sub-command is provided.
     """
-    configure_logging()
     parser = argparse.ArgumentParser(
         prog="codeindex",
         description="CodeIndex - Grafo de código para reducir tokens de IA",
     )
     parser.add_argument("--project", "-p", default=".", help="Ruta al proyecto")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        default=False,
+        help="Emitir JSON compacto en stdout (para consumo por IA)",
+    )
 
     sub = parser.add_subparsers(dest="command")
 
     # index
     p_idx = sub.add_parser("index", help="Indexar un proyecto")
-    p_idx.add_argument("path", help="Ruta al proyecto")
+    p_idx.add_argument("path", help="Ruta al directorio a indexar")
 
     # search
     p_search = sub.add_parser("search", help="Buscar símbolos")
@@ -260,7 +389,7 @@ def main():
     p_imp.add_argument("--depth", "-d", type=int, default=2, help="Profundidad máxima")
 
     # imports
-    p_imports = sub.add_parser("imports", help="Buscar imports")
+    p_imports = sub.add_parser("imports", help="Buscar imports de un módulo")
     p_imports.add_argument("module", help="Módulo a buscar")
 
     # status
@@ -270,7 +399,21 @@ def main():
     p_callers = sub.add_parser("callers", help="¿Quién llama a un símbolo?")
     p_callers.add_argument("qualified_name", help="qualified_name del símbolo")
 
+    # install-skill
+    p_skill = sub.add_parser("install-skill", help="Instalar skills en Claude Code")
+    p_skill.add_argument(
+        "--global",
+        dest="global_install",
+        action="store_true",
+        default=False,
+        help="Instalar en ~/.claude/skills/ (global) en lugar de .claude/skills/ (proyecto)",
+    )
+
     args = parser.parse_args()
+
+    # Configure logging after parsing so the project path is known
+    configure_logging(project=args.project)
+
     if not args.command:
         parser.print_help()
         sys.exit(0)
@@ -283,6 +426,7 @@ def main():
         "imports": cmd_imports,
         "status": cmd_status,
         "callers": cmd_callers,
+        "install-skill": cmd_install_skill,
     }
     cmds[args.command](args)
 
