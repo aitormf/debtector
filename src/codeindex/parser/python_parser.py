@@ -77,6 +77,10 @@ class PythonParser(LanguageParser):
         # Extraer clases, funciones, métodos
         self._extract_symbols(root, source, file_path, file_qn, nodes, edges, parent=None)
 
+        # Segunda pasada: aristas CALLS (requiere índice completo de símbolos)
+        symbol_index = self._build_symbol_index(nodes)
+        self._extract_file_calls(root, source, file_path, symbol_index, edges, parent=None)
+
         return nodes, edges
 
     # ──────────────────────────────────────────────
@@ -307,6 +311,184 @@ class PythonParser(LanguageParser):
                             line=child.start_point[0] + 1,
                         )
                     )
+
+    # ──────────────────────────────────────────────
+    # CALLS edge extraction (second pass)
+    # ──────────────────────────────────────────────
+
+    @staticmethod
+    def _build_symbol_index(nodes: list[NodeInfo]) -> dict[str, list[str]]:
+        """Build a lookup from short name (and ``Class.name``) to qualified names.
+
+        Used to resolve call targets to known symbols within the same file.
+
+        Args:
+            nodes: All nodes produced by the first-pass symbol extraction.
+
+        Returns:
+            Dict mapping ``name`` and ``ClassName.name`` keys to lists of
+            qualified name strings.
+        """
+        index: dict[str, list[str]] = {}
+        for node in nodes:
+            if node.kind == NodeKind.FILE:
+                continue
+            index.setdefault(node.name, []).append(node.qualified_name)
+            if node.parent_name:
+                compound = f"{node.parent_name}.{node.name}"
+                index.setdefault(compound, []).append(node.qualified_name)
+        return index
+
+    def _extract_file_calls(
+        self,
+        node,
+        source: bytes,
+        file_path: str,
+        symbol_index: dict[str, list[str]],
+        edges: list[EdgeInfo],
+        parent: str | None,
+    ) -> None:
+        """Second-pass AST walk that emits CALLS edges for resolved call targets.
+
+        Mirrors the structure of :meth:`_extract_symbols` to identify which
+        function or method is the caller, then delegates to
+        :meth:`_extract_calls` for the body.
+
+        Args:
+            node: AST node whose children to inspect (root or class body).
+            source: Raw source bytes.
+            file_path: Absolute path to the source file.
+            symbol_index: Name-to-qualified-name lookup from the first pass.
+            edges: Mutable list to which new CALLS edges are appended.
+            parent: Enclosing class name, or ``None`` at module level.
+        """
+        for child in node.children:
+            actual = child
+            if child.type == "decorated_definition":
+                for sub in child.children:
+                    if sub.type in ("class_definition", "function_definition"):
+                        actual = sub
+                        break
+
+            if actual.type == "class_definition":
+                class_name = self._get_name(actual, source)
+                body = self._get_body(actual)
+                if body:
+                    self._extract_file_calls(
+                        body, source, file_path, symbol_index, edges, parent=class_name
+                    )
+
+            elif actual.type == "function_definition":
+                func_name = self._get_name(actual, source)
+                kind = NodeKind.METHOD if parent else NodeKind.FUNCTION
+                caller_qn = make_qualified_name(file_path, func_name, kind, parent)
+                body = self._get_body(actual)
+                if body:
+                    self._extract_calls(
+                        body, source, file_path, caller_qn, parent, symbol_index, edges
+                    )
+
+    def _extract_calls(
+        self,
+        body_node,
+        source: bytes,
+        file_path: str,
+        caller_qn: str,
+        caller_class: str | None,
+        symbol_index: dict[str, list[str]],
+        edges: list[EdgeInfo],
+    ) -> None:
+        """Walk a function body and emit CALLS edges for resolved call targets.
+
+        Only emits edges for calls whose targets can be resolved to a known
+        symbol in the same file.  Unresolved calls (e.g. external library
+        calls, calls through variables) are silently skipped.
+
+        Args:
+            body_node: The ``block`` AST node of a function or method.
+            source: Raw source bytes.
+            file_path: Absolute path to the source file.
+            caller_qn: Qualified name of the enclosing function or method.
+            caller_class: Name of the enclosing class, or ``None``.
+            symbol_index: Name-to-qualified-name lookup from the first pass.
+            edges: Mutable list to which new CALLS edges are appended.
+        """
+        for node in self._walk(body_node):
+            if node.type != "call":
+                continue
+            func_child = node.child_by_field_name("function")
+            if func_child is None:
+                continue
+            callee_qn = self._resolve_callee(func_child, source, caller_class, symbol_index)
+            if callee_qn and callee_qn != caller_qn:
+                edges.append(
+                    EdgeInfo(
+                        kind=EdgeKind.CALLS,
+                        source=caller_qn,
+                        target=callee_qn,
+                        file_path=file_path,
+                        line=node.start_point[0] + 1,
+                    )
+                )
+
+    def _resolve_callee(
+        self,
+        func_node,
+        source: bytes,
+        caller_class: str | None,
+        symbol_index: dict[str, list[str]],
+    ) -> str | None:
+        """Resolve a call's function node to a qualified name in the same file.
+
+        Handles three patterns:
+
+        * ``identifier`` — plain function or constructor call (e.g. ``helper()``,
+          ``Service()``).  Within a class body, the same-class method is
+          preferred if the name matches.
+        * ``attribute`` with ``self`` object — intra-class method call
+          (``self.validate()``).
+        * ``attribute`` with a class name object — explicit class call
+          (``UserService.get_user()``).
+
+        Args:
+            func_node: The ``function`` child of a tree-sitter ``call`` node.
+            source: Raw source bytes.
+            caller_class: Name of the enclosing class, or ``None``.
+            symbol_index: Name-to-qualified-name lookup.
+
+        Returns:
+            The resolved qualified name string, or ``None`` if the target
+            cannot be resolved to a known intra-file symbol.
+        """
+        if func_node.type == "identifier":
+            name = self._text(func_node, source)
+            # Prefer same-class method when inside a class
+            if caller_class:
+                key = f"{caller_class}.{name}"
+                if key in symbol_index:
+                    return symbol_index[key][0]
+            candidates = symbol_index.get(name, [])
+            return candidates[0] if len(candidates) == 1 else None
+
+        if func_node.type == "attribute":
+            obj_node = func_node.child_by_field_name("object")
+            attr_node = func_node.child_by_field_name("attribute")
+            if obj_node is None or attr_node is None:
+                return None
+            obj = self._text(obj_node, source)
+            attr = self._text(attr_node, source)
+
+            if obj == "self" and caller_class:
+                key = f"{caller_class}.{attr}"
+                candidates = symbol_index.get(key, [])
+                return candidates[0] if candidates else None
+
+            # ClassName.method() or module.function()
+            key = f"{obj}.{attr}"
+            candidates = symbol_index.get(key, [])
+            return candidates[0] if candidates else None
+
+        return None
 
     # ──────────────────────────────────────────────
     # Helpers

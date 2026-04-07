@@ -77,6 +77,10 @@ class JavaScriptParser(LanguageParser):
         self._extract_imports(root, source, file_path, file_qn, edges)
         self._extract_symbols(root, source, file_path, file_qn, lang, nodes, edges, parent=None)
 
+        # Segunda pasada: aristas CALLS (requiere índice completo de símbolos)
+        symbol_index = self._build_symbol_index(nodes)
+        self._extract_file_calls(root, source, file_path, symbol_index, edges, parent=None)
+
         return nodes, edges
 
     # ──────────────────────────────────────────────
@@ -442,6 +446,210 @@ class JavaScriptParser(LanguageParser):
                             if inner.type in ("identifier", "type_identifier"):
                                 return [self._text(inner, source)]
         return []
+
+    # ──────────────────────────────────────────────
+    # CALLS edge extraction (second pass)
+    # ──────────────────────────────────────────────
+
+    @staticmethod
+    def _build_symbol_index(nodes: list[NodeInfo]) -> dict[str, list[str]]:
+        """Build a lookup from short name (and ``Class.name``) to qualified names.
+
+        Args:
+            nodes: All nodes produced by the first-pass symbol extraction.
+
+        Returns:
+            Dict mapping ``name`` and ``ClassName.name`` keys to lists of
+            qualified name strings.
+        """
+        index: dict[str, list[str]] = {}
+        for node in nodes:
+            if node.kind == NodeKind.FILE:
+                continue
+            index.setdefault(node.name, []).append(node.qualified_name)
+            if node.parent_name:
+                compound = f"{node.parent_name}.{node.name}"
+                index.setdefault(compound, []).append(node.qualified_name)
+        return index
+
+    def _extract_file_calls(
+        self,
+        node,
+        source: bytes,
+        file_path: str,
+        symbol_index: dict[str, list[str]],
+        edges: list[EdgeInfo],
+        parent: str | None,
+    ) -> None:
+        """Second-pass walk that emits CALLS edges for resolved call targets.
+
+        Mirrors the structure of :meth:`_extract_symbols` to determine the
+        current caller context (class / function name) before descending into
+        bodies.
+
+        Args:
+            node: AST node whose children to inspect.
+            source: Raw source bytes.
+            file_path: Absolute path to the source file.
+            symbol_index: Name-to-qualified-name lookup from the first pass.
+            edges: Mutable list to which new CALLS edges are appended.
+            parent: Enclosing class name, or ``None`` at module level.
+        """
+        for child in node.children:
+            actual = child
+            if child.type == "export_statement":
+                for sub in child.children:
+                    if sub.type in (
+                        "class_declaration",
+                        "function_declaration",
+                        "lexical_declaration",
+                    ):
+                        actual = sub
+                        break
+
+            if actual.type == "class_declaration":
+                class_name = self._get_name(actual, source)
+                body = self._get_class_body(actual)
+                if body:
+                    for member in body.children:
+                        if member.type == "method_definition":
+                            mname = self._get_name(member, source)
+                            caller_qn = make_qualified_name(
+                                file_path, mname, NodeKind.METHOD, class_name
+                            )
+                            self._extract_calls(
+                                member,
+                                source,
+                                file_path,
+                                caller_qn,
+                                class_name,
+                                symbol_index,
+                                edges,
+                            )
+
+            elif actual.type == "function_declaration":
+                func_name = self._get_name(actual, source)
+                caller_qn = make_qualified_name(file_path, func_name, NodeKind.FUNCTION, parent)
+                self._extract_calls(
+                    actual, source, file_path, caller_qn, parent, symbol_index, edges
+                )
+
+            elif actual.type == "lexical_declaration" and not parent:
+                # Arrow functions
+                for sub in actual.children:
+                    if sub.type == "variable_declarator":
+                        func_name = None
+                        arrow_node = None
+                        for s in sub.children:
+                            if s.type == "identifier":
+                                func_name = self._text(s, source)
+                            elif s.type == "arrow_function":
+                                arrow_node = s
+                        if func_name and arrow_node:
+                            caller_qn = make_qualified_name(
+                                file_path, func_name, NodeKind.FUNCTION
+                            )
+                            self._extract_calls(
+                                arrow_node,
+                                source,
+                                file_path,
+                                caller_qn,
+                                None,
+                                symbol_index,
+                                edges,
+                            )
+
+    def _extract_calls(
+        self,
+        func_node,
+        source: bytes,
+        file_path: str,
+        caller_qn: str,
+        caller_class: str | None,
+        symbol_index: dict[str, list[str]],
+        edges: list[EdgeInfo],
+    ) -> None:
+        """Walk a function/method node and emit CALLS edges for resolved targets.
+
+        Args:
+            func_node: The function, method, or arrow-function AST node.
+            source: Raw source bytes.
+            file_path: Absolute path to the source file.
+            caller_qn: Qualified name of the enclosing function or method.
+            caller_class: Name of the enclosing class, or ``None``.
+            symbol_index: Name-to-qualified-name lookup from the first pass.
+            edges: Mutable list to which new CALLS edges are appended.
+        """
+        for node in self._walk(func_node):
+            if node.type != "call_expression":
+                continue
+            func_child = node.child_by_field_name("function")
+            if func_child is None:
+                continue
+            callee_qn = self._resolve_callee(func_child, source, caller_class, symbol_index)
+            if callee_qn and callee_qn != caller_qn:
+                edges.append(
+                    EdgeInfo(
+                        kind=EdgeKind.CALLS,
+                        source=caller_qn,
+                        target=callee_qn,
+                        file_path=file_path,
+                        line=node.start_point[0] + 1,
+                    )
+                )
+
+    def _resolve_callee(
+        self,
+        func_node,
+        source: bytes,
+        caller_class: str | None,
+        symbol_index: dict[str, list[str]],
+    ) -> str | None:
+        """Resolve a call's function node to a qualified name in the same file.
+
+        Handles:
+
+        * ``identifier`` — plain call (``helper()``) or constructor (``Service()``).
+        * ``member_expression`` with ``this`` — intra-class call (``this.validate()``).
+        * ``member_expression`` with a named object — explicit call
+          (``Service.create()``).
+
+        Args:
+            func_node: The ``function`` field of a ``call_expression`` node.
+            source: Raw source bytes.
+            caller_class: Name of the enclosing class, or ``None``.
+            symbol_index: Name-to-qualified-name lookup.
+
+        Returns:
+            Resolved qualified name, or ``None`` if unresolvable.
+        """
+        if func_node.type == "identifier":
+            name = self._text(func_node, source)
+            if caller_class:
+                key = f"{caller_class}.{name}"
+                if key in symbol_index:
+                    return symbol_index[key][0]
+            candidates = symbol_index.get(name, [])
+            return candidates[0] if len(candidates) == 1 else None
+
+        if func_node.type == "member_expression":
+            obj_node = func_node.child_by_field_name("object")
+            prop_node = func_node.child_by_field_name("property")
+            if obj_node is None or prop_node is None:
+                return None
+            obj = self._text(obj_node, source)
+            prop = self._text(prop_node, source)
+
+            if obj == "this" and caller_class:
+                key = f"{caller_class}.{prop}"
+                candidates = symbol_index.get(key, [])
+                return candidates[0] if candidates else None
+
+            key = f"{obj}.{prop}"
+            candidates = symbol_index.get(key, [])
+            return candidates[0] if candidates else None
+
+        return None
 
     def _first_line(self, node, source: bytes) -> str:
         """Return the first source line covered by *node*.

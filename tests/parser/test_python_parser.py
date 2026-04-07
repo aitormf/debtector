@@ -124,10 +124,10 @@ class TestPythonParserEdges:
         assert any("deactivate_user" in t for t in targets)
 
     def test_total_edge_count_approximately(self, parsed) -> None:
-        """~14 edges: 5 CONTAINS + 5 HAS_METHOD + 5 IMPORTS_FROM + 1 INHERITS."""
+        """~14 structural + up to 4 CALLS edges from intra-file call resolution."""
         _, edges = parsed
-        # Flexible: between 13 and 16 is acceptable
-        assert 13 <= len(edges) <= 16, f"Got {len(edges)} edges: {[e.kind for e in edges]}"
+        # 5 CONTAINS + 5 HAS_METHOD + 5 IMPORTS_FROM + 1 INHERITS + ≤4 CALLS
+        assert 13 <= len(edges) <= 20, f"Got {len(edges)} edges: {[e.kind for e in edges]}"
 
 
 class TestPythonParserQualifiedNames:
