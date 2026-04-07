@@ -81,6 +81,24 @@ class TestCodeindexDir:
         configure_logging(project=str(tmp_path))
         assert (tmp_path / ".codeindex" / "codeindex.log").exists()
 
+    def test_gitignore_created(self, tmp_path: Path) -> None:
+        """`_codeindex_dir` writes a .gitignore that ignores everything except *.db."""
+        _codeindex_dir(str(tmp_path))
+        gi = tmp_path / ".codeindex" / ".gitignore"
+        assert gi.exists()
+        content = gi.read_text(encoding="utf-8")
+        assert "*\n" in content
+        assert "!*.db\n" in content
+        assert "!.gitignore\n" in content
+
+    def test_gitignore_not_overwritten(self, tmp_path: Path) -> None:
+        """Calling `_codeindex_dir` twice does not overwrite an existing .gitignore."""
+        _codeindex_dir(str(tmp_path))
+        gi = tmp_path / ".codeindex" / ".gitignore"
+        gi.write_text("custom\n", encoding="utf-8")
+        _codeindex_dir(str(tmp_path))
+        assert gi.read_text(encoding="utf-8") == "custom\n"
+
 
 # ──────────────────────────────────────────────
 # --json output: cmd_status
