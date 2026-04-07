@@ -61,17 +61,35 @@ class Indexer:
         ignore_dirs: set[str] | None = None,
         ignore_files: set[str] | None = None,
     ):
+        """Initialize the Indexer.
+
+        Args:
+            store: :class:`~codeindex.graph_store.GraphStore` instance where
+                parsed data will be written.
+            ignore_dirs: Set of directory names to skip during traversal.
+                Defaults to :data:`DEFAULT_IGNORE_DIRS`.
+            ignore_files: Set of exact file names to skip.
+                Defaults to :data:`DEFAULT_IGNORE_FILES`.
+        """
         self.store = store
         self.registry = ParserRegistry()
         self.ignore_dirs = ignore_dirs or DEFAULT_IGNORE_DIRS
         self.ignore_files = ignore_files or DEFAULT_IGNORE_FILES
 
     def index(self, project_path: str) -> dict:
-        """
-        Indexa un proyecto completo con detección de cambios.
+        """Index a project directory with incremental change detection.
+
+        Walks *project_path* recursively, skips ignored directories and
+        unsupported file types, computes a SHA-256 hash for each file, and
+        only re-parses files that have changed since the last run.  Files that
+        no longer exist on disk are removed from the store.
+
+        Args:
+            project_path: Absolute or relative path to the project root.
 
         Returns:
-            {"scanned": N, "indexed": N, "skipped": N, "errors": N, "removed": N}
+            Dict with integer counters:
+            ``scanned``, ``indexed``, ``skipped``, ``errors``, ``removed``.
         """
         project_path = os.path.abspath(project_path)
         stats = {"scanned": 0, "indexed": 0, "skipped": 0, "errors": 0, "removed": 0}
@@ -146,6 +164,18 @@ class Indexer:
         return stats
 
     def _discover_files(self, root_path: str):
+        """Yield absolute paths of source files under *root_path*.
+
+        Directories listed in :attr:`ignore_dirs` or starting with a dot are
+        pruned.  Only files whose extension is registered in the parser
+        registry are yielded.
+
+        Args:
+            root_path: Absolute path to the directory to traverse.
+
+        Yields:
+            Absolute file paths for each supported source file found.
+        """
         supported = set(self.registry.supported_extensions)
         for dirpath, dirnames, filenames in os.walk(root_path):
             dirnames[:] = [

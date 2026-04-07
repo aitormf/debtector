@@ -98,6 +98,12 @@ class GraphStore:
     """
 
     def __init__(self, db_path: str | Path = ".codeindex.db") -> None:
+        """Initialize the GraphStore and create the SQLite database if needed.
+
+        Args:
+            db_path: Path to the SQLite database file. Parent directories are
+                created automatically if they do not exist.
+        """
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -114,20 +120,25 @@ class GraphStore:
         self._cache_lock = threading.Lock()
 
     def __enter__(self) -> GraphStore:
+        """Support usage as a context manager."""
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Close the database connection on context manager exit."""
         self.close()
 
     def _init_schema(self) -> None:
+        """Execute the DDL script to create tables and indexes if missing."""
         self._conn.executescript(_SCHEMA_SQL)
         self._conn.commit()
 
     def _invalidate_cache(self) -> None:
+        """Discard the cached NetworkX graph so it is rebuilt on next access."""
         with self._cache_lock:
             self._nxg_cache = None
 
     def close(self) -> None:
+        """Close the underlying SQLite connection."""
         if self._conn:
             self._conn.close()
 
@@ -230,7 +241,11 @@ class GraphStore:
         self._invalidate_cache()
 
     def remove_file(self, file_path: str) -> None:
-        """Elimina todos los datos de un archivo del índice."""
+        """Remove all nodes and edges associated with a file from the index.
+
+        Args:
+            file_path: Relative path of the file to remove.
+        """
         self._conn.execute("DELETE FROM edges WHERE file_path = ?", (file_path,))
         self._conn.execute("DELETE FROM nodes WHERE file_path = ?", (file_path,))
         self._conn.commit()
@@ -238,6 +253,14 @@ class GraphStore:
         self._invalidate_cache()
 
     def set_metadata(self, key: str, value: str) -> None:
+        """Persist a key-value pair in the metadata table.
+
+        If the key already exists its value is overwritten.
+
+        Args:
+            key: Metadata key (e.g. ``"schema_version"``).
+            value: String value to store.
+        """
         self._conn.execute(
             "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
             (key, value),
@@ -245,6 +268,14 @@ class GraphStore:
         self._conn.commit()
 
     def get_metadata(self, key: str) -> str | None:
+        """Retrieve a value from the metadata table.
+
+        Args:
+            key: Metadata key to look up.
+
+        Returns:
+            The stored string value, or ``None`` if the key does not exist.
+        """
         row = self._conn.execute("SELECT value FROM metadata WHERE key = ?", (key,)).fetchone()
         return row["value"] if row else None
 
@@ -253,7 +284,15 @@ class GraphStore:
     # ══════════════════════════════════════════
 
     def get_file_hash(self, file_path: str) -> str | None:
-        """Devuelve el hash almacenado de un archivo para detectar cambios."""
+        """Return the stored SHA-256 hash of a file for change detection.
+
+        Args:
+            file_path: Relative path of the file.
+
+        Returns:
+            The stored hex-digest string, or ``None`` if the file has not been
+            indexed yet.
+        """
         row = self._conn.execute(
             "SELECT file_hash FROM nodes WHERE file_path = ? AND kind = 'File' LIMIT 1",
             (file_path,),
@@ -261,14 +300,29 @@ class GraphStore:
         return row["file_hash"] if row and row["file_hash"] else None
 
     def get_node(self, qualified_name: str) -> GraphNode | None:
-        """Busca un nodo por su qualified_name exacto."""
+        """Look up a single node by its exact qualified name.
+
+        Args:
+            qualified_name: Fully-qualified symbol identifier
+                (e.g. ``"src/app.py::UserService.get_user"``).
+
+        Returns:
+            The matching :class:`GraphNode`, or ``None`` if not found.
+        """
         row = self._conn.execute(
             "SELECT * FROM nodes WHERE qualified_name = ?", (qualified_name,)
         ).fetchone()
         return self._row_to_node(row) if row else None
 
     def get_nodes_by_file(self, file_path: str) -> list[GraphNode]:
-        """Todos los nodos de un archivo."""
+        """Return all nodes that belong to a given file, ordered by line number.
+
+        Args:
+            file_path: Relative path of the source file.
+
+        Returns:
+            List of :class:`GraphNode` objects sorted by ``line_start``.
+        """
         rows = self._conn.execute(
             "SELECT * FROM nodes WHERE file_path = ? ORDER BY line_start",
             (file_path,),
@@ -276,18 +330,31 @@ class GraphStore:
         return [self._row_to_node(r) for r in rows]
 
     def get_all_files(self) -> list[str]:
-        """Lista de archivos indexados."""
+        """Return the relative paths of all indexed source files.
+
+        Returns:
+            Sorted list of file paths currently present in the index.
+        """
         rows = self._conn.execute(
             "SELECT DISTINCT file_path FROM nodes WHERE kind = 'File' ORDER BY file_path"
         ).fetchall()
         return [r["file_path"] for r in rows]
 
     def search_nodes(self, query: str, kind: str | None = None, limit: int = 20) -> list[GraphNode]:
-        """
-        Búsqueda por palabras clave en nombres de nodos.
+        """Search nodes by keyword, matching against name and qualified_name.
 
-        Cada palabra del query debe coincidir (AND lógico).
-        Ejemplo: "user service" encuentra "UserService" y "user_service".
+        Every whitespace-separated word in *query* must match (AND logic). The
+        search is case-insensitive.  Example: ``"user service"`` matches
+        ``"UserService"`` and ``"user_service"``.
+
+        Args:
+            query: Whitespace-separated keywords to search for.
+            kind: Optional :class:`~codeindex.models.NodeKind` value to filter
+                results (e.g. ``"Class"``, ``"Method"``).
+            limit: Maximum number of results to return. Defaults to 20.
+
+        Returns:
+            List of matching :class:`GraphNode` objects, up to *limit* items.
         """
         words = query.lower().split()
         if not words:
@@ -313,7 +380,16 @@ class GraphStore:
         return [self._row_to_node(r) for r in rows]
 
     def search_imports(self, module: str) -> list[dict]:
-        """Encuentra qué archivos importan un módulo dado."""
+        """Find all files that import a given module (partial match).
+
+        Args:
+            module: Module name or substring to search for
+                (e.g. ``"flask"``, ``"auth.utils"``).
+
+        Returns:
+            List of dicts with keys ``source_qualified``, ``target_qualified``,
+            ``file_path``, and ``line``.
+        """
         rows = self._conn.execute(
             """SELECT e.source_qualified, e.target_qualified, e.file_path, e.line
                FROM edges e
@@ -325,7 +401,16 @@ class GraphStore:
         return [dict(r) for r in rows]
 
     def get_file_summary(self, file_path: str) -> dict | None:
-        """Resumen estructural de un archivo: sus nodos y aristas."""
+        """Return a structured summary of a file's symbols and relationships.
+
+        Args:
+            file_path: Relative path of the source file.
+
+        Returns:
+            Dict with keys ``path``, ``language``, ``nodes`` (list of symbol
+            dicts), and ``edges`` (list of relationship dicts).  Returns
+            ``None`` if the file has not been indexed.
+        """
         nodes = self.get_nodes_by_file(file_path)
         if not nodes:
             return None
@@ -365,7 +450,16 @@ class GraphStore:
     # ══════════════════════════════════════════
 
     def get_outgoing(self, qualified_name: str, edge_kind: str | None = None) -> list[GraphEdge]:
-        """Aristas que salen de un nodo."""
+        """Return edges that originate from the given node.
+
+        Args:
+            qualified_name: Source node identifier.
+            edge_kind: Optional :class:`~codeindex.models.EdgeKind` to filter
+                by (e.g. ``"IMPORTS_FROM"``).
+
+        Returns:
+            List of :class:`GraphEdge` objects leaving the node.
+        """
         if edge_kind:
             rows = self._conn.execute(
                 "SELECT * FROM edges WHERE source_qualified = ? AND kind = ?",
@@ -379,7 +473,16 @@ class GraphStore:
         return [self._row_to_edge(r) for r in rows]
 
     def get_incoming(self, qualified_name: str, edge_kind: str | None = None) -> list[GraphEdge]:
-        """Aristas que llegan a un nodo."""
+        """Return edges that point to the given node.
+
+        Args:
+            qualified_name: Target node identifier.
+            edge_kind: Optional :class:`~codeindex.models.EdgeKind` to filter
+                by (e.g. ``"CALLS"``).
+
+        Returns:
+            List of :class:`GraphEdge` objects arriving at the node.
+        """
         if edge_kind:
             rows = self._conn.execute(
                 "SELECT * FROM edges WHERE target_qualified = ? AND kind = ?",
@@ -393,7 +496,15 @@ class GraphStore:
         return [self._row_to_edge(r) for r in rows]
 
     def callers_of(self, qualified_name: str) -> list[GraphNode]:
-        """¿Quién llama a este nodo? (aristas CALLS entrantes)."""
+        """Return all nodes that call the given symbol (inbound CALLS edges).
+
+        Args:
+            qualified_name: Target symbol identifier.
+
+        Returns:
+            List of :class:`GraphNode` objects that call *qualified_name*.
+            Empty when no CALLS edges have been indexed yet.
+        """
         edges = self.get_incoming(qualified_name, edge_kind="CALLS")
         callers = []
         for e in edges:
@@ -403,7 +514,15 @@ class GraphStore:
         return callers
 
     def callees_of(self, qualified_name: str) -> list[GraphNode]:
-        """¿A quién llama este nodo? (aristas CALLS salientes)."""
+        """Return all nodes called by the given symbol (outbound CALLS edges).
+
+        Args:
+            qualified_name: Source symbol identifier.
+
+        Returns:
+            List of :class:`GraphNode` objects called by *qualified_name*.
+            Empty when no CALLS edges have been indexed yet.
+        """
         edges = self.get_outgoing(qualified_name, edge_kind="CALLS")
         callees = []
         for e in edges:
@@ -418,16 +537,21 @@ class GraphStore:
         max_depth: int = 2,
         max_nodes: int = 500,
     ) -> dict[str, Any]:
-        """
-        Análisis de impacto: dado un conjunto de archivos modificados,
-        encuentra todos los nodos afectados mediante BFS bidireccional.
+        """Compute the impact radius of a set of changed files using bidirectional BFS.
 
-        Devuelve:
-            changed_nodes: nodos en los archivos cambiados
-            impacted_nodes: nodos afectados transitivamente
-            impacted_files: archivos impactados
-            edges: aristas relevantes
-            depth_reached: profundidad alcanzada
+        Args:
+            changed_files: Relative paths of files that were modified.
+            max_depth: Maximum number of hops to traverse. Defaults to 2.
+            max_nodes: Safety cap on total nodes visited. Defaults to 500.
+
+        Returns:
+            Dict with keys:
+
+            * ``changed_nodes`` – :class:`GraphNode` list for the changed files.
+            * ``impacted_nodes`` – :class:`GraphNode` list of transitively affected nodes.
+            * ``impacted_files`` – Deduplicated list of affected file paths.
+            * ``edges`` – Relevant :class:`GraphEdge` list connecting the above nodes.
+            * ``depth_reached`` – Actual BFS depth reached.
         """
         nxg = self._build_networkx_graph()
 
@@ -483,11 +607,17 @@ class GraphStore:
         }
 
     def get_dependency_chain(self, qualified_name: str, max_depth: int = 5) -> list[list[str]]:
-        """
-        Encuentra las cadenas de dependencias de un nodo.
-        Devuelve una lista de caminos, cada uno es una lista de qualified_names.
+        """Find all dependency chains reachable from a node using DFS.
 
-        Útil para responder: "¿de qué depende transitivamente UserService?"
+        Useful for answering "what does UserService transitively depend on?".
+
+        Args:
+            qualified_name: Starting node identifier.
+            max_depth: Maximum chain length to explore. Defaults to 5.
+
+        Returns:
+            List of paths, where each path is a list of qualified_name strings
+            beginning at *qualified_name* and following outbound edges.
         """
         nxg = self._build_networkx_graph()
         if qualified_name not in nxg:
@@ -515,7 +645,12 @@ class GraphStore:
     # ══════════════════════════════════════════
 
     def get_stats(self) -> GraphStats:
-        """Estadísticas agregadas del grafo."""
+        """Return aggregate statistics for the current index.
+
+        Returns:
+            A :class:`~codeindex.models.GraphStats` instance with total node
+            and edge counts, per-kind breakdowns, language list, and file count.
+        """
         total_nodes = self._conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
         total_edges = self._conn.execute("SELECT COUNT(*) FROM edges").fetchone()[0]
 
@@ -552,7 +687,11 @@ class GraphStore:
     # ══════════════════════════════════════════
 
     def _build_networkx_graph(self):
-        """Construye (o devuelve del cache) el grafo NetworkX en memoria."""
+        """Build (or return cached) the in-memory NetworkX DiGraph.
+
+        All edges from the database are loaded into a directed graph used for
+        BFS/DFS traversals. The result is cached until the next write.
+        """
         with self._cache_lock:
             if self._nxg_cache is not None:
                 return self._nxg_cache
@@ -573,7 +712,7 @@ class GraphStore:
             return g
 
     def _batch_get_nodes(self, qualified_names: set[str]) -> list[GraphNode]:
-        """Obtiene nodos en lotes para evitar el límite de variables de SQLite."""
+        """Fetch nodes by qualified_name in batches of 450 to stay under SQLite's variable limit."""
         if not qualified_names:
             return []
         results = []
@@ -590,7 +729,7 @@ class GraphStore:
         return results
 
     def _get_edges_among(self, qualified_names: set[str]) -> list[GraphEdge]:
-        """Obtiene aristas donde tanto source como target están en el conjunto."""
+        """Fetch edges whose source AND target are both within the given node set."""
         if not qualified_names:
             return []
         results = []
@@ -610,6 +749,7 @@ class GraphStore:
         return results
 
     def _row_to_node(self, row: sqlite3.Row) -> GraphNode:
+        """Convert a raw SQLite row into a :class:`GraphNode` dataclass."""
         return GraphNode(
             id=row["id"],
             kind=row["kind"],
@@ -627,6 +767,7 @@ class GraphStore:
         )
 
     def _row_to_edge(self, row: sqlite3.Row) -> GraphEdge:
+        """Convert a raw SQLite row into a :class:`GraphEdge` dataclass."""
         return GraphEdge(
             id=row["id"],
             kind=row["kind"],
