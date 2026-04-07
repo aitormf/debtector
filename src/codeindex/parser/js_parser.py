@@ -7,10 +7,13 @@ CONTAINS, IMPORTS_FROM, HAS_METHOD e INHERITS.
 
 from __future__ import annotations
 
+import structlog
 from tree_sitter_language_pack import get_parser
 
 from ..models import EdgeInfo, EdgeKind, NodeInfo, NodeKind, make_qualified_name
 from .base import LanguageParser
+
+log = structlog.get_logger()
 
 
 class JavaScriptParser(LanguageParser):
@@ -26,11 +29,11 @@ class JavaScriptParser(LanguageParser):
         return [".js", ".jsx", ".ts", ".tsx"]
 
     def parse(self, file_path: str) -> tuple[list[NodeInfo], list[EdgeInfo]]:
+        lang = "typescript" if file_path.endswith((".ts", ".tsx")) else "javascript"
+        log.debug("parsing_file", file=file_path, language=lang)
         source = self.read_source(file_path)
         tree = self._parser.parse(source)
         root = tree.root_node
-
-        lang = "typescript" if file_path.endswith((".ts", ".tsx")) else "javascript"
 
         nodes: list[NodeInfo] = []
         edges: list[EdgeInfo] = []

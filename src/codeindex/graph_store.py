@@ -25,6 +25,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+import structlog
+
 from .models import (
     EdgeInfo,
     GraphEdge,
@@ -32,6 +34,8 @@ from .models import (
     GraphStats,
     NodeInfo,
 )
+
+log = structlog.get_logger()
 
 # ──────────────────────────────────────────────
 # Schema SQL
@@ -213,6 +217,12 @@ class GraphStore:
                 )
 
             self._conn.commit()
+            log.debug(
+                "file_stored",
+                file=file_path,
+                nodes=len(nodes),
+                edges=len(edges),
+            )
         except BaseException:
             self._conn.rollback()
             raise
@@ -224,6 +234,7 @@ class GraphStore:
         self._conn.execute("DELETE FROM edges WHERE file_path = ?", (file_path,))
         self._conn.execute("DELETE FROM nodes WHERE file_path = ?", (file_path,))
         self._conn.commit()
+        log.debug("file_removed", file=file_path)
         self._invalidate_cache()
 
     def set_metadata(self, key: str, value: str) -> None:

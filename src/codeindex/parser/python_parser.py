@@ -8,10 +8,13 @@ IMPORTS_FROM (archivo→módulo) y HAS_METHOD (clase→método).
 
 from __future__ import annotations
 
+import structlog
 from tree_sitter_language_pack import get_parser
 
 from ..models import EdgeInfo, EdgeKind, NodeInfo, NodeKind, make_qualified_name
 from .base import LanguageParser
+
+log = structlog.get_logger()
 
 
 class PythonParser(LanguageParser):
@@ -27,6 +30,7 @@ class PythonParser(LanguageParser):
         return [".py"]
 
     def parse(self, file_path: str) -> tuple[list[NodeInfo], list[EdgeInfo]]:
+        log.debug("parsing_file", file=file_path, language=self.language)
         source = self.read_source(file_path)
         tree = self._parser.parse(source)
         root = tree.root_node

@@ -17,6 +17,7 @@ import sys
 
 from .graph_store import GraphStore
 from .indexer import Indexer
+from .logging import configure_logging
 
 
 def _get_store(project: str) -> GraphStore:
@@ -158,9 +159,10 @@ def cmd_callers(args):
 
 
 def main():
+    configure_logging()
     parser = argparse.ArgumentParser(
         prog="codeindex",
-        description="🔍 CodeIndex - Grafo de código para reducir tokens de IA",
+        description="CodeIndex - Grafo de código para reducir tokens de IA",
     )
     parser.add_argument("--project", "-p", default=".", help="Ruta al proyecto")
 

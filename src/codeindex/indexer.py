@@ -10,10 +10,14 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import structlog
+
 from .graph_store import GraphStore
 from .models import NodeKind
 from .parser import ParserRegistry
 from .parser.base import LanguageParser
+
+log = structlog.get_logger()
 
 DEFAULT_IGNORE_DIRS = {
     ".git",
@@ -71,6 +75,8 @@ class Indexer:
         """
         project_path = os.path.abspath(project_path)
         stats = {"scanned": 0, "indexed": 0, "skipped": 0, "errors": 0, "removed": 0}
+        idx_log = log.bind(project=project_path)
+        idx_log.info("indexing_started")
 
         indexed_files = set(self.store.get_all_files())
         current_files: set[str] = set()
@@ -80,32 +86,29 @@ class Indexer:
             current_files.add(rel_path)
             stats["scanned"] += 1
 
-            # Comprobar si hay parser disponible
             parser = self.registry.get_parser(file_path)
             if parser is None:
                 continue
 
-            # Comprobar si el archivo cambió
             try:
                 current_hash = LanguageParser.file_hash(file_path)
             except Exception:
+                idx_log.warning("file_hash_error", file=rel_path)
                 stats["errors"] += 1
                 continue
 
             stored_hash = self.store.get_file_hash(rel_path)
             if stored_hash == current_hash:
+                idx_log.debug("file_skipped", file=rel_path)
                 stats["skipped"] += 1
                 continue
 
-            # Parsear y almacenar
             try:
                 result = self.registry.parse(file_path)
                 if result:
                     nodes, edges = result
-                    # Reescribir rutas a relativas
                     for node in nodes:
                         node.file_path = rel_path
-                        # Reconstruir qualified_name con ruta relativa
                         if node.kind == NodeKind.FILE:
                             node.qualified_name = rel_path
                         elif node.parent_name:
@@ -114,25 +117,32 @@ class Indexer:
                             node.qualified_name = f"{rel_path}::{node.name}"
                     for edge in edges:
                         edge.file_path = rel_path
-                        # Actualizar qualified_names en aristas que referencian el archivo
                         if edge.source.endswith(file_path.split("/")[-1]) or "::" in edge.source:
                             edge.source = edge.source.replace(file_path, rel_path)
                         if edge.target.endswith(file_path.split("/")[-1]) or "::" in edge.target:
                             edge.target = edge.target.replace(file_path, rel_path)
 
                     self.store.store_file(rel_path, nodes, edges, current_hash)
+                    idx_log.info(
+                        "file_indexed",
+                        file=rel_path,
+                        nodes=len(nodes),
+                        edges=len(edges),
+                    )
                     stats["indexed"] += 1
                 else:
+                    idx_log.warning("parse_returned_none", file=rel_path)
                     stats["errors"] += 1
-            except Exception as e:
-                print(f"  Error parsing {rel_path}: {e}")
+            except Exception:
+                idx_log.exception("file_parse_error", file=rel_path)
                 stats["errors"] += 1
 
-        # Eliminar archivos que ya no existen
         for removed in indexed_files - current_files:
             self.store.remove_file(removed)
+            idx_log.info("file_removed", file=removed)
             stats["removed"] += 1
 
+        idx_log.info("indexing_finished", **stats)
         return stats
 
     def _discover_files(self, root_path: str):
