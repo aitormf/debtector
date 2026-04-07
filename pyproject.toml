@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codeindex"
+version = "0.2.0"
+description = "Grafo de código sobre SQLite para reducir consumo de tokens en IA"
+requires-python = ">=3.10"
+dependencies = [
+    "tree-sitter-language-pack>=1.0",
+    "networkx>=3.0",
+    "structlog>=24.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff>=0.4",
+    "bandit[toml]>=1.7",
+    "commitizen>=3.0",
+    "pre-commit>=3.0",
+]
+
+[project.scripts]
+codeindex = "codeindex.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ---------------------------------------------------------------------------
+# Ruff — linter + formatter
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "C4", "UP"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+# ---------------------------------------------------------------------------
+# Bandit — security analysis
+# ---------------------------------------------------------------------------
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = []
+
+# ---------------------------------------------------------------------------
+# Commitizen — conventional commits
+# ---------------------------------------------------------------------------
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.2.0"
+version_files = ["pyproject.toml:version", "src/codeindex/__init__.py"]
+tag_format = "v$version"
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=codeindex --cov-report=term-missing"
