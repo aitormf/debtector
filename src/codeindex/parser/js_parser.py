@@ -283,8 +283,9 @@ class JavaScriptParser(LanguageParser):
     # ──────────────────────────────────────────────
 
     def _get_name(self, node, source: bytes) -> str:
+        # type_identifier is used for class names in TypeScript
         for child in node.children:
-            if child.type in ("identifier", "property_identifier"):
+            if child.type in ("identifier", "property_identifier", "type_identifier"):
                 return self._text(child, source)
         return "<unknown>"
 
@@ -298,8 +299,13 @@ class JavaScriptParser(LanguageParser):
         for child in class_node.children:
             if child.type == "class_heritage":
                 for sub in child.children:
-                    if sub.type == "identifier":
+                    if sub.type in ("identifier", "type_identifier"):
                         return [self._text(sub, source)]
+                    # TypeScript wraps the base class in an extends_clause node
+                    if sub.type == "extends_clause":
+                        for inner in sub.children:
+                            if inner.type in ("identifier", "type_identifier"):
+                                return [self._text(inner, source)]
         return []
 
     def _first_line(self, node, source: bytes) -> str:

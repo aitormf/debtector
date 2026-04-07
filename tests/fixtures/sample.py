@@ -5,11 +5,13 @@ Simula un servicio de usuarios típico.
 
 from __future__ import annotations
 
+import os  # noqa: F401
 from dataclasses import dataclass
+from typing import Optional  # noqa: F401
 
-from flask import Flask
+from flask import Flask, jsonify, request  # noqa: F401
 
-from .database import Database
+from .database import ConnectionPool, Database  # noqa: F401
 
 
 @dataclass

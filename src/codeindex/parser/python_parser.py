@@ -266,13 +266,21 @@ class PythonParser(LanguageParser):
         if not body or not body.children:
             return None
         first = body.children[0]
+        # tree-sitter ≥0.23: string appears directly in block
+        if first.type == "string":
+            return self._strip_string_quotes(self._text(first, source))
+        # older tree-sitter: string wrapped in expression_statement
         if first.type == "expression_statement" and first.children:
             expr = first.children[0]
             if expr.type == "string":
-                text = self._text(expr, source)
-                for q in ('"""', "'''", '"', "'"):
-                    if text.startswith(q) and text.endswith(q):
-                        return text[len(q) : -len(q)].strip()
+                return self._strip_string_quotes(self._text(expr, source))
+        return None
+
+    @staticmethod
+    def _strip_string_quotes(text: str) -> str | None:
+        for q in ('"""', "'''", '"', "'"):
+            if text.startswith(q) and text.endswith(q) and len(text) >= 2 * len(q):
+                return text[len(q) : -len(q)].strip()
         return None
 
     def _get_decorators(self, decorated_node, source: bytes) -> list[str]:
