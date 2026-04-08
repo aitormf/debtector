@@ -173,8 +173,20 @@ uv run ruff format .
 uv run bandit -r src/
 
 # Instalar pre-commit hooks
-uv run pre-commit install
+uv run pre-commit install                          # stage pre-commit
+uv run pre-commit install --hook-type commit-msg   # stage commit-msg
+uv run pre-commit install --hook-type pre-push     # stage pre-push
 ```
+
+Los tres comandos son necesarios porque el proyecto tiene hooks en tres stages distintos:
+
+| Stage | Hooks |
+|---|---|
+| `pre-commit` | ruff, ruff-format, bandit, trailing-whitespace… |
+| `commit-msg` | commitizen (formato Conventional Commits), bloqueo de atribuciones a IA |
+| `pre-push` | pytest, ruff-check |
+
+> **Nota:** `pre-commit install` solo instala el stage `pre-commit`. Sin los otros dos comandos los hooks de `commit-msg` y `pre-push` no se ejecutan aunque estén definidos en `.pre-commit-config.yaml`.
 
 ## Logging
 
