@@ -190,7 +190,7 @@ Los logs siempre van a `.codeindex/codeindex.log`, nunca a stdout.
 
 ## Roadmap
 
-- [ ] FTS5 — búsqueda léxica/ranked sin deps adicionales
+- [x] FTS5 — búsqueda léxica/ranked sin deps adicionales
 - [ ] Búsqueda semántica — `sqlite-vec` + `fastembed` (ver [ADR-001](docs/decisions/001-semantic-search.md))
 - [ ] Exportación del grafo — DOT/JSON para visualización
 - [ ] Más lenguajes — Go, Rust, Java
