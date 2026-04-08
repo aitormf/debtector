@@ -10,6 +10,12 @@ triggers:
   - who imports
   - blast radius
   - dependency graph
+  - where is defined
+  - find definition
+  - class hierarchy
+  - inheritance graph
+  - trace dependency
+  - refactor impact
 ---
 
 # CodeIndex — Code Graph Query Tool
@@ -28,6 +34,8 @@ Use `codeindex --json <subcommand>` to query it. All output is compact JSON — 
 | Find who calls a specific function/method | `callers` |
 | Get overall stats (node/edge counts) | `status` |
 | Refresh the index after editing files | `index` |
+| Install skill files into Claude Code | `install-skill` |
+| Set up git pre-commit auto-indexing | `install-hook` |
 
 ## Command reference
 
@@ -41,12 +49,19 @@ Run this first to confirm the index exists and is non-empty.
 
 ---
 
-### search — find symbols by name
+### search — find symbols by name (FTS5 + BM25)
 ```bash
 codeindex --json search "<query>"
 codeindex --json search "<query>" --kind Class   # or Function, Method
 ```
 Returns: array of `{kind, name, qualified_name, file_path, line_start, line_end, signature}`
+
+Search uses **FTS5 full-text search with BM25 ranking**. Key behaviours:
+- **camelCase splitting**: `"UserService"` matches `user`, `service`, and `userservice`
+- **Prefix matching**: each word is automatically expanded with `*` (e.g. `auth` also matches `authenticate`)
+- **Multi-word**: `"parse token"` finds nodes that contain both terms (order-independent)
+- **Kind filter**: `--kind Class|Function|Method` narrows results
+- Falls back to SQL `LIKE` if the FTS5 table is missing
 
 Use `qualified_name` as the stable identifier for any follow-up queries.
 
@@ -90,6 +105,8 @@ Returns: array of node dicts for callers.
 
 The `qualified_name` format is `path/to/file.py::ClassName.method_name` or `path/to/file.py::function_name`.
 
+CALLS edges are extracted by the Python and JS/TS parsers and stored in the index.
+
 ---
 
 ### index — refresh the index
@@ -98,6 +115,24 @@ codeindex index <directory>
 codeindex --json index <directory>
 ```
 Run after editing files. Incremental — only re-parses changed files (based on SHA-256 hash). JSON returns `{scanned, indexed, skipped, errors, removed}`.
+
+---
+
+### install-skill — copy skills into Claude Code
+```bash
+codeindex install-skill              # project-level: .claude/skills/
+codeindex install-skill --global     # user-level: ~/.claude/skills/
+```
+Copies `codeindex.md` and `codeindex-bootstrap.md` to the appropriate skills directory so Claude Code can trigger them automatically.
+
+---
+
+### install-hook — git pre-commit auto-indexing
+```bash
+codeindex install-hook                   # silent: re-indexes on every commit
+codeindex install-hook --add-to-stage    # also stages .codeindex/index.db
+```
+Appends a shell snippet to `.git/hooks/pre-commit` (idempotent). The hook runs `codeindex index .` before every commit so the index is never stale. With `--add-to-stage`, the updated `index.db` is included in the commit automatically.
 
 ---
 
@@ -127,6 +162,13 @@ codeindex index .
 codeindex --json status
 ```
 
+**First-time project setup:**
+```bash
+codeindex index .
+codeindex install-skill          # make skills available in Claude Code
+codeindex install-hook           # auto-index on every git commit
+```
+
 ## Project path
 
 By default `--project` is `.` (current directory). Use `--project /path/to/repo` when querying a different project. The index lives at `{project}/.codeindex/index.db`.
@@ -134,5 +176,6 @@ By default `--project` is `.` (current directory). Use `--project /path/to/repo`
 ## Notes
 
 - The index is not a substitute for `grep` on content — use it for structure (what exists, where, how things connect).
-- `callers` only shows CALLS edges; if CALLS edges are not yet populated, use `imports` + `search` to trace manually.
+- `search` uses FTS5 BM25 — results are ranked by relevance, most relevant first.
 - When the index is stale, re-run `codeindex index <dir>` first.
+- `.codeindex/.gitignore` is created automatically on first use; the directory is self-contained.

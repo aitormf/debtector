@@ -161,11 +161,23 @@ Directorios ignorados en indexación: `.git`, `__pycache__`, `node_modules`, `.n
 
 ---
 
-## Roadmap activo
+## Fixture de test de referencia
 
-- [x] FTS5 — búsqueda léxica/ranked con camelCase splitting y BM25
-- [ ] Búsqueda semántica — `sqlite-vec` + `fastembed` (ver `docs/decisions/001-semantic-search.md`)
-- [ ] Exportación del grafo — DOT/JSON para visualización
-- [ ] Más lenguajes — Go, Rust, Java
-- [ ] Schema migrations — versionado del esquema SQLite
-- [ ] Ignorar rutas — soporte para `.codeindexignore`
+`tests/fixtures/sample.py` — servicio Flask de ejemplo. Al parsearse debe producir:
+- **Nodos**: 1 File + 3 Class (`User`, `UserService`, `AdminService`) + 5 Method + 2 Function = **11 nodos**
+- **Aristas**: CONTAINS × 3 + HAS_METHOD × 5 + IMPORTS_FROM × 4 + INHERITS × 1 = **~14 aristas**
+
+Usar como smoke test tras tocar parsers o GraphStore.
+
+---
+
+## Referencia de diseño
+
+Patrones adoptados de [tirth8205/code-review-graph](https://github.com/tirth8205/code-review-graph):
+`qualified_name` como ID único · escritura atómica por archivo · NetworkX como cache · batch queries de 450 · BFS bidireccional para impacto · tabla `metadata` key-value · sanitización de nombres contra prompt injection.
+
+---
+
+## Roadmap
+
+Ver [`TODO.md`](TODO.md) para la lista completa y priorizada de tareas pendientes.
