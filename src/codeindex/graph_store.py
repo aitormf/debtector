@@ -19,6 +19,7 @@ Uso:
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import threading
 import time
@@ -85,7 +86,20 @@ CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_qualified);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_qualified);
 CREATE INDEX IF NOT EXISTS idx_edges_kind ON edges(kind);
 CREATE INDEX IF NOT EXISTS idx_edges_file ON edges(file_path);
+
+-- FTS5: búsqueda léxica con ranking BM25
+CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
+    node_id    UNINDEXED,
+    name,
+    qualified_name,
+    signature,
+    docstring,
+    tokenize = 'unicode61'
+);
 """
+
+# Regex to split camelCase boundaries: "AuthService" → "Auth Service"
+_CAMEL_RE = re.compile(r"([a-z])([A-Z])")
 
 
 class GraphStore:
@@ -168,15 +182,21 @@ class GraphStore:
         """
         self._conn.execute("BEGIN IMMEDIATE")
         try:
+            # Limpiar FTS antes de borrar nodos (aún necesitamos sus IDs)
+            self._conn.execute(
+                "DELETE FROM nodes_fts WHERE node_id IN "
+                "(SELECT id FROM nodes WHERE file_path = ?)",
+                (file_path,),
+            )
             # Limpiar datos previos del archivo
             self._conn.execute("DELETE FROM edges WHERE file_path = ?", (file_path,))
             self._conn.execute("DELETE FROM nodes WHERE file_path = ?", (file_path,))
 
             now = time.time()
 
-            # Insertar nodos
+            # Insertar nodos y poblar FTS5
             for node in nodes:
-                self._conn.execute(
+                cur = self._conn.execute(
                     """INSERT INTO nodes
                        (kind, name, qualified_name, file_path, line_start, line_end,
                         language, parent_name, signature, docstring, decorators,
@@ -206,6 +226,18 @@ class GraphStore:
                         file_hash,
                         json.dumps(node.extra),
                         now,
+                    ),
+                )
+                self._conn.execute(
+                    "INSERT INTO nodes_fts"
+                    "(node_id, name, qualified_name, signature, docstring)"
+                    " VALUES (?, ?, ?, ?, ?)",
+                    (
+                        cur.lastrowid,
+                        self._fts_text(node.name),
+                        self._fts_text(node.qualified_name),
+                        self._fts_text(node.signature),
+                        node.docstring or "",
                     ),
                 )
 
@@ -246,6 +278,11 @@ class GraphStore:
         Args:
             file_path: Relative path of the file to remove.
         """
+        self._conn.execute(
+            "DELETE FROM nodes_fts WHERE node_id IN "
+            "(SELECT id FROM nodes WHERE file_path = ?)",
+            (file_path,),
+        )
         self._conn.execute("DELETE FROM edges WHERE file_path = ?", (file_path,))
         self._conn.execute("DELETE FROM nodes WHERE file_path = ?", (file_path,))
         self._conn.commit()
@@ -341,38 +378,99 @@ class GraphStore:
         return [r["file_path"] for r in rows]
 
     def search_nodes(self, query: str, kind: str | None = None, limit: int = 20) -> list[GraphNode]:
-        """Search nodes by keyword, matching against name and qualified_name.
+        """Search nodes using FTS5 full-text search with BM25 ranking.
 
-        Every whitespace-separated word in *query* must match (AND logic). The
-        search is case-insensitive.  Example: ``"user service"`` matches
-        ``"UserService"`` and ``"user_service"``.
+        Splits camelCase and snake_case identifiers at index time so that
+        ``"auth"`` matches ``"AuthService"`` and ``"validate"`` matches
+        ``"validateEmail"``.  Multi-word queries require ALL words to match
+        (AND logic).  Each word is matched as a prefix so ``"serv"`` finds
+        ``"service"``.
+
+        Falls back to SQL ``LIKE`` search when the FTS5 table is unavailable.
 
         Args:
-            query: Whitespace-separated keywords to search for.
-            kind: Optional :class:`~codeindex.models.NodeKind` value to filter
+            query: Free-text search string (e.g. ``"auth service"``,
+                ``"create user"``).
+            kind: Optional :class:`~codeindex.models.NodeKind` string to filter
                 results (e.g. ``"Class"``, ``"Method"``).
             limit: Maximum number of results to return. Defaults to 20.
 
         Returns:
-            List of matching :class:`GraphNode` objects, up to *limit* items.
+            List of matching :class:`GraphNode` objects ordered by BM25
+            relevance, up to *limit* items.
         """
-        words = query.lower().split()
+        words = query.strip().split()
         if not words:
             return []
+        try:
+            return self._search_fts(words, kind, limit)
+        except sqlite3.OperationalError:
+            return self._search_like(words, kind, limit)
 
-        conditions = []
-        params: list = []
+    def _search_fts(
+        self, words: list[str], kind: str | None, limit: int
+    ) -> list[GraphNode]:
+        """Execute an FTS5 MATCH query with BM25 ranking.
+
+        Args:
+            words: Tokenised search terms (already split on whitespace).
+            kind: Optional node kind filter.
+            limit: Maximum results.
+
+        Returns:
+            Ranked list of :class:`GraphNode` objects.
+        """
+        # Normalise the query the same way as the indexed content (camelCase split,
+        # non-word → space), then add prefix wildcard to each resulting token.
+        normalised = self._fts_text(*words)
+        fts_expr = " ".join(w + "*" for w in normalised.split() if w)
+        if not fts_expr:
+            return []
+
+        kind_clause = "AND n.kind = ?" if kind else ""
+        params: list[Any] = [fts_expr]
+        if kind:
+            params.append(kind)
+        params.append(limit)
+
+        rows = self._conn.execute(
+            f"""SELECT n.* FROM (
+                    SELECT node_id, rank FROM nodes_fts
+                    WHERE nodes_fts MATCH ?
+                    ORDER BY rank
+                ) fts
+                JOIN nodes n ON n.id = fts.node_id
+                {kind_clause}
+                ORDER BY fts.rank
+                LIMIT ?""",  # nosec B608
+            params,
+        ).fetchall()
+        return [self._row_to_node(r) for r in rows]
+
+    def _search_like(
+        self, words: list[str], kind: str | None, limit: int
+    ) -> list[GraphNode]:
+        """Fallback SQL LIKE search used when FTS5 is unavailable.
+
+        Args:
+            words: Tokenised search terms.
+            kind: Optional node kind filter.
+            limit: Maximum results.
+
+        Returns:
+            List of :class:`GraphNode` objects (unranked).
+        """
+        conditions: list[str] = []
+        params: list[Any] = []
         for word in words:
+            w = word.lower()
             conditions.append("(LOWER(name) LIKE ? OR LOWER(qualified_name) LIKE ?)")
-            params.extend([f"%{word}%", f"%{word}%"])
-
+            params.extend([f"%{w}%", f"%{w}%"])
         if kind:
             conditions.append("kind = ?")
             params.append(kind)
-
         where = " AND ".join(conditions)
         params.append(limit)
-
         rows = self._conn.execute(
             f"SELECT * FROM nodes WHERE {where} LIMIT ?",  # nosec B608
             params,
@@ -710,6 +808,29 @@ class GraphStore:
 
             self._nxg_cache = g
             return g
+
+    @staticmethod
+    def _fts_text(*parts: str | None) -> str:
+        """Normalise text for FTS5 indexing.
+
+        Splits camelCase boundaries, replaces non-word characters with spaces,
+        and lowercases the result so that tokens like ``"AuthService"`` become
+        ``"auth service"`` and are individually searchable.
+
+        Args:
+            *parts: One or more strings to combine (``None`` values are skipped).
+
+        Returns:
+            A single lowercased, space-separated string ready for FTS5 insertion.
+        """
+        combined = " ".join(p for p in parts if p)
+        # Split camelCase: "AuthService" → "Auth Service"
+        split = _CAMEL_RE.sub(r"\1 \2", combined)
+        # Replace non-word chars with spaces in both versions
+        split = re.sub(r"[^\w]+", " ", split)
+        # Also keep original (non-split) so "authservice" finds "AuthService"
+        original = re.sub(r"[^\w]+", " ", combined)
+        return f"{split} {original}".lower().strip()
 
     def _batch_get_nodes(self, qualified_names: set[str]) -> list[GraphNode]:
         """Fetch nodes by qualified_name in batches of 450 to stay under SQLite's variable limit."""
