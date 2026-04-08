@@ -44,10 +44,7 @@ def _codeindex_dir(project: str) -> Path:
     gitignore = d / ".gitignore"
     if not gitignore.exists():
         gitignore.write_text(
-            "# Managed by codeindex — do not edit manually\n"
-            "*\n"
-            "!.gitignore\n"
-            "!*.db\n",
+            "# Managed by codeindex — do not edit manually\n" "*\n" "!.gitignore\n" "!*.db\n",
             encoding="utf-8",
         )
     return d
@@ -528,9 +525,7 @@ def main() -> None:
     )
 
     # install-hook
-    p_hook = sub.add_parser(
-        "install-hook", help="Instalar hook git pre-commit para auto-indexado"
-    )
+    p_hook = sub.add_parser("install-hook", help="Instalar hook git pre-commit para auto-indexado")
     p_hook.add_argument(
         "--add-to-stage",
         dest="add_to_stage",

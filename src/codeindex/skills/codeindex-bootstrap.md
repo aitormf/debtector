@@ -20,7 +20,11 @@ Follow these steps to set up CodeIndex for a project that has not been indexed y
 codeindex --help
 ```
 
-If the command is not found: `pip install codeindex` or `uv add codeindex`.
+If the command is not found:
+```bash
+uv add codeindex        # preferred (uv project)
+pip install codeindex   # fallback
+```
 
 ## Step 2 — Detect project structure
 
@@ -48,6 +52,7 @@ Example outputs to expect:
 
 The index is stored at `.codeindex/index.db` in the current directory.
 Logs go to `.codeindex/codeindex.log`.
+A `.codeindex/.gitignore` is created automatically — no manual setup needed.
 
 ## Step 4 — Verify the index
 
@@ -72,26 +77,34 @@ codeindex --json search "<KnownClassName>"
 codeindex --json summary <path/to/known/file.py>
 ```
 
+The `search` command uses FTS5 full-text search with BM25 ranking and camelCase splitting,
+so `"UserService"` will match even when you only type `"user service"` or `"userserv"`.
+
 If results look correct, the index is ready.
 
-## Step 6 — Add to .gitignore (optional but recommended)
-
-The `.codeindex/` directory should typically NOT be committed (it's a local cache):
-
-```
-# .gitignore
-.codeindex/
-```
-
-## Step 7 — Set up incremental indexing
-
-After any editing session, refresh the index:
+## Step 6 — Install skills into Claude Code
 
 ```bash
-codeindex index <source_root>
+codeindex install-skill              # project-level (.claude/skills/)
+codeindex install-skill --global     # user-level (~/.claude/skills/)
 ```
 
-Only changed files are re-parsed (incremental by default, based on file hash).
+This copies `codeindex.md` and `codeindex-bootstrap.md` so Claude Code triggers them automatically for future sessions. No restart needed.
+
+## Step 7 — Set up git pre-commit auto-indexing (recommended)
+
+```bash
+codeindex install-hook
+```
+
+Installs a `pre-commit` git hook that runs `codeindex index .` before every commit — keeping the index always up to date without manual intervention.
+
+If you want the updated `index.db` to be committed alongside your code changes:
+```bash
+codeindex install-hook --add-to-stage
+```
+
+The hook is idempotent: running it twice has no effect.
 
 ## Troubleshooting
 
@@ -102,11 +115,12 @@ Only changed files are re-parsed (incremental by default, based on file hash).
 | Missing TypeScript nodes | `.ts` files not in source root | Confirm path includes `.ts` files |
 | Stale results | Files edited after last index | Run `codeindex index <source_root>` again |
 | `index.db` not found for other commands | Ran index from different directory | Use `--project` flag or `cd` to project root |
+| `search` returns unexpected results | FTS5 BM25 ranking | Results are relevance-ranked; add `--kind` to narrow |
 
 ## Supported languages
 
 | Language | Extensions |
-|----------|-----------|
+|----------|------------|
 | Python | `.py` |
 | JavaScript | `.js`, `.jsx` |
 | TypeScript | `.ts`, `.tsx` |

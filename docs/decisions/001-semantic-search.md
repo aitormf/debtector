@@ -1,7 +1,7 @@
 # ADR-001: Búsqueda semántica — FTS5 + sqlite-vec + fastembed
 
-**Estado:** Aceptado  
-**Fecha:** 2026-04-07  
+**Estado:** Aceptado
+**Fecha:** 2026-04-07
 **Contexto:** CodeIndex v0.2
 
 ---

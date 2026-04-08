@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from codeindex.graph_store import GraphStore
 from codeindex.models import NodeInfo, NodeKind
 
@@ -86,7 +85,7 @@ def populated_store(store: GraphStore) -> GraphStore:
             "Returns service health status",
         ),
     )
-    store.store_file("src/auth.py",    nodes[:4], [], "hash1")
+    store.store_file("src/auth.py", nodes[:4], [], "hash1")
     store.store_file("src/payment.py", nodes[4:], [], "hash2")
     return store
 

@@ -52,4 +52,3 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
-

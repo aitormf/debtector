@@ -8,7 +8,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from codeindex.models import EdgeKind, NodeKind
 from codeindex.parser.js_parser import JavaScriptParser
 

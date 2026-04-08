@@ -279,8 +279,7 @@ class GraphStore:
             file_path: Relative path of the file to remove.
         """
         self._conn.execute(
-            "DELETE FROM nodes_fts WHERE node_id IN "
-            "(SELECT id FROM nodes WHERE file_path = ?)",
+            "DELETE FROM nodes_fts WHERE node_id IN " "(SELECT id FROM nodes WHERE file_path = ?)",
             (file_path,),
         )
         self._conn.execute("DELETE FROM edges WHERE file_path = ?", (file_path,))
@@ -407,9 +406,7 @@ class GraphStore:
         except sqlite3.OperationalError:
             return self._search_like(words, kind, limit)
 
-    def _search_fts(
-        self, words: list[str], kind: str | None, limit: int
-    ) -> list[GraphNode]:
+    def _search_fts(self, words: list[str], kind: str | None, limit: int) -> list[GraphNode]:
         """Execute an FTS5 MATCH query with BM25 ranking.
 
         Args:
@@ -447,9 +444,7 @@ class GraphStore:
         ).fetchall()
         return [self._row_to_node(r) for r in rows]
 
-    def _search_like(
-        self, words: list[str], kind: str | None, limit: int
-    ) -> list[GraphNode]:
+    def _search_like(self, words: list[str], kind: str | None, limit: int) -> list[GraphNode]:
         """Fallback SQL LIKE search used when FTS5 is unavailable.
 
         Args:

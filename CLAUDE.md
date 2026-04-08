@@ -26,7 +26,7 @@ uv run pytest                        # tests
 uv run ruff check .                  # linter
 uv run ruff format .                 # formatter
 uv run bandit -r src/                # seguridad
-uv run pre-commit install            # instalar hooks locales
+uv run pre-commit install && uv run pre-commit install --hook-type commit-msg  # instalar hooks locales
 ```
 
 ---

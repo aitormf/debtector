@@ -546,9 +546,7 @@ class JavaScriptParser(LanguageParser):
                             elif s.type == "arrow_function":
                                 arrow_node = s
                         if func_name and arrow_node:
-                            caller_qn = make_qualified_name(
-                                file_path, func_name, NodeKind.FUNCTION
-                            )
+                            caller_qn = make_qualified_name(file_path, func_name, NodeKind.FUNCTION)
                             self._extract_calls(
                                 arrow_node,
                                 source,
