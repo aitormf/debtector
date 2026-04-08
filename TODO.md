@@ -7,7 +7,7 @@ Tareas pendientes ordenadas por prioridad.
 ## Prioridad alta
 
 - [x] **Tests unitarios** — parsers (Python, JS/TS), GraphStore, indexer (TDD obligatorio)
-- [ ] **Fixture JS/TS** — archivo de test equivalente a `tests/fixtures/sample.py` para el JS parser
+- [x] **Fixture JS/TS** — archivo de test equivalente a `tests/fixtures/sample.py` para el JS parser
 - [ ] **Verificar parsers** — ejecutar contra los fixtures existentes y confirmar conteo de nodos/aristas
 - [ ] **`.codeindexignore`** — soporte para ignorar rutas adicionales en la indexación (como `.gitignore`)
 

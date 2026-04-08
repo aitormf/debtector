@@ -26,3 +26,8 @@ class Service {
         return data.toUpperCase();
     }
 }
+
+// Arrow function that calls helper() — tests arrow CALLS extraction
+export const pipeline = (input: string): string => {
+    return helper();
+};

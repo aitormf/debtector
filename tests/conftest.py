@@ -38,6 +38,24 @@ def sample_ts_fixture_path() -> Path:
 
 
 @pytest.fixture()
+def python_extras_fixture_path() -> Path:
+    """Return the absolute path to tests/fixtures/python_extras.py."""
+    return Path(__file__).parent / "fixtures" / "python_extras.py"
+
+
+@pytest.fixture()
+def js_commonjs_fixture_path() -> Path:
+    """Return the absolute path to tests/fixtures/js_commonjs.js."""
+    return Path(__file__).parent / "fixtures" / "js_commonjs.js"
+
+
+@pytest.fixture()
+def ts_calls_fixture_path() -> Path:
+    """Return the absolute path to tests/fixtures/calls_sample.ts."""
+    return Path(__file__).parent / "fixtures" / "calls_sample.ts"
+
+
+@pytest.fixture()
 def simple_nodes() -> list[NodeInfo]:
     """A minimal set of nodes for testing graph_store writes."""
     return [
