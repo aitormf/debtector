@@ -262,6 +262,7 @@ def cmd_status(args) -> None:
                 "languages": stats.languages,
                 "nodes_by_kind": stats.nodes_by_kind,
                 "edges_by_kind": stats.edges_by_kind,
+                "embeddings_count": stats.embeddings_count,
             }
         )
     else:
@@ -270,6 +271,7 @@ def cmd_status(args) -> None:
         print(f"  Archivos:    {stats.files_count}")
         print(f"  Nodos:       {stats.total_nodes}")
         print(f"  Aristas:     {stats.total_edges}")
+        print(f"  Embeddings:  {stats.embeddings_count}")
         print(f"  Lenguajes:   {', '.join(stats.languages)}")
         if stats.nodes_by_kind:
             print("\n  Nodos por tipo:")
@@ -279,6 +281,46 @@ def cmd_status(args) -> None:
             print("\n  Aristas por tipo:")
             for k, v in stats.edges_by_kind.items():
                 print(f"    {k:15s} {v}")
+
+
+def cmd_semantic(args) -> None:
+    """Search for symbols semantically similar to a natural-language query.
+
+    Requires sqlite-vec and fastembed to be installed (``uv add 'codeindex[search]'``).
+    Embeddings must have been generated during the last ``codeindex index`` run.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Path to the project root.
+            - ``query`` (str): Natural-language search string.
+            - ``limit`` (int): Maximum number of results.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
+    """
+    store = _get_store(args.project)
+    try:
+        results = store.semantic_search(args.query, limit=args.limit)
+    except (RuntimeError, ImportError) as exc:
+        if args.json:
+            _json_out({"error": str(exc)})
+        else:
+            print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        store.close()
+
+    if args.json:
+        _json_out([{"distance": dist, **node_to_dict(n)} for n, dist in results])
+    else:
+        if not results:
+            print("No se encontraron resultados.")
+            return
+        print(f"\nBúsqueda semántica: '{args.query}'")
+        print("─" * 60)
+        for n, dist in results:
+            print(f"  [{dist:.4f}] {n.kind:8s} {n.name}")
+            print(f"           {n.file_path}:{n.line_start}")
+        print(f"\nTotal: {len(results)}")
 
 
 def cmd_callers(args) -> None:
@@ -510,6 +552,17 @@ def main() -> None:
     # status
     sub.add_parser("status", help="Estadísticas del índice")
 
+    # semantic
+    p_sem = sub.add_parser("semantic", help="Búsqueda semántica por concepto (requiere [search])")
+    p_sem.add_argument("query", help="Query en lenguaje natural")
+    p_sem.add_argument(
+        "--limit",
+        "-l",
+        type=int,
+        default=10,
+        help="Número máximo de resultados (default: 10)",
+    )
+
     # callers
     p_callers = sub.add_parser("callers", help="¿Quién llama a un símbolo?")
     p_callers.add_argument("qualified_name", help="qualified_name del símbolo")
@@ -546,6 +599,7 @@ def main() -> None:
     cmds = {
         "index": cmd_index,
         "search": cmd_search,
+        "semantic": cmd_semantic,
         "summary": cmd_summary,
         "impact": cmd_impact,
         "imports": cmd_imports,

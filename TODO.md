@@ -8,8 +8,8 @@ Tareas pendientes ordenadas por prioridad.
 
 - [x] **Tests unitarios** — parsers (Python, JS/TS), GraphStore, indexer (TDD obligatorio)
 - [x] **Fixture JS/TS** — archivo de test equivalente a `tests/fixtures/sample.py` para el JS parser
-- [ ] **Verificar parsers** — ejecutar contra los fixtures existentes y confirmar conteo de nodos/aristas
-- [ ] **`.codeindexignore`** — soporte para ignorar rutas adicionales en la indexación (como `.gitignore`)
+- [x] **Verificar parsers** — ejecutar contra los fixtures existentes y confirmar conteo de nodos/aristas
+- [x] **`.codeindexignore`** — soporte para ignorar rutas adicionales en la indexación (como `.gitignore`)
 
 ## Prioridad media
 
@@ -21,7 +21,7 @@ Tareas pendientes ordenadas por prioridad.
 
 - [ ] **Schema migrations** — tabla `metadata` con `schema_version` + script de migración automática al abrir una DB antigua
 
-- [ ] **Búsqueda semántica** — `sqlite-vec` + `fastembed` para embeddings sin cambiar de base de datos (ver `docs/decisions/001-semantic-search.md`)
+- [x] **Búsqueda semántica** — `sqlite-vec` + `fastembed` para embeddings sin cambiar de base de datos (ver `docs/decisions/001-semantic-search.md`)
 
 
 - [ ] **Más lenguajes** — Go, Rust, Java (Tree-sitter los soporta; solo falta escribir el parser siguiendo `base.py`)

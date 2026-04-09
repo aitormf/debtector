@@ -101,6 +101,30 @@ CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
 # Regex to split camelCase boundaries: "AuthService" → "Auth Service"
 _CAMEL_RE = re.compile(r"([a-z])([A-Z])")
 
+# ──────────────────────────────────────────────
+# Schema adicional para sqlite-vec (embeddings semánticos)
+# ──────────────────────────────────────────────
+
+_VEC_SCHEMA_SQL = """
+CREATE VIRTUAL TABLE IF NOT EXISTS node_embeddings USING vec0(
+    embedding float[384]
+);
+"""
+
+
+def _serialize_f32(vector: list[float]) -> bytes:
+    """Serialize a float32 vector to bytes for sqlite-vec storage.
+
+    Args:
+        vector: List of float values.
+
+    Returns:
+        Raw bytes in little-endian float32 format (4 bytes per element).
+    """
+    import struct
+
+    return struct.pack(f"{len(vector)}f", *vector)
+
 
 class GraphStore:
     """
@@ -133,6 +157,10 @@ class GraphStore:
         self._nxg_cache = None
         self._cache_lock = threading.Lock()
 
+        # sqlite-vec: disponible si la extensión se carga correctamente
+        self._vec_available: bool = False
+        self._try_load_sqlite_vec()
+
     def __enter__(self) -> GraphStore:
         """Support usage as a context manager."""
         return self
@@ -145,6 +173,37 @@ class GraphStore:
         """Execute the DDL script to create tables and indexes if missing."""
         self._conn.executescript(_SCHEMA_SQL)
         self._conn.commit()
+
+    @property
+    def vec_available(self) -> bool:
+        """Return ``True`` if the sqlite-vec extension is loaded and ready.
+
+        Returns:
+            Whether vector embeddings can be stored and searched.
+        """
+        return self._vec_available
+
+    def _try_load_sqlite_vec(self) -> None:
+        """Attempt to load the sqlite-vec extension and create the embeddings table.
+
+        Sets :attr:`_vec_available` to ``True`` on success.  Silently degrades
+        if the package is not installed or the extension cannot be loaded (e.g.
+        SQLite compiled without extension support).
+        """
+        try:
+            import sqlite_vec  # noqa: PLC0415
+        except ImportError:
+            return  # sqlite-vec no instalado; _vec_available permanece False
+
+        try:
+            self._conn.enable_load_extension(True)
+            sqlite_vec.load(self._conn)
+            self._conn.enable_load_extension(False)
+            self._conn.execute(_VEC_SCHEMA_SQL)
+            self._conn.commit()
+            self._vec_available = True
+        except (AttributeError, sqlite3.OperationalError, sqlite3.DatabaseError):
+            pass
 
     def _invalidate_cache(self) -> None:
         """Discard the cached NetworkX graph so it is rebuilt on next access."""
@@ -182,6 +241,17 @@ class GraphStore:
         """
         self._conn.execute("BEGIN IMMEDIATE")
         try:
+            # Limpiar embeddings antes de borrar nodos (necesitamos sus IDs)
+            if self._vec_available:
+                old_ids = [
+                    r[0]
+                    for r in self._conn.execute(
+                        "SELECT id FROM nodes WHERE file_path = ?", (file_path,)
+                    ).fetchall()
+                ]
+                for nid in old_ids:
+                    self._conn.execute("DELETE FROM node_embeddings WHERE rowid = ?", (nid,))
+
             # Limpiar FTS antes de borrar nodos (aún necesitamos sus IDs)
             self._conn.execute(
                 "DELETE FROM nodes_fts WHERE node_id IN "
@@ -273,13 +343,24 @@ class GraphStore:
         self._invalidate_cache()
 
     def remove_file(self, file_path: str) -> None:
-        """Remove all nodes and edges associated with a file from the index.
+        """Remove all nodes, edges, and embeddings associated with a file.
 
         Args:
             file_path: Relative path of the file to remove.
         """
+        # Limpiar embeddings antes de borrar nodos (necesitamos los IDs)
+        if self._vec_available:
+            node_ids = [
+                r[0]
+                for r in self._conn.execute(
+                    "SELECT id FROM nodes WHERE file_path = ?", (file_path,)
+                ).fetchall()
+            ]
+            for nid in node_ids:
+                self._conn.execute("DELETE FROM node_embeddings WHERE rowid = ?", (nid,))
+
         self._conn.execute(
-            "DELETE FROM nodes_fts WHERE node_id IN " "(SELECT id FROM nodes WHERE file_path = ?)",
+            "DELETE FROM nodes_fts WHERE node_id IN (SELECT id FROM nodes WHERE file_path = ?)",
             (file_path,),
         )
         self._conn.execute("DELETE FROM edges WHERE file_path = ?", (file_path,))
@@ -471,6 +552,132 @@ class GraphStore:
             params,
         ).fetchall()
         return [self._row_to_node(r) for r in rows]
+
+    def update_file_embeddings(
+        self,
+        file_path: str,
+        embed_fn=None,
+    ) -> int:
+        """Generate and store vector embeddings for all nodes in a file.
+
+        Embeddings are stored in the ``node_embeddings`` virtual table managed
+        by the sqlite-vec extension.  Any previous embeddings for nodes in this
+        file are replaced automatically (they should have been removed by
+        :meth:`store_file` beforehand).
+
+        This method is a no-op when sqlite-vec is not available.
+
+        Args:
+            file_path: Relative path of the source file.
+            embed_fn: Optional callable ``(texts: list[str]) -> list[list[float]]``
+                used to generate embeddings.  When ``None``, the default
+                fastembed-based embedder from :mod:`~codeindex.embedder` is used.
+
+        Returns:
+            Number of embeddings stored.  Returns ``0`` if sqlite-vec is
+            unavailable or the file has no indexed nodes.
+
+        Raises:
+            ImportError: If fastembed is not installed and no *embed_fn* provided.
+        """
+        if not self._vec_available:
+            return 0
+
+        rows = self._conn.execute(
+            "SELECT id, kind, name, signature, docstring FROM nodes WHERE file_path = ?",
+            (file_path,),
+        ).fetchall()
+
+        if not rows:
+            return 0
+
+        if embed_fn is None:
+            from .embedder import embed_texts as embed_fn  # noqa: PLC0415
+
+        texts = [
+            f"{r['kind']} {r['name']} {r['signature'] or ''} {r['docstring'] or ''}".strip()
+            for r in rows
+        ]
+        embeddings = embed_fn(texts)
+
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            for row, embedding in zip(rows, embeddings, strict=True):
+                blob = _serialize_f32(embedding)
+                # DELETE + INSERT porque vec0 no garantiza soporte de ON CONFLICT
+                self._conn.execute("DELETE FROM node_embeddings WHERE rowid = ?", (row["id"],))
+                self._conn.execute(
+                    "INSERT INTO node_embeddings(rowid, embedding) VALUES (?, ?)",
+                    (row["id"], blob),
+                )
+            self._conn.commit()
+        except BaseException:
+            self._conn.rollback()
+            raise
+
+        log.debug("embeddings_stored", file=file_path, count=len(rows))
+        return len(rows)
+
+    def semantic_search(
+        self,
+        query: str,
+        limit: int = 10,
+        embed_fn=None,
+    ) -> list[tuple[GraphNode, float]]:
+        """Search for nodes semantically similar to a natural-language query.
+
+        Uses sqlite-vec KNN search over stored node embeddings.  Results are
+        ordered by ascending L2 distance (lower = more similar).
+
+        Args:
+            query: Natural-language search string (e.g. ``"rate limiting logic"``).
+            limit: Maximum number of results to return.  Defaults to 10.
+            embed_fn: Optional callable ``(texts: list[str]) -> list[list[float]]``
+                for embedding generation.  When ``None``, the default fastembed
+                embedder is used.
+
+        Returns:
+            List of ``(GraphNode, distance)`` tuples ordered by ascending
+            distance.  Empty when no embeddings have been generated yet.
+
+        Raises:
+            RuntimeError: If sqlite-vec is not available.
+            ImportError: If fastembed is not installed and no *embed_fn* provided.
+        """
+        if not self._vec_available:
+            raise RuntimeError(
+                "sqlite-vec no está disponible. " "Instálalo con: uv add 'codeindex[search]'"
+            )
+
+        if embed_fn is not None:
+            query_vec = embed_fn([query])[0]
+        else:
+            from .embedder import embed_text  # noqa: PLC0415
+
+            query_vec = embed_text(query)
+
+        query_blob = _serialize_f32(query_vec)
+
+        rows = self._conn.execute(
+            """SELECT rowid, distance
+               FROM node_embeddings
+               WHERE embedding MATCH ?
+                 AND k = ?
+               ORDER BY distance""",
+            (query_blob, limit),
+        ).fetchall()
+
+        if not rows:
+            return []
+
+        node_id_to_dist = {r["rowid"]: r["distance"] for r in rows}
+        nodes = self._batch_get_nodes_by_id(set(node_id_to_dist.keys()))
+
+        # Ordenar por distancia (el batch_get no garantiza orden)
+        return sorted(
+            [(n, node_id_to_dist[n.id]) for n in nodes],
+            key=lambda t: t[1],
+        )
 
     def search_imports(self, module: str) -> list[dict]:
         """Find all files that import a given module (partial match).
@@ -766,6 +973,15 @@ class GraphStore:
             "SELECT COUNT(*) FROM nodes WHERE kind = 'File'"
         ).fetchone()[0]
 
+        embeddings_count = 0
+        if self._vec_available:
+            try:
+                embeddings_count = self._conn.execute(
+                    "SELECT COUNT(*) FROM node_embeddings"
+                ).fetchone()[0]
+            except sqlite3.OperationalError:
+                pass
+
         return GraphStats(
             total_nodes=total_nodes,
             total_edges=total_edges,
@@ -773,6 +989,7 @@ class GraphStore:
             edges_by_kind=edges_by_kind,
             languages=languages,
             files_count=files_count,
+            embeddings_count=embeddings_count,
         )
 
     # ══════════════════════════════════════════
@@ -826,6 +1043,30 @@ class GraphStore:
         # Also keep original (non-split) so "authservice" finds "AuthService"
         original = re.sub(r"[^\w]+", " ", combined)
         return f"{split} {original}".lower().strip()
+
+    def _batch_get_nodes_by_id(self, node_ids: set[int]) -> list[GraphNode]:
+        """Fetch nodes by their integer primary key in batches of 450.
+
+        Args:
+            node_ids: Set of ``nodes.id`` values to retrieve.
+
+        Returns:
+            List of :class:`GraphNode` objects (order not guaranteed).
+        """
+        if not node_ids:
+            return []
+        results = []
+        ids = list(node_ids)
+        batch_size = 450
+        for i in range(0, len(ids), batch_size):
+            batch = ids[i : i + batch_size]
+            placeholders = ",".join("?" for _ in batch)
+            rows = self._conn.execute(
+                f"SELECT * FROM nodes WHERE id IN ({placeholders})",  # nosec B608
+                batch,
+            ).fetchall()
+            results.extend(self._row_to_node(r) for r in rows)
+        return results
 
     def _batch_get_nodes(self, qualified_names: set[str]) -> list[GraphNode]:
         """Fetch nodes by qualified_name in batches of 450 to stay under SQLite's variable limit."""

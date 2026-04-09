@@ -102,8 +102,8 @@ y se almacenan en una tabla `node_embeddings(node_id, embedding)` con extensión
 
 ## Estado de implementación
 
-- [ ] FTS5: tabla `nodes_fts`, actualización incremental, flag `--fts` o auto-detect
-- [ ] sqlite-vec: schema de tabla `node_embeddings`, integración en `store_file`
-- [ ] fastembed: función `embed_node(node) -> list[float]`, lazy import
-- [ ] `codeindex semantic "<query>"` subcomando
-- [ ] Tests de integración con fixtures conocidos
+- [x] FTS5: tabla `nodes_fts`, actualización incremental, flag `--fts` o auto-detect
+- [x] sqlite-vec: schema de tabla `node_embeddings`, integración en `store_file`/`remove_file`
+- [x] fastembed: `src/codeindex/embedder.py` — `embed_text/embed_texts`, lazy import
+- [x] `codeindex semantic "<query>"` subcomando
+- [x] Tests de integración con fixtures conocidos (23 tests, embedder fake determinista)

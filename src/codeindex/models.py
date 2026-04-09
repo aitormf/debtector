@@ -155,6 +155,7 @@ class GraphStats:
     edges_by_kind: dict[str, int]
     languages: list[str]
     files_count: int
+    embeddings_count: int = 0
 
 
 # ──────────────────────────────────────────────

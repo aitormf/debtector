@@ -22,6 +22,10 @@ dev = [
     "commitizen>=3.0",
     "pre-commit>=3.0",
 ]
+search = [
+    "sqlite-vec>=0.1.0",
+    "fastembed>=0.3.0",
+]
 
 [project.scripts]
 codeindex = "codeindex.cli:main"
