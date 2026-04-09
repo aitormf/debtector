@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from codeindex.graph_store import GraphStore
 from codeindex.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 from codeindex.parser.python_parser import PythonParser

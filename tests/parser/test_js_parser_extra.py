@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from codeindex.models import EdgeKind, NodeKind
 from codeindex.parser.js_parser import JavaScriptParser
 
@@ -285,7 +286,7 @@ class TestJSInlineSnippets:
         """Methods inside a TS class are extracted as METHOD nodes."""
         f = tmp_path / "cls.ts"
         f.write_text(
-            "class Svc {\n" "    run(): void {}\n" "    stop(): void {}\n" "}\n",
+            "class Svc {\n    run(): void {}\n    stop(): void {}\n}\n",
             encoding="utf-8",
         )
         nodes, _ = JavaScriptParser().parse(str(f))
@@ -297,7 +298,7 @@ class TestJSInlineSnippets:
         """Identifier call inside class resolves to same-class method via caller_class."""
         f = tmp_path / "sameclass.ts"
         f.write_text(
-            "class Svc {\n" "    run(): void { this.stop(); }\n" "    stop(): void {}\n" "}\n",
+            "class Svc {\n    run(): void { this.stop(); }\n    stop(): void {}\n}\n",
             encoding="utf-8",
         )
         _, edges = JavaScriptParser().parse(str(f))

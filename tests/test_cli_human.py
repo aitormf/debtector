@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+
 from codeindex.cli import (
     _get_store,
     cmd_callers,

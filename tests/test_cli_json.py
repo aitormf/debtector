@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from codeindex.cli import (
     _HOOK_MARKER,
     _codeindex_dir,

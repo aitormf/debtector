@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from codeindex.graph_store import GraphStore
 from codeindex.models import NodeInfo, NodeKind
 
@@ -248,9 +249,9 @@ class TestSemanticSearch:
         names = [n.name for n, _ in results]
         auth_idx = min(i for i, n in enumerate(names) if n in {"AuthService", "validate_token"})
         payment_idx = min(i for i, n in enumerate(names) if n in {"PaymentGateway", "charge"})
-        assert (
-            auth_idx < payment_idx
-        ), f"Auth ({auth_idx}) no está antes que Payment ({payment_idx})"
+        assert auth_idx < payment_idx, (
+            f"Auth ({auth_idx}) no está antes que Payment ({payment_idx})"
+        )
 
     def test_payment_query_ranks_payment_first(self, populated_store: GraphStore) -> None:
         results = populated_store.semantic_search("payment billing", embed_fn=_fake_embed, limit=20)

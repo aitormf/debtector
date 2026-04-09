@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+
 from codeindex.graph_store import GraphStore
 from codeindex.indexer import Indexer
 
