@@ -254,8 +254,7 @@ class GraphStore:
 
             # Limpiar FTS antes de borrar nodos (aún necesitamos sus IDs)
             self._conn.execute(
-                "DELETE FROM nodes_fts WHERE node_id IN "
-                "(SELECT id FROM nodes WHERE file_path = ?)",
+                "DELETE FROM nodes_fts WHERE node_id IN (SELECT id FROM nodes WHERE file_path = ?)",
                 (file_path,),
             )
             # Limpiar datos previos del archivo
@@ -646,7 +645,7 @@ class GraphStore:
         """
         if not self._vec_available:
             raise RuntimeError(
-                "sqlite-vec no está disponible. " "Instálalo con: uv add 'codeindex[search]'"
+                "sqlite-vec no está disponible. Instálalo con: uv add 'codeindex[search]'"
             )
 
         if embed_fn is not None:

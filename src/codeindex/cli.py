@@ -44,7 +44,7 @@ def _codeindex_dir(project: str) -> Path:
     gitignore = d / ".gitignore"
     if not gitignore.exists():
         gitignore.write_text(
-            "# Managed by codeindex — do not edit manually\n" "*\n" "!.gitignore\n" "!*.db\n",
+            "# Managed by codeindex — do not edit manually\n*\n!.gitignore\n!*.db\n",
             encoding="utf-8",
         )
     return d
