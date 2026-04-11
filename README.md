@@ -8,6 +8,24 @@ codeindex --json impact src/auth.py --depth 3
 codeindex --json callers "src/auth.py::AuthService.validate"
 ```
 
+## ¿Cuándo usar CodeIndex?
+
+### Es especialmente útil cuando…
+
+- **El repositorio es grande.** Leer decenas de archivos enteros para responder una pregunta estructural es caro en tokens. El grafo responde lo mismo con una fracción.
+- **Las preguntas son de navegación.** "¿Quién llama a esta función?", "¿qué hereda de esta clase?", "¿qué importa este módulo?" son queries baratas sobre el grafo pero costosas leyendo código.
+- **Necesitas visión global.** Entender la arquitectura de un servicio o el árbol de dependencias de un módulo es inmediato con el grafo; imposible sin él sin leer muchos archivos.
+- **El código cambia con frecuencia.** La detección incremental por SHA-256 hace que re-indexar sea rápido: solo reprocesa los archivos modificados.
+
+### No aporta tanto cuando…
+
+- **El repo es muy pequeño.** Si caben tres archivos en un contexto, el overhead de mantener el índice no se justifica.
+- **La pregunta es semántica o lógica.** "¿Esta función hace X correctamente?" o "¿hay un bug aquí?" requiere leer el cuerpo del código, no el grafo.
+- **El lenguaje no está soportado.** Fuera de Python, JS y TS, el índice solo genera nodos `File` sin estructura interna.
+- **El código es muy dinámico.** Metaprogramación, `getattr`, decoradores que reescriben funciones, etc. crean relaciones en runtime que el parser estático no puede capturar.
+
+---
+
 ## Instalación
 
 ```bash
@@ -44,8 +62,9 @@ El índice se guarda en `.codeindex/index.db` (SQLite). Los logs van a `.codeind
 | Comando | Descripción |
 |---------|-------------|
 | `index <dir>` | Indexa el directorio (incremental por hash SHA-256) |
-| `status` | Estadísticas del grafo (ficheros, nodos, aristas por tipo) |
-| `search <query>` | Busca símbolos por nombre. `--kind Class\|Function\|Method` para filtrar |
+| `status` | Estadísticas del grafo (ficheros, nodos, aristas, embeddings por tipo) |
+| `search <query>` | Busca símbolos por nombre (FTS5 + BM25). `--kind Class\|Function\|Method` para filtrar |
+| `semantic <query>` | Búsqueda semántica por significado (sqlite-vec KNN). `--limit N` |
 | `summary <file>` | Todos los símbolos e imports de un fichero |
 | `impact <files...>` | Qué ficheros y nodos se ven afectados por un cambio. `--depth N` |
 | `imports <module>` | Qué ficheros importan un módulo o librería |
@@ -203,11 +222,11 @@ Los logs siempre van a `.codeindex/codeindex.log`, nunca a stdout.
 ## Roadmap
 
 - [x] FTS5 — búsqueda léxica/ranked sin deps adicionales
-- [ ] Búsqueda semántica — `sqlite-vec` + `fastembed` (ver [ADR-001](docs/decisions/001-semantic-search.md))
+- [x] Búsqueda semántica — `sqlite-vec` + `fastembed` (ver [ADR-001](docs/decisions/001-semantic-search.md))
+- [x] Ignorar rutas — soporte para `.codeindexignore`
 - [ ] Exportación del grafo — DOT/JSON para visualización
 - [ ] Más lenguajes — Go, Rust, Java
 - [ ] Schema migrations — versionado del esquema SQLite
-- [ ] Ignorar rutas — soporte para `.codeindexignore`
 
 ## Licencia
 

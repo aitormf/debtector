@@ -28,6 +28,17 @@ Tareas pendientes ordenadas por prioridad.
 
 ## Prioridad baja
 
+- [ ] **Benchmark de ahorro de tokens** — comando `codeindex benchmark` que mide el ahorro estimado frente a leer los archivos directamente:
+  - Para cada query de un conjunto estándar, calcular `tokens(archivos que habría que leer)` vs `tokens(respuesta del grafo)` usando `tiktoken`
+  - `codeindex stats` ampliar para mostrar: tamaño total del source en tokens, promedio de tokens por query al grafo, ahorro estimado en porcentaje
+  - Opcional: modo `--trace` para registrar en cada consulta CLI los tokens reales consumidos y acumularlos en `metadata`
+
+- [ ] **Soporte monorepo** — permitir indexar múltiples paquetes/apps dentro de un mismo repositorio como unidades independientes pero consultables de forma conjunta:
+  - Detección automática de raíces de paquete (`package.json`, `pyproject.toml`, `Cargo.toml`…)
+  - Opción `--workspace` para indexar todo el monorepo y etiquetar cada nodo con su paquete de origen (`package` en `extra`)
+  - Filtrado por paquete en los comandos existentes: `codeindex search "Service" --package api`
+  - Aristas `CROSS_PACKAGE` para imports entre paquetes del mismo workspace
+
 - [ ] **Exportación del grafo** — formatos DOT / JSON para visualización externa (D3.js, Graphviz)
 
 - [ ] **MCP server** — exponer el GraphStore como herramienta MCP para que Claude Code consulte el índice sin invocar la CLI

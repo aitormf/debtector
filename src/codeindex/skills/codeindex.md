@@ -16,6 +16,31 @@ triggers:
   - inheritance graph
   - trace dependency
   - refactor impact
+  - semantic search
+  - find code that
+  - what handles
+  - where is the logic for
+  - which code deals with
+  - find similar code
+  - how does this work
+  - how does X work
+  - explain this module
+  - explain the codebase
+  - give me an overview
+  - understand the codebase
+  - understand this code
+  - before I change
+  - before changing
+  - what could break
+  - what might break
+  - orient me
+  - where should I start
+  - familiarize with
+  - get familiar with
+  - new to this codebase
+  - starting a new task
+  - what changed could affect
+  - what did I break
 ---
 
 # CodeIndex — Code Graph Query Tool
@@ -23,132 +48,71 @@ triggers:
 CodeIndex maintains a structural graph of the codebase stored in `.codeindex/index.db`.
 Use `codeindex --json <subcommand>` to query it. All output is compact JSON — parse it directly, do not re-read source files for information already in the index.
 
+> **If you are unsure about flags, output format, or exact syntax for any command, run `codeindex <subcommand> --help` rather than guessing.**
+
 ## When to use each subcommand
 
 | Goal | Command |
 |------|---------|
 | Find a class, function or method by name | `search` |
+| Find symbols by meaning / concept | `semantic` |
 | See all symbols and imports in one file | `summary` |
 | Know which files are affected by a change | `impact` |
 | Find who imports a library or module | `imports` |
 | Find who calls a specific function/method | `callers` |
-| Get overall stats (node/edge counts) | `status` |
+| Get overall stats (node/edge/embedding counts) | `status` |
 | Refresh the index after editing files | `index` |
-| Install skill files into Claude Code | `install-skill` |
-| Set up git pre-commit auto-indexing | `install-hook` |
-
-## Command reference
-
-### status — index health check
-```bash
-codeindex --json status
-```
-Returns: `{"files": N, "total_nodes": N, "total_edges": N, "languages": [...], "nodes_by_kind": {...}, "edges_by_kind": {...}}`
-
-Run this first to confirm the index exists and is non-empty.
-
----
-
-### search — find symbols by name (FTS5 + BM25)
-```bash
-codeindex --json search "<query>"
-codeindex --json search "<query>" --kind Class   # or Function, Method
-```
-Returns: array of `{kind, name, qualified_name, file_path, line_start, line_end, signature}`
-
-Search uses **FTS5 full-text search with BM25 ranking**. Key behaviours:
-- **camelCase splitting**: `"UserService"` matches `user`, `service`, and `userservice`
-- **Prefix matching**: each word is automatically expanded with `*` (e.g. `auth` also matches `authenticate`)
-- **Multi-word**: `"parse token"` finds nodes that contain both terms (order-independent)
-- **Kind filter**: `--kind Class|Function|Method` narrows results
-- Falls back to SQL `LIKE` if the FTS5 table is missing
-
-Use `qualified_name` as the stable identifier for any follow-up queries.
-
----
-
-### summary — all symbols in a file
-```bash
-codeindex --json summary <relative/path/to/file.py>
-```
-Returns: `{path, language, nodes: [...], edges: [...]}`
-
-Each node has `{kind, name, parent, signature}`. Each edge has `{kind, source, target}`.
-
----
-
-### impact — blast radius of a change
-```bash
-codeindex --json impact <file1> [file2 ...] --depth 3
-```
-Returns: `{changed_nodes: [...qnames], impacted_nodes: [...], impacted_files: [...]}`
-
-Default depth is 2. Increase to 3–4 for deep dependency chains. Use before any refactor that touches public APIs.
-
----
-
-### imports — who uses a module/library
-```bash
-codeindex --json imports <module_name>
-```
-Returns: array of `{file_path, line, source, target}`
-
-Works on any substring of the import target (e.g. `"flask"`, `"structlog"`, `".database"`).
-
----
-
-### callers — who calls a function or method
-```bash
-codeindex --json callers "<qualified_name>"
-```
-Returns: array of node dicts for callers.
-
-The `qualified_name` format is `path/to/file.py::ClassName.method_name` or `path/to/file.py::function_name`.
-
-CALLS edges are extracted by the Python and JS/TS parsers and stored in the index.
-
----
-
-### index — refresh the index
-```bash
-codeindex index <directory>
-codeindex --json index <directory>
-```
-Run after editing files. Incremental — only re-parses changed files (based on SHA-256 hash). JSON returns `{scanned, indexed, skipped, errors, removed}`.
-
----
-
-### install-skill — copy skills into Claude Code
-```bash
-codeindex install-skill              # project-level: .claude/skills/
-codeindex install-skill --global     # user-level: ~/.claude/skills/
-```
-Copies `codeindex.md` and `codeindex-bootstrap.md` to the appropriate skills directory so Claude Code can trigger them automatically.
-
----
-
-### install-hook — git pre-commit auto-indexing
-```bash
-codeindex install-hook                   # silent: re-indexes on every commit
-codeindex install-hook --add-to-stage    # also stages .codeindex/index.db
-```
-Appends a shell snippet to `.git/hooks/pre-commit` (idempotent). The hook runs `codeindex index .` before every commit so the index is never stale. With `--add-to-stage`, the updated `index.db` is included in the commit automatically.
-
----
 
 ## Typical workflows
+
+**Starting a new task — orient before touching anything:**
+```bash
+# 1. Get a feel for the file you'll be working on
+codeindex --json summary path/to/file.py
+
+# 2. Understand what it depends on
+codeindex --json imports path/to/file.py
+
+# 3. Find related symbols by concept (no need to know exact names)
+codeindex --json semantic "user authentication flow"
+
+# 4. Check who calls the functions you might change
+codeindex --json callers "path/to/file.py::MyClass.my_method"
+```
+Use this flow before reading source files — in most cases it answers orientation questions at a fraction of the token cost.
+
+---
+
+**After making changes — verify blast radius:**
+```bash
+# Re-index first so the graph reflects your changes
+codeindex index .
+
+# What files are affected by what I just changed?
+codeindex --json impact path/to/changed/file.py --depth 3
+
+# Who calls the function I modified?
+codeindex --json callers "path/to/file.py::changed_function"
+```
+
+---
 
 **Before refactoring a public function:**
 ```bash
 codeindex --json search "my_function" --kind Function
-codeindex --json impact path/to/file.py --depth 3
 codeindex --json callers "path/to/file.py::my_function"
+codeindex --json impact path/to/file.py --depth 3
 ```
 
-**Understanding a new file:**
+---
+
+**Finding code by concept:**
 ```bash
-codeindex --json summary path/to/file.py
+codeindex --json semantic "user authentication and token validation"
+codeindex --json semantic "rate limiting middleware" --limit 5
 ```
+
+---
 
 **Checking library adoption:**
 ```bash
@@ -156,17 +120,12 @@ codeindex --json imports flask
 codeindex --json imports ".database"   # relative imports
 ```
 
+---
+
 **After editing files:**
 ```bash
 codeindex index .
 codeindex --json status
-```
-
-**First-time project setup:**
-```bash
-codeindex index .
-codeindex install-skill          # make skills available in Claude Code
-codeindex install-hook           # auto-index on every git commit
 ```
 
 ## Project path
@@ -177,5 +136,6 @@ By default `--project` is `.` (current directory). Use `--project /path/to/repo`
 
 - The index is not a substitute for `grep` on content — use it for structure (what exists, where, how things connect).
 - `search` uses FTS5 BM25 — results are ranked by relevance, most relevant first.
+- `semantic` uses vector cosine distance — lower distance = more similar.
 - When the index is stale, re-run `codeindex index <dir>` first.
-- `.codeindex/.gitignore` is created automatically on first use; the directory is self-contained.
+- Use `.codeindexignore` (gitignore-style patterns) to exclude paths from indexing.
