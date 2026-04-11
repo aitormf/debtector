@@ -40,6 +40,7 @@ class EdgeKind(str, Enum):
     CALLS = "CALLS"  # función/método llama a otra
     INHERITS = "INHERITS"  # clase hereda de otra
     DEPENDS_ON = "DEPENDS_ON"  # dependencia genérica
+    COVERS = "COVERS"  # función/método de test ejerce a símbolo de producción
 
 
 # ──────────────────────────────────────────────

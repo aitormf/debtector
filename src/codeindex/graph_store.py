@@ -23,6 +23,7 @@ import re
 import sqlite3
 import threading
 import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -1002,6 +1003,155 @@ class GraphStore:
 
     # ══════════════════════════════════════════
     # ESTADÍSTICAS
+    # ══════════════════════════════════════════
+    # COVERS: test coverage edges
+    # ══════════════════════════════════════════
+
+    # SQL fragment that identifies test files by path/name convention.
+    # Used in get_uncovered_symbols() with table alias ``n``.
+    #
+    # NOTE: the ``tests/`` prefix patterns here are intentionally broader than
+    # ``is_test_file()`` in utils.py.  ``is_test_file()`` inspects only the
+    # filename; this SQL also catches helpers and fixtures living inside a
+    # ``tests/`` directory (e.g. ``tests/helpers.py``) which should not be
+    # considered production symbols.
+    _TEST_FILE_SQL = """(
+        n.file_path LIKE 'test_%'
+        OR n.file_path LIKE '%/test_%'
+        OR n.file_path LIKE '%_test.py'
+        OR n.file_path LIKE '%.test.ts'
+        OR n.file_path LIKE '%.test.js'
+        OR n.file_path LIKE '%.spec.ts'
+        OR n.file_path LIKE '%.spec.js'
+        OR n.file_path LIKE 'tests/%'
+        OR n.file_path LIKE '%/tests/%'
+    )"""  # nosec B608 — class constant, not user input
+
+    # Same fragment with alias ``src_n`` for the JOIN in update_covers_edges().
+    _TEST_FILE_SQL_SRCN = """(
+        src_n.file_path LIKE 'test_%'
+        OR src_n.file_path LIKE '%/test_%'
+        OR src_n.file_path LIKE '%_test.py'
+        OR src_n.file_path LIKE '%.test.ts'
+        OR src_n.file_path LIKE '%.test.js'
+        OR src_n.file_path LIKE '%.spec.ts'
+        OR src_n.file_path LIKE '%.spec.js'
+        OR src_n.file_path LIKE 'tests/%'
+        OR src_n.file_path LIKE '%/tests/%'
+    )"""  # nosec B608 — class constant, not user input
+
+    # Batch size for IN (...) queries — stays well below SQLite's 999-variable limit.
+    _BATCH_SIZE = 450
+
+    def update_covers_edges(self) -> int:
+        """Rebuild all COVERS edges from unresolved CALLS edges in test files.
+
+        A COVERS edge ``test_fn → prod_fn`` is created for every unresolved
+        CALLS edge (``extra`` contains ``"unresolved": true``) whose source
+        lives in a test file and whose bare target name matches a production
+        node (Function or Method) in a non-test file.
+
+        This method is idempotent: it deletes all existing COVERS edges before
+        re-deriving them.
+
+        Returns:
+            Number of COVERS edges created.
+        """
+        self._conn.execute("DELETE FROM edges WHERE kind = 'COVERS'")
+
+        # Unresolved CALLS from test functions toward bare names.
+        # Uses _TEST_FILE_SQL_SRCN because the JOIN aliases the nodes table as src_n.
+        unresolved = self._conn.execute(
+            f"""
+            SELECT e.source_qualified, e.target_qualified AS raw_name, e.file_path, e.line
+            FROM edges e
+            JOIN nodes src_n ON src_n.qualified_name = e.source_qualified
+            WHERE e.kind = 'CALLS'
+              AND e.extra LIKE '%"unresolved"%'
+              AND {self._TEST_FILE_SQL_SRCN}
+            """  # nosec B608 — _TEST_FILE_SQL_SRCN is a class constant
+        ).fetchall()
+
+        if not unresolved:
+            self._conn.commit()
+            return 0
+
+        # Batch-resolve raw names → production qualified_names to avoid N+1 queries.
+        # Build a lookup: raw_name → list of (source_qualified, file_path, line)
+        callers_by_name: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
+        for row in unresolved:
+            callers_by_name[row["raw_name"]].append(
+                (row["source_qualified"], row["file_path"], row["line"])
+            )
+
+        distinct_names = list(callers_by_name.keys())
+        now = time.time()
+        count = 0
+        inserts: list[tuple] = []
+
+        # Process in batches of _BATCH_SIZE to respect SQLite's variable limit.
+        for i in range(0, len(distinct_names), self._BATCH_SIZE):
+            batch = distinct_names[i : i + self._BATCH_SIZE]
+            placeholders = ",".join("?" * len(batch))
+            prod_rows = self._conn.execute(
+                f"""
+                SELECT n.name, n.qualified_name FROM nodes n
+                WHERE n.name IN ({placeholders})
+                  AND n.kind IN ('Function', 'Method')
+                  AND NOT {self._TEST_FILE_SQL}
+                """,  # nosec B608 — only placeholders and class constants
+                batch,
+            ).fetchall()
+
+            for prod in prod_rows:
+                for source_qn, file_path, line in callers_by_name[prod["name"]]:
+                    inserts.append((source_qn, prod["qualified_name"], file_path, line, now))
+                    count += 1
+
+        self._conn.executemany(
+            """
+            INSERT OR IGNORE INTO edges
+              (kind, source_qualified, target_qualified, file_path, line, extra, updated_at)
+            VALUES ('COVERS', ?, ?, ?, ?, '{}', ?)
+            """,
+            inserts,
+        )
+        self._conn.commit()
+        self._invalidate_cache()
+        log.info("covers_edges_updated", count=count)
+        return count
+
+    def get_uncovered_symbols(self, path_filter: str | None = None) -> list[GraphNode]:
+        """Return Function and Method nodes in production files with no COVERS edge.
+
+        Test files are excluded from the results.  An optional path filter
+        restricts results to a single file or directory prefix.
+
+        Args:
+            path_filter: If given, only symbols whose ``file_path`` starts with
+                this string are returned (e.g. ``"src/auth.py"`` or ``"src/"``).
+
+        Returns:
+            List of :class:`~codeindex.models.GraphNode` instances that have no
+            incoming COVERS edge.
+        """
+        query = f"""
+            SELECT n.* FROM nodes n
+            WHERE n.kind IN ('Function', 'Method')
+              AND NOT {self._TEST_FILE_SQL}
+              AND n.qualified_name NOT IN (
+                SELECT target_qualified FROM edges WHERE kind = 'COVERS'
+              )
+        """  # nosec B608 — _TEST_FILE_SQL is a class constant, not user input
+
+        params: list[str] = []
+        if path_filter:
+            query += " AND n.file_path LIKE ?"
+            params.append(f"{path_filter}%")
+
+        rows = self._conn.execute(query, params).fetchall()
+        return [self._row_to_node(r) for r in rows]
+
     # ══════════════════════════════════════════
 
     def get_stats(self) -> GraphStats:

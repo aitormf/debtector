@@ -13,13 +13,20 @@ Tareas pendientes ordenadas por prioridad.
 
 ## Prioridad media
 
-- [ ] **Arista `TESTED_BY`** — nueva arista en el grafo que une un símbolo (Function/Method) con el test que lo ejercita. Diseñar:
-  - Nombre definitivo de la arista (`TESTED_BY`, `COVERS`, `VERIFIED_BY`…)
-  - Cómo se extrae: llamadas desde archivos `test_*.py` / `*.test.ts` hacia símbolos no-test
-  - Nuevo subcomando `codeindex untested <dir>` que lista símbolos sin ninguna arista `TESTED_BY`
-  - Triggers en la skill: `what is untested`, `test coverage gaps`, `find uncovered code`
+- [x] **Arista `COVERS`** — arista que une un test (Function/Method en archivo test) con el símbolo de producción que ejercita:
+  - Parsers emiten CALLS no resueltos (`extra={"unresolved": true}`) desde archivos test hacia nombres externos
+  - `GraphStore.update_covers_edges()` deriva aristas COVERS por resolución de nombres tras cada indexación
+  - `GraphStore.get_uncovered_symbols()` devuelve símbolos de producción sin ninguna arista COVERS entrante
+  - Nuevo subcomando `codeindex untested [path]` que lista símbolos sin cobertura
+  - `is_test_file()` en `utils.py` como utilidad compartida (Python + JS/TS)
 
 - [ ] **Schema migrations** — tabla `metadata` con `schema_version` + script de migración automática al abrir una DB antigua
+
+- [ ] **`codeindex init` + filtros git** — comandar que configura el repo para compartir la BD entre desarrolladores:
+  - Entry points `codeindex-clean` (SQLite → SQL dump) y `codeindex-smudge` (SQL dump → SQLite) para usar como filtros git
+  - `codeindex init` escribe/parchea `.gitattributes`, configura `filter.codeindex` y `diff.codeindex` en git local, e instala los hooks `post-checkout`, `post-merge` y `post-rewrite`
+  - **Depende de Schema migrations**: la BD compartida necesita migraciones automáticas para que un desarrollador con una versión anterior del esquema pueda hacer pull sin romper su índice
+  - Pendiente de diseño: política de resolución de conflictos cuando dos ramas modifican el índice de forma incompatible
 
 - [x] **Búsqueda semántica** — `sqlite-vec` + `fastembed` para embeddings sin cambiar de base de datos (ver `docs/decisions/001-semantic-search.md`)
 

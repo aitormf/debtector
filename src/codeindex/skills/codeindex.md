@@ -41,6 +41,11 @@ triggers:
   - starting a new task
   - what changed could affect
   - what did I break
+  - what is untested
+  - test coverage gaps
+  - find uncovered code
+  - which code has no tests
+  - what lacks tests
 ---
 
 # CodeIndex — Code Graph Query Tool
@@ -60,6 +65,7 @@ Use `codeindex --json <subcommand>` to query it. All output is compact JSON — 
 | Know which files are affected by a change | `impact` |
 | Find who imports a library or module | `imports` |
 | Find who calls a specific function/method | `callers` |
+| List production symbols with no test coverage | `untested` |
 | Get overall stats (node/edge/embedding counts) | `status` |
 | Refresh the index after editing files | `index` |
 
@@ -80,6 +86,17 @@ codeindex --json semantic "user authentication flow"
 codeindex --json callers "path/to/file.py::MyClass.my_method"
 ```
 Use this flow before reading source files — in most cases it answers orientation questions at a fraction of the token cost.
+
+---
+
+**Find untested code before shipping:**
+```bash
+# All production symbols with no test coverage
+codeindex --json untested
+
+# Narrowed to a specific module
+codeindex --json untested src/auth/
+```
 
 ---
 

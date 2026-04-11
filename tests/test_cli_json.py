@@ -18,6 +18,7 @@ from codeindex.cli import (
     cmd_install_skill,
     cmd_search,
     cmd_status,
+    cmd_untested,
 )
 
 # ──────────────────────────────────────────────
@@ -368,3 +369,84 @@ class TestInstallHook:
         assert exc.value.code == 1
         out = json.loads(capsys.readouterr().out)
         assert "error" in out
+
+
+# ──────────────────────────────────────────────
+# --json output: cmd_untested
+# ──────────────────────────────────────────────
+
+
+def _seed_untested_store(project: str, tmp_path: Path) -> None:
+    """Index a minimal src + test tree with one covered and one uncovered function."""
+    from codeindex.indexer import Indexer
+
+    src = tmp_path / "src"
+    src.mkdir(parents=True, exist_ok=True)
+    (src / "math_utils.py").write_text(
+        "def add(a, b):\n    return a + b\n\ndef subtract(a, b):\n    return a - b\n",
+        encoding="utf-8",
+    )
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir(parents=True, exist_ok=True)
+    (tests_dir / "test_math.py").write_text(
+        "from src.math_utils import add\n\ndef test_add():\n    assert add(1, 2) == 3\n",
+        encoding="utf-8",
+    )
+    store = _get_store(project)
+    Indexer(store).index(str(tmp_path))
+    store.update_covers_edges()
+    store.close()
+
+
+class TestJsonUntested:
+    """cmd_untested with --json emits a JSON array of uncovered symbols."""
+
+    @pytest.fixture()
+    def untested_project(self, tmp_path: Path) -> str:
+        """Return project path with one covered (add) and one uncovered (subtract) function."""
+        _seed_untested_store(str(tmp_path), tmp_path)
+        return str(tmp_path)
+
+    def test_returns_array(self, untested_project: str, capsys: pytest.CaptureFixture) -> None:
+        cmd_untested(_args(project=untested_project, json=True, path=None))
+        out = json.loads(capsys.readouterr().out)
+        assert isinstance(out, list)
+
+    def test_uncovered_symbol_present(
+        self, untested_project: str, capsys: pytest.CaptureFixture
+    ) -> None:
+        cmd_untested(_args(project=untested_project, json=True, path=None))
+        out = json.loads(capsys.readouterr().out)
+        names = {n["name"] for n in out}
+        assert "subtract" in names
+
+    def test_covered_symbol_absent(
+        self, untested_project: str, capsys: pytest.CaptureFixture
+    ) -> None:
+        cmd_untested(_args(project=untested_project, json=True, path=None))
+        out = json.loads(capsys.readouterr().out)
+        names = {n["name"] for n in out}
+        assert "add" not in names
+
+    def test_result_has_required_fields(
+        self, untested_project: str, capsys: pytest.CaptureFixture
+    ) -> None:
+        cmd_untested(_args(project=untested_project, json=True, path=None))
+        out = json.loads(capsys.readouterr().out)
+        assert len(out) > 0
+        node = out[0]
+        for field in ("kind", "name", "qualified_name", "file_path"):
+            assert field in node, f"missing field: {field}"
+
+    def test_path_filter(self, untested_project: str, capsys: pytest.CaptureFixture) -> None:
+        cmd_untested(_args(project=untested_project, json=True, path="src/math_utils.py"))
+        out = json.loads(capsys.readouterr().out)
+        assert all(n["file_path"] == "src/math_utils.py" for n in out)
+
+    def test_no_test_functions_in_output(
+        self, untested_project: str, capsys: pytest.CaptureFixture
+    ) -> None:
+        cmd_untested(_args(project=untested_project, json=True, path=None))
+        out = json.loads(capsys.readouterr().out)
+        for node in out:
+            assert not node["file_path"].startswith("tests/")
