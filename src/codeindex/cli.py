@@ -348,6 +348,33 @@ def cmd_callers(args) -> None:
         print(f"\nTotal: {len(callers)}")
 
 
+def cmd_untested(args) -> None:
+    """List production symbols (Function/Method) that have no COVERS edge.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Path to the project root.
+            - ``path`` (str | None): Optional file or directory prefix to filter results.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
+    """
+    store = _get_store(args.project)
+    symbols = store.get_uncovered_symbols(path_filter=args.path or None)
+    store.close()
+
+    if args.json:
+        _json_out([node_to_dict(n) for n in symbols])
+    else:
+        if not symbols:
+            print("✓ All symbols are covered.")
+            return
+        print(f"\nSímbolos sin test ({len(symbols)}):")
+        print("─" * 60)
+        for n in symbols:
+            print(f"  {n.kind:10s} {n.name}")
+            print(f"             {n.file_path}:{n.line_start}")
+
+
 def cmd_install_skill(args) -> None:
     """Copy CodeIndex skill files to the Claude Code skills directory.
 
@@ -567,6 +594,15 @@ def main() -> None:
     p_callers = sub.add_parser("callers", help="¿Quién llama a un símbolo?")
     p_callers.add_argument("qualified_name", help="qualified_name del símbolo")
 
+    # untested
+    p_untested = sub.add_parser("untested", help="Símbolos sin tests (sin arista COVERS)")
+    p_untested.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help="Ruta o prefijo de directorio para filtrar (opcional)",
+    )
+
     # install-skill
     p_skill = sub.add_parser("install-skill", help="Instalar skills en Claude Code")
     p_skill.add_argument(
@@ -605,6 +641,7 @@ def main() -> None:
         "imports": cmd_imports,
         "status": cmd_status,
         "callers": cmd_callers,
+        "untested": cmd_untested,
         "install-skill": cmd_install_skill,
         "install-hook": cmd_install_hook,
     }

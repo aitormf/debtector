@@ -69,6 +69,7 @@ El índice se guarda en `.codeindex/index.db` (SQLite). Los logs van a `.codeind
 | `impact <files...>` | Qué ficheros y nodos se ven afectados por un cambio. `--depth N` |
 | `imports <module>` | Qué ficheros importan un módulo o librería |
 | `callers <qname>` | Qué funciones/métodos llaman a un símbolo concreto |
+| `untested [path]` | Lista símbolos de producción sin ningún test que los cubra (arista `COVERS`) |
 | `install-skill` | Instala los skills de Claude Code (ver más abajo) |
 | `install-hook` | Instala un hook git pre-commit para auto-indexado |
 
@@ -119,6 +120,7 @@ codeindex --project /otro/repo --json search "Service"
 | `IMPORTS_FROM` | Fichero → módulo importado |
 | `INHERITS` | Clase → clase base |
 | `CALLS` | Función/método → función/método llamado (resolución intra-fichero) |
+| `COVERS` | Función/método de test → símbolo de producción que ejercita |
 
 ### Qualified names
 

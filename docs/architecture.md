@@ -16,7 +16,8 @@ src/codeindex/
 ├── graph_store.py    # Persistencia: SQLite + sqlite-vec + NetworkX cache en memoria
 ├── indexer.py        # Orquestación: recorre archivos, detecta cambios, llama a parsers
 ├── embedder.py       # Generación de embeddings (fastembed, BAAI/bge-small-en-v1.5, 384 dims)
-├── cli.py            # Interfaz CLI: index, search, semantic, summary, impact, imports, callers, status
+├── cli.py            # Interfaz CLI: index, search, semantic, summary, impact, imports, callers, untested, status
+├── utils.py          # Utilidades compartidas: is_test_file()
 ├── logging.py        # Configuración structlog (dev coloreado / prod JSON)
 └── parser/
     ├── base.py           # LanguageParser — clase abstracta
@@ -30,8 +31,9 @@ src/codeindex/
 |---|---|
 | `models.py` | Define los tipos de entrada (`NodeInfo`, `EdgeInfo`) y salida (`GraphNode`, `GraphEdge`) sin dependencias internas |
 | `graph_store.py` | Única fuente de verdad. Escribe en SQLite, gestiona embeddings en sqlite-vec, mantiene un DiGraph de NetworkX como cache para traversals |
-| `indexer.py` | Recorre el sistema de archivos, detecta cambios por SHA-256, delega el parseo y llama a `GraphStore.store_file()`. Genera embeddings tras cada indexación (no-fatal) |
+| `indexer.py` | Recorre el sistema de archivos, detecta cambios por SHA-256, delega el parseo y llama a `GraphStore.store_file()`. Genera embeddings y aristas COVERS tras cada indexación (no-fatal) |
 | `embedder.py` | Convierte nodos a texto y genera vectores float32 con fastembed (ONNX, sin PyTorch). Lazy-loaded singleton del modelo |
+| `utils.py` | Utilidades compartidas sin dependencias internas: `is_test_file()` |
 | `parser/*` | Transforman un archivo fuente en `(list[NodeInfo], list[EdgeInfo])` usando Tree-sitter. Sin acceso a la DB |
 | `cli.py` | Traduce argumentos de línea de comandos a llamadas al GraphStore. Sin lógica de negocio propia |
 
@@ -158,14 +160,14 @@ Ranking BM25 con camelCase splitting: `"UserService"` → tokens `user`, `servic
 | `HAS_METHOD` | Clase tiene método | `app.py::UserService` → `app.py::UserService.get_user` |
 | `IMPORTS_FROM` | Archivo importa módulo o símbolo | `app.py` → `flask` |
 | `INHERITS` | Clase hereda de otra | `app.py::AdminService` → `UserService` |
-| `CALLS` | Función/método llama a otro símbolo | `app.py::create_app` → `app.py::UserService.__init__` |
+| `CALLS` | Función/método llama a otro símbolo (intra-fichero resuelto; en archivos test también se emiten llamadas cross-fichero con `extra.unresolved=true`) | `app.py::create_app` → `app.py::UserService.__init__` |
+| `COVERS` | Función/método de test ejerce a símbolo de producción. Derivado automáticamente tras cada indexación a partir de CALLS no resueltos en archivos test | `tests/test_auth.py::test_login` → `src/auth.py::login` |
 | `DEPENDS_ON` | Dependencia genérica (uso futuro) | — |
 
 #### Aristas pendientes de diseño
 
 | Valor propuesto | Propósito |
 |---|---|
-| `TESTED_BY` | Une un símbolo con el test que lo ejercita. Habilitará `codeindex untested` |
 | `USES_TYPE` | Une una función con los tipos que referencia en sus type hints |
 
 ---

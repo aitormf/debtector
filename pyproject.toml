@@ -69,3 +69,4 @@ tag_format = "v$version"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=codeindex --cov-report=term-missing"
+norecursedirs = ["tests/fixtures"]

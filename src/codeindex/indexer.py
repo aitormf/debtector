@@ -267,6 +267,14 @@ class Indexer:
             idx_log.info("file_removed", file=removed)
             stats["removed"] += 1
 
+        # Rebuild COVERS edges from unresolved CALLS in test files (non-fatal)
+        try:
+            covers_count = self.store.update_covers_edges()
+            stats["covers"] = covers_count
+        except Exception:  # noqa: BLE001
+            idx_log.debug("covers_update_skipped")
+            stats["covers"] = 0
+
         idx_log.info("indexing_finished", **stats)
         return stats
 

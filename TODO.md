@@ -13,11 +13,12 @@ Tareas pendientes ordenadas por prioridad.
 
 ## Prioridad media
 
-- [ ] **Arista `TESTED_BY`** — nueva arista en el grafo que une un símbolo (Function/Method) con el test que lo ejercita. Diseñar:
-  - Nombre definitivo de la arista (`TESTED_BY`, `COVERS`, `VERIFIED_BY`…)
-  - Cómo se extrae: llamadas desde archivos `test_*.py` / `*.test.ts` hacia símbolos no-test
-  - Nuevo subcomando `codeindex untested <dir>` que lista símbolos sin ninguna arista `TESTED_BY`
-  - Triggers en la skill: `what is untested`, `test coverage gaps`, `find uncovered code`
+- [x] **Arista `COVERS`** — arista que une un test (Function/Method en archivo test) con el símbolo de producción que ejercita:
+  - Parsers emiten CALLS no resueltos (`extra={"unresolved": true}`) desde archivos test hacia nombres externos
+  - `GraphStore.update_covers_edges()` deriva aristas COVERS por resolución de nombres tras cada indexación
+  - `GraphStore.get_uncovered_symbols()` devuelve símbolos de producción sin ninguna arista COVERS entrante
+  - Nuevo subcomando `codeindex untested [path]` que lista símbolos sin cobertura
+  - `is_test_file()` en `utils.py` como utilidad compartida (Python + JS/TS)
 
 - [ ] **Schema migrations** — tabla `metadata` con `schema_version` + script de migración automática al abrir una DB antigua
 

@@ -11,6 +11,7 @@ import structlog
 from tree_sitter_language_pack import get_parser
 
 from ..models import EdgeInfo, EdgeKind, NodeInfo, NodeKind, make_qualified_name
+from ..utils import is_test_file
 from .base import LanguageParser
 
 log = structlog.get_logger()
@@ -580,6 +581,7 @@ class JavaScriptParser(LanguageParser):
             symbol_index: Name-to-qualified-name lookup from the first pass.
             edges: Mutable list to which new CALLS edges are appended.
         """
+        in_test = is_test_file(file_path)
         for node in self._walk(func_node):
             if node.type != "call_expression":
                 continue
@@ -597,6 +599,19 @@ class JavaScriptParser(LanguageParser):
                         line=node.start_point[0] + 1,
                     )
                 )
+            elif callee_qn is None and in_test:
+                raw = self._get_raw_callee_name(func_child, source)
+                if raw:
+                    edges.append(
+                        EdgeInfo(
+                            kind=EdgeKind.CALLS,
+                            source=caller_qn,
+                            target=raw,
+                            file_path=file_path,
+                            line=node.start_point[0] + 1,
+                            extra={"unresolved": True},
+                        )
+                    )
 
     def _resolve_callee(
         self,
@@ -649,6 +664,29 @@ class JavaScriptParser(LanguageParser):
             candidates = symbol_index.get(key, [])
             return candidates[0] if candidates else None
 
+        return None
+
+    def _get_raw_callee_name(self, func_node, source: bytes) -> str | None:
+        """Extract the bare name of a callee without resolving to a qualified name.
+
+        Used to capture cross-file call targets in test files so that
+        :meth:`~codeindex.graph_store.GraphStore.update_covers_edges` can later
+        resolve them against the full node index.
+
+        Args:
+            func_node: The ``function`` field of a ``call_expression`` node.
+            source: Raw source bytes.
+
+        Returns:
+            The bare callee name (e.g. ``"add"`` or ``"validate"``), or ``None``
+            if no name can be extracted.
+        """
+        if func_node.type == "identifier":
+            return self._text(func_node, source)
+        if func_node.type == "member_expression":
+            prop_node = func_node.child_by_field_name("property")
+            if prop_node is not None:
+                return self._text(prop_node, source)
         return None
 
     def _first_line(self, node, source: bytes) -> str:
