@@ -62,6 +62,7 @@ class JavaScriptParser(LanguageParser):
 
         # Nodo del archivo
         file_qn = make_qualified_name(file_path, file_path, NodeKind.FILE)
+        module_docstring = self._get_module_docstring(root, source)
         nodes.append(
             NodeInfo(
                 kind=NodeKind.FILE,
@@ -71,6 +72,7 @@ class JavaScriptParser(LanguageParser):
                 line_start=1,
                 line_end=root.end_point[0] + 1,
                 language=lang,
+                docstring=module_docstring,
             )
         )
 
@@ -660,6 +662,34 @@ class JavaScriptParser(LanguageParser):
             The first line of the node's source text.
         """
         return self._text(node, source).split("\n")[0]
+
+    def _get_module_docstring(self, root, source: bytes) -> str | None:
+        """Extract a module-level JSDoc comment from the top of the file.
+
+        Looks for the first ``comment`` node in the root whose text starts with
+        ``/**`` — the conventional JSDoc block used to describe a module.
+
+        Args:
+            root: The tree-sitter root node of the parsed file.
+            source: Raw source bytes.
+
+        Returns:
+            The comment text with ``/**``, ``*/``, leading ``*`` per line, and
+            surrounding whitespace stripped; or ``None`` if no JSDoc is found.
+        """
+        for child in root.children:
+            if child.type == "comment":
+                text = self._text(child, source)
+                if text.startswith("/**"):
+                    # Strip /** ... */ and leading * per line
+                    inner = text[3:]
+                    if inner.endswith("*/"):
+                        inner = inner[:-2]
+                    lines = [ln.strip().lstrip("*").strip() for ln in inner.splitlines()]
+                    return " ".join(ln for ln in lines if ln) or None
+            elif child.type not in ("", "\n"):
+                break
+        return None
 
     @staticmethod
     def _text(node, source: bytes) -> str:

@@ -13,9 +13,10 @@ Un proyecto con 200 archivos Python puede tener ~150.000 tokens de contenido. La
 ```
 src/codeindex/
 ├── models.py         # Tipos de datos: NodeInfo, EdgeInfo, GraphNode, GraphEdge, enums
-├── graph_store.py    # Persistencia: SQLite + NetworkX cache en memoria
+├── graph_store.py    # Persistencia: SQLite + sqlite-vec + NetworkX cache en memoria
 ├── indexer.py        # Orquestación: recorre archivos, detecta cambios, llama a parsers
-├── cli.py            # Interfaz CLI (Typer): index, search, summary, impact, imports, callers, status
+├── embedder.py       # Generación de embeddings (fastembed, BAAI/bge-small-en-v1.5, 384 dims)
+├── cli.py            # Interfaz CLI: index, search, semantic, summary, impact, imports, callers, status
 ├── logging.py        # Configuración structlog (dev coloreado / prod JSON)
 └── parser/
     ├── base.py           # LanguageParser — clase abstracta
@@ -28,8 +29,9 @@ src/codeindex/
 | Módulo | Responsabilidad |
 |---|---|
 | `models.py` | Define los tipos de entrada (`NodeInfo`, `EdgeInfo`) y salida (`GraphNode`, `GraphEdge`) sin dependencias internas |
-| `graph_store.py` | Única fuente de verdad. Escribe en SQLite, mantiene un DiGraph de NetworkX como cache para traversals |
-| `indexer.py` | Recorre el sistema de archivos, detecta cambios por SHA-256, delega el parseo y llama a `GraphStore.store_file()` |
+| `graph_store.py` | Única fuente de verdad. Escribe en SQLite, gestiona embeddings en sqlite-vec, mantiene un DiGraph de NetworkX como cache para traversals |
+| `indexer.py` | Recorre el sistema de archivos, detecta cambios por SHA-256, delega el parseo y llama a `GraphStore.store_file()`. Genera embeddings tras cada indexación (no-fatal) |
+| `embedder.py` | Convierte nodos a texto y genera vectores float32 con fastembed (ONNX, sin PyTorch). Lazy-loaded singleton del modelo |
 | `parser/*` | Transforman un archivo fuente en `(list[NodeInfo], list[EdgeInfo])` usando Tree-sitter. Sin acceso a la DB |
 | `cli.py` | Traduce argumentos de línea de comandos a llamadas al GraphStore. Sin lógica de negocio propia |
 
@@ -57,16 +59,17 @@ El flujo inverso (consulta):
 ```
 CLI / AI query
     │
-    ├── Búsqueda léxica → SQLite FTS5 (search)
-    ├── Lookup directo  → SQLite SQL  (summary, callers, imports)
-    └── Traversal       → NetworkX    (impact, dependency chain)
+    ├── Búsqueda léxica   → SQLite FTS5         (search)
+    ├── Búsqueda semántica → sqlite-vec KNN      (semantic)
+    ├── Lookup directo    → SQLite SQL            (summary, callers, imports)
+    └── Traversal         → NetworkX             (impact, dependency chain)
 ```
 
 ---
 
 ## Schema SQLite
 
-El índice vive en `.codeindex/index.db`. Tres tablas:
+El índice vive en `.codeindex/index.db`. Cuatro tablas: tres relacionales y una tabla virtual de vectores (sqlite-vec):
 
 ```sql
 CREATE TABLE nodes (
@@ -102,6 +105,12 @@ CREATE TABLE metadata (
     key    TEXT PRIMARY KEY,
     value  TEXT NOT NULL
 );
+
+-- Tabla virtual sqlite-vec
+CREATE VIRTUAL TABLE node_embeddings USING vec0(
+    embedding float[384]   -- BAAI/bge-small-en-v1.5, 384 dims, float32
+);
+-- La rowid de node_embeddings coincide con nodes.id
 ```
 
 ### Índices
@@ -180,10 +189,11 @@ Es la "dirección completa" que elimina la ambigüedad entre símbolos con el mi
 
 ### Escritura atómica por archivo
 
-Cuando un archivo cambia, se reemplazan todos sus nodos y aristas dentro de una sola transacción:
+Cuando un archivo cambia, se reemplazan todos sus nodos, aristas **y embeddings** dentro de una sola transacción:
 
 ```
 BEGIN IMMEDIATE
+  DELETE FROM node_embeddings WHERE rowid IN (SELECT id FROM nodes WHERE file_path = ?)
   DELETE FROM nodes WHERE file_path = ?
   DELETE FROM edges WHERE file_path = ?
   INSERT INTO nodes ...
@@ -192,6 +202,30 @@ COMMIT
 ```
 
 Si algo falla, nada cambia. Esto simplifica la indexación incremental: no hay merges parciales.
+
+### Búsqueda semántica con sqlite-vec
+
+sqlite-vec es una extensión SQLite para almacenar y buscar vectores de embeddings. Se carga dinámicamente; si no está disponible, la indexación continúa sin embeddings y el comando `semantic` devuelve un error claro.
+
+```
+# Indexación (update_file_embeddings):
+nodes del archivo → node_to_text() → fastembed → float32 bytes → INSERT INTO node_embeddings
+
+# Búsqueda (semantic_search):
+query string → fastembed → float32 bytes → KNN query → JOIN nodes → list[(GraphNode, distance)]
+```
+
+La consulta KNN usa la sintaxis de sqlite-vec:
+
+```sql
+SELECT n.id, n.*, e.distance
+FROM node_embeddings e
+JOIN nodes n ON n.id = e.rowid
+WHERE e.embedding MATCH ? AND k = ?
+ORDER BY e.distance
+```
+
+Los embeddings se generan con `BAAI/bge-small-en-v1.5` (384 dimensiones, ~24 MB, ONNX Runtime sin PyTorch). El modelo se descarga una sola vez y se cachea en `~/.cache/fastembed/`.
 
 ### NetworkX como cache de traversal
 
@@ -235,7 +269,7 @@ Cada parser implementa `LanguageParser` (abstracta en `parser/base.py`) y recibe
 
 `.git`, `__pycache__`, `node_modules`, `.next`, `dist`, `build`, `.venv`, `venv`, `.idea`, `.vscode`
 
-Soporte para `.codeindexignore` pendiente (ver [`TODO.md`](../TODO.md)).
+Soporte adicional para `.codeindexignore` (gitignore-style): patrones por nombre, glob, directorio con o sin `/`. Se carga automáticamente desde la raíz del proyecto antes de cada indexación.
 
 ---
 
@@ -245,4 +279,4 @@ Ver [`docs/decisions/`](decisions/) para los ADRs formales.
 
 | ADR | Decisión |
 |---|---|
-| [001](decisions/001-semantic-search.md) | FTS5 (fase 1) + sqlite-vec + fastembed (fase 2) para búsqueda semántica |
+| [001](decisions/001-semantic-search.md) | FTS5 (fase 1, implementado) + sqlite-vec + fastembed (fase 2, implementado) para búsqueda semántica |

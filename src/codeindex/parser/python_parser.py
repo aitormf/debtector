@@ -59,6 +59,7 @@ class PythonParser(LanguageParser):
 
         # Nodo del archivo
         file_qn = make_qualified_name(file_path, file_path, NodeKind.FILE)
+        module_docstring = self._get_module_docstring(root, source)
         nodes.append(
             NodeInfo(
                 kind=NodeKind.FILE,
@@ -68,6 +69,7 @@ class PythonParser(LanguageParser):
                 line_start=1,
                 line_end=root.end_point[0] + 1,
                 language=self.language,
+                docstring=module_docstring,
             )
         )
 
@@ -549,6 +551,34 @@ class PythonParser(LanguageParser):
         for child in node.children:
             if child.type == "block":
                 return child
+        return None
+
+    def _get_module_docstring(self, root, source: bytes) -> str | None:
+        """Extract the module-level docstring from the root node.
+
+        A module docstring is the first statement of the file if it is a bare
+        string literal (``expression_statement`` containing a ``string``).
+
+        Args:
+            root: The tree-sitter root node of the parsed file.
+            source: Raw source bytes.
+
+        Returns:
+            The docstring content with surrounding quotes removed, or ``None``
+            if the module has no docstring.
+        """
+        for child in root.children:
+            # tree-sitter ≥0.23: string appears directly in the module body
+            if child.type == "string":
+                return self._strip_string_quotes(self._text(child, source))
+            # older tree-sitter: string wrapped in expression_statement
+            if child.type == "expression_statement" and child.children:
+                expr = child.children[0]
+                if expr.type == "string":
+                    return self._strip_string_quotes(self._text(expr, source))
+            # Skip comments and blank lines; stop at any real statement
+            elif child.type not in ("comment", "\n"):
+                break
         return None
 
     def _get_docstring(self, node, source: bytes) -> str | None:

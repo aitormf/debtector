@@ -11,6 +11,8 @@ dependencies = [
     "tree-sitter-language-pack>=1.0",
     "networkx>=3.0",
     "structlog>=24.0",
+    "sqlite-vec>=0.1.0",
+    "fastembed>=0.3.0",
 ]
 
 [project.optional-dependencies]
@@ -21,10 +23,6 @@ dev = [
     "bandit[toml]>=1.7",
     "commitizen>=3.0",
     "pre-commit>=3.0",
-]
-search = [
-    "sqlite-vec>=0.1.0",
-    "fastembed>=0.3.0",
 ]
 
 [project.scripts]

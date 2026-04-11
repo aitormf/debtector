@@ -201,8 +201,10 @@ name = "codeindex"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
+    { name = "fastembed" },
     { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "sqlite-vec" },
     { name = "structlog" },
     { name = "tree-sitter-language-pack" },
 ]
@@ -216,26 +218,22 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
-search = [
-    { name = "fastembed" },
-    { name = "sqlite-vec" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "bandit", extras = ["toml"], marker = "extra == 'dev'", specifier = ">=1.7" },
     { name = "commitizen", marker = "extra == 'dev'", specifier = ">=3.0" },
-    { name = "fastembed", marker = "extra == 'search'", specifier = ">=0.3.0" },
+    { name = "fastembed", specifier = ">=0.3.0" },
     { name = "networkx", specifier = ">=3.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
-    { name = "sqlite-vec", marker = "extra == 'search'", specifier = ">=0.1.0" },
+    { name = "sqlite-vec", specifier = ">=0.1.0" },
     { name = "structlog", specifier = ">=24.0" },
     { name = "tree-sitter-language-pack", specifier = ">=1.0" },
 ]
-provides-extras = ["dev", "search"]
+provides-extras = ["dev"]
 
 [[package]]
 name = "colorama"

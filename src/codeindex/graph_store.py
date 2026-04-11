@@ -593,10 +593,71 @@ class GraphStore:
         if embed_fn is None:
             from .embedder import embed_texts as embed_fn  # noqa: PLC0415
 
-        texts = [
-            f"{r['kind']} {r['name']} {r['signature'] or ''} {r['docstring'] or ''}".strip()
-            for r in rows
-        ]
+        from .embedder import build_rich_node_text, path_to_tokens  # noqa: PLC0415
+
+        ptokens = path_to_tokens(file_path)
+
+        # Módulos importados por este archivo
+        import_rows = self._conn.execute(
+            "SELECT target_qualified FROM edges WHERE kind = 'IMPORTS_FROM' AND file_path = ?",
+            (file_path,),
+        ).fetchall()
+        import_names = [r["target_qualified"].split(".")[-1] for r in import_rows]
+
+        # Símbolos del archivo agrupados por tipo para enriquecer File y Class
+        sym_rows = self._conn.execute(
+            "SELECT kind, name, parent_name FROM nodes WHERE file_path = ? AND kind != 'File'",
+            (file_path,),
+        ).fetchall()
+        file_child_names = [r["name"] for r in sym_rows if not r["parent_name"]]
+        class_methods: dict[str, list[str]] = {}
+        for r in sym_rows:
+            if r["kind"] == "Method" and r["parent_name"]:
+                class_methods.setdefault(r["parent_name"], []).append(r["name"])
+
+        # Archivos de test que llaman a cualquier símbolo de este archivo
+        test_rows = self._conn.execute(
+            """
+            SELECT DISTINCT n.file_path
+            FROM edges e
+            JOIN nodes n ON n.qualified_name = e.source_qualified
+            WHERE e.target_qualified IN (
+                SELECT qualified_name FROM nodes WHERE file_path = ?
+            )
+            AND (
+                n.file_path LIKE 'test%'
+                OR n.file_path LIKE '%/test%'
+                OR n.file_path LIKE '%_test.%'
+                OR n.file_path LIKE 'tests/%'
+            )
+            LIMIT 5
+            """,
+            (file_path,),
+        ).fetchall()
+        test_names = [Path(r["file_path"]).stem for r in test_rows]
+
+        texts = []
+        for r in rows:
+            if r["kind"] == "File":
+                child_names = file_child_names
+            elif r["kind"] == "Class":
+                child_names = class_methods.get(r["name"], [])
+            else:
+                child_names = None
+
+            texts.append(
+                build_rich_node_text(
+                    kind=r["kind"],
+                    name=r["name"],
+                    signature=r["signature"],
+                    docstring=r["docstring"],
+                    path_tokens=ptokens,
+                    import_names=import_names or None,
+                    child_names=child_names or None,
+                    test_names=test_names or None,
+                )
+            )
+
         embeddings = embed_fn(texts)
 
         self._conn.execute("BEGIN IMMEDIATE")

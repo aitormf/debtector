@@ -26,6 +26,7 @@ uv add codeindex        # preferred (uv project)
 pip install codeindex   # fallback
 ```
 
+
 ## Step 2 — Detect project structure
 
 Before indexing, identify the source root (avoid indexing `node_modules`, `venv`, `.git`, build outputs):
@@ -116,6 +117,7 @@ The hook is idempotent: running it twice has no effect.
 | Stale results | Files edited after last index | Run `codeindex index <source_root>` again |
 | `index.db` not found for other commands | Ran index from different directory | Use `--project` flag or `cd` to project root |
 | `search` returns unexpected results | FTS5 BM25 ranking | Results are relevance-ranked; add `--kind` to narrow |
+| `embeddings_count: 0` in status | sqlite-vec failed to load | Check Python version (≥ 3.10) and reinstall: `uv sync` |
 
 ## Supported languages
 
