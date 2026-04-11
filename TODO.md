@@ -22,6 +22,12 @@ Tareas pendientes ordenadas por prioridad.
 
 - [ ] **Schema migrations** — tabla `metadata` con `schema_version` + script de migración automática al abrir una DB antigua
 
+- [ ] **`codeindex init` + filtros git** — comandar que configura el repo para compartir la BD entre desarrolladores:
+  - Entry points `codeindex-clean` (SQLite → SQL dump) y `codeindex-smudge` (SQL dump → SQLite) para usar como filtros git
+  - `codeindex init` escribe/parchea `.gitattributes`, configura `filter.codeindex` y `diff.codeindex` en git local, e instala los hooks `post-checkout`, `post-merge` y `post-rewrite`
+  - **Depende de Schema migrations**: la BD compartida necesita migraciones automáticas para que un desarrollador con una versión anterior del esquema pueda hacer pull sin romper su índice
+  - Pendiente de diseño: política de resolución de conflictos cuando dos ramas modifican el índice de forma incompatible
+
 - [x] **Búsqueda semántica** — `sqlite-vec` + `fastembed` para embeddings sin cambiar de base de datos (ver `docs/decisions/001-semantic-search.md`)
 
 
