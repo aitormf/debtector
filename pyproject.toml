@@ -15,7 +15,7 @@ dependencies = [
     "fastembed>=0.3.0",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=7.0",
     "pytest-cov",

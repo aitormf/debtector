@@ -209,7 +209,7 @@ dependencies = [
     { name = "tree-sitter-language-pack" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "bandit", extra = ["toml"] },
     { name = "commitizen" },
@@ -221,19 +221,22 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bandit", extras = ["toml"], marker = "extra == 'dev'", specifier = ">=1.7" },
-    { name = "commitizen", marker = "extra == 'dev'", specifier = ">=3.0" },
     { name = "fastembed", specifier = ">=0.3.0" },
     { name = "networkx", specifier = ">=3.0" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4" },
     { name = "sqlite-vec", specifier = ">=0.1.0" },
     { name = "structlog", specifier = ">=24.0" },
     { name = "tree-sitter-language-pack", specifier = ">=1.0" },
 ]
-provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "bandit", extras = ["toml"], specifier = ">=1.7" },
+    { name = "commitizen", specifier = ">=3.0" },
+    { name = "pre-commit", specifier = ">=3.0" },
+    { name = "pytest", specifier = ">=7.0" },
+    { name = "pytest-cov" },
+    { name = "ruff", specifier = ">=0.4" },
+]
 
 [[package]]
 name = "colorama"
