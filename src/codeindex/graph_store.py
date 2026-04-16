@@ -39,6 +39,36 @@ from .models import (
 log = structlog.get_logger()
 
 # ──────────────────────────────────────────────
+# Schema versioning
+# ──────────────────────────────────────────────
+
+CURRENT_SCHEMA_VERSION: int = 1
+"""Version number of the current database schema.
+
+Increment this constant and add an entry to :data:`_MIGRATION_SQL` whenever a
+breaking or additive schema change is introduced.
+"""
+
+
+class SchemaTooNewError(RuntimeError):
+    """Raised when the stored schema version exceeds :data:`CURRENT_SCHEMA_VERSION`.
+
+    This usually means the database was created by a newer version of
+    codeindex and cannot be safely opened by this version.
+    """
+
+
+# SQL to apply for each schema upgrade step.
+# Key = target version number.  The corresponding SQL is run *after* the base
+# schema (_SCHEMA_SQL) has been applied with IF NOT EXISTS guards, so only the
+# *delta* needs to be expressed here.
+#
+# v1 is the baseline: no DDL delta is needed; only version tracking is added.
+# Example of a future migration:
+#   2: "ALTER TABLE nodes ADD COLUMN foo TEXT DEFAULT '';",
+_MIGRATION_SQL: dict[int, str] = {}
+
+# ──────────────────────────────────────────────
 # Schema SQL
 # ──────────────────────────────────────────────
 
@@ -170,9 +200,44 @@ class GraphStore:
         self.close()
 
     def _init_schema(self) -> None:
-        """Execute the DDL script to create tables and indexes if missing."""
+        """Execute the DDL script and apply any pending schema migrations."""
         self._conn.executescript(_SCHEMA_SQL)
         self._conn.commit()
+        self._apply_migrations()
+
+    def _apply_migrations(self) -> None:
+        """Check the stored schema version and apply pending migrations in order.
+
+        Reads ``schema_version`` from the ``metadata`` table.  A missing entry
+        is treated as version 0 (legacy database created before versioning was
+        introduced).
+
+        Raises:
+            SchemaTooNewError: If the stored version exceeds
+                :data:`CURRENT_SCHEMA_VERSION`.
+        """
+        raw = self.get_metadata("schema_version")
+        stored = int(raw) if raw is not None else 0
+
+        if stored > CURRENT_SCHEMA_VERSION:
+            raise SchemaTooNewError(
+                f"Database schema version {stored} is newer than the supported "
+                f"version {CURRENT_SCHEMA_VERSION}. Please upgrade codeindex."
+            )
+
+        for target in range(stored + 1, CURRENT_SCHEMA_VERSION + 1):
+            migration_sql = _MIGRATION_SQL.get(target)
+            if migration_sql:
+                # executescript issues an implicit COMMIT before running; that
+                # is acceptable here since schema changes cannot be rolled back
+                # in SQLite anyway.
+                self._conn.executescript(migration_sql)
+            self._conn.execute(
+                "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
+                ("schema_version", str(target)),
+            )
+            self._conn.commit()
+            log.info("schema_migrated", from_version=target - 1, to_version=target)
 
     @property
     def vec_available(self) -> bool:

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
-from codeindex.graph_store import GraphStore
+import pytest
+
+from codeindex.graph_store import CURRENT_SCHEMA_VERSION, GraphStore, SchemaTooNewError
 from codeindex.models import EdgeKind, NodeInfo, NodeKind
 
 
@@ -242,3 +245,46 @@ class TestContextManager:
             store.set_metadata("k", "v")
             assert store.get_metadata("k") == "v"
         # After exit, connection should be closed (no assertion needed — no exception = ok)
+
+
+class TestSchemaMigrations:
+    """Tests for automatic schema migration on DB open."""
+
+    def test_fresh_db_gets_current_version(self, tmp_path: Path) -> None:
+        """A brand-new database must have schema_version set to CURRENT_SCHEMA_VERSION."""
+        db_path = tmp_path / "fresh.db"
+        with GraphStore(db_path) as store:
+            version = store.get_metadata("schema_version")
+        assert version == str(CURRENT_SCHEMA_VERSION)
+
+    def test_reopening_does_not_change_version(self, tmp_path: Path) -> None:
+        """Opening an up-to-date DB a second time must leave schema_version unchanged."""
+        db_path = tmp_path / "stable.db"
+        with GraphStore(db_path) as store:
+            v1 = store.get_metadata("schema_version")
+        with GraphStore(db_path) as store:
+            v2 = store.get_metadata("schema_version")
+        assert v1 == v2 == str(CURRENT_SCHEMA_VERSION)
+
+    def test_legacy_db_without_version_gets_migrated(self, tmp_path: Path) -> None:
+        """A DB with no schema_version entry (legacy) must be migrated on open."""
+        db_path = tmp_path / "legacy.db"
+        # Simulate an old DB: create the metadata table but omit the schema_version row.
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        conn.commit()
+        conn.close()
+
+        with GraphStore(db_path) as store:
+            version = store.get_metadata("schema_version")
+        assert version == str(CURRENT_SCHEMA_VERSION)
+
+    def test_too_new_schema_raises_error(self, tmp_path: Path) -> None:
+        """A DB whose schema_version exceeds CURRENT_SCHEMA_VERSION must raise SchemaTooNewError."""
+        db_path = tmp_path / "future.db"
+        # Create a valid DB, then manually bump the version beyond what the code knows.
+        with GraphStore(db_path) as store:
+            store.set_metadata("schema_version", str(CURRENT_SCHEMA_VERSION + 1))
+
+        with pytest.raises(SchemaTooNewError):
+            GraphStore(db_path)
