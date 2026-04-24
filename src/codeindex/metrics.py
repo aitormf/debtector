@@ -190,6 +190,89 @@ def find_cycles(store: GraphStore) -> list[list[str]]:
     return sccs
 
 
+@dataclass
+class InheritanceMetrics:
+    """Métricas de herencia para una clase.
+
+    Args:
+        qualified_name: Identificador único de la clase.
+        depth: Profundidad en la jerarquía de herencia (0 = clase raíz).
+        children: Número de clases que heredan directamente de esta.
+    """
+
+    qualified_name: str
+    depth: int
+    children: int
+
+
+def inheritance_metrics(store: GraphStore) -> list[InheritanceMetrics]:
+    """Calcula profundidad de herencia y número de hijos para cada clase.
+
+    Recorre las aristas ``INHERITS`` del grafo. La profundidad se calcula
+    como el camino más largo desde la raíz de la jerarquía hasta la clase.
+    Los ciclos de herencia (inválidos en Python/JS) se cortan al detectar
+    nodos ya visitados.
+
+    Args:
+        store: GraphStore con el índice del proyecto.
+
+    Returns:
+        Lista de :class:`InheritanceMetrics`, una por clase indexada.
+        Lista vacía si no hay clases en el índice.
+    """
+    conn = store._conn
+
+    # Obtener todos los nodos Class y Method con kind=Class
+    class_rows = conn.execute(
+        "SELECT qualified_name FROM nodes WHERE kind = ?",
+        (NodeKind.CLASS,),
+    ).fetchall()
+
+    if not class_rows:
+        return []
+
+    class_set: set[str] = {r["qualified_name"] for r in class_rows}
+
+    # Aristas INHERITS: source=hijo, target=padre
+    edge_rows = conn.execute(
+        "SELECT source_qualified, target_qualified FROM edges WHERE kind = ?",
+        (EdgeKind.INHERITS,),
+    ).fetchall()
+
+    # children_map[parent] = número de hijos directos
+    children_map: dict[str, int] = defaultdict(int)
+    # parent_map[child] = qualified_name del padre (puede ser externo)
+    parent_map: dict[str, str] = {}
+
+    for r in edge_rows:
+        child, parent = r["source_qualified"], r["target_qualified"]
+        parent_map[child] = parent
+        if parent in class_set:
+            children_map[parent] += 1
+
+    def _depth(qn: str, visited: set[str]) -> int:
+        """Calcula la profundidad recursivamente, cortando ciclos."""
+        if qn in visited:
+            return 0
+        parent = parent_map.get(qn)
+        if parent is None:
+            return 0
+        visited.add(qn)
+        return 1 + _depth(parent, visited)
+
+    results: list[InheritanceMetrics] = []
+    for qn in class_set:
+        results.append(
+            InheritanceMetrics(
+                qualified_name=qn,
+                depth=_depth(qn, set()),
+                children=children_map.get(qn, 0),
+            )
+        )
+
+    return results
+
+
 def god_modules(store: GraphStore, percentile: float = 90) -> list[ModuleMetrics]:
     """Detecta módulos dios: outliers estadísticos de fan-in (Ca).
 
