@@ -691,6 +691,9 @@ def cmd_init(args) -> None:
 # ──────────────────────────────────────────────
 
 _BASELINE_FILE = ".codeindex/baseline.json"
+# Tolerancia de inestabilidad: diferencia mínima para considerar una regresión.
+# Un delta < 5% se trata como ruido de redondeo, no como degradación real.
+_INSTABILITY_TOLERANCE = 0.05
 
 
 def _baseline_path(project: str) -> Path:
@@ -788,7 +791,7 @@ def _baseline_status(args) -> None:
         prev = baseline_map.get(m.file_path)
         if prev is None:
             continue
-        if m.instability > prev["instability"] + 0.05:
+        if m.instability > prev["instability"] + _INSTABILITY_TOLERANCE:
             regressions.append(
                 {
                     "file_path": m.file_path,
