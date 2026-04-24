@@ -686,6 +686,148 @@ def cmd_init(args) -> None:
 
 # ──────────────────────────────────────────────
 # ──────────────────────────────────────────────
+# Baseline
+# ──────────────────────────────────────────────
+
+_BASELINE_FILE = ".codeindex/baseline.json"
+
+
+def _baseline_path(project: str) -> Path:
+    return Path(project) / _BASELINE_FILE
+
+
+def cmd_baseline(args) -> None:
+    """Save or compare coupling metrics against a stored baseline.
+
+    Sub-commands:
+
+    * ``save``   — snapshot current metrics to ``.codeindex/baseline.json``.
+    * ``status`` — compare current metrics to the baseline and report regressions.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Path to the project root.
+            - ``baseline_cmd`` (str): ``"save"`` or ``"status"``.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
+    """
+    if args.baseline_cmd == "save":
+        _baseline_save(args)
+    else:
+        _baseline_status(args)
+
+
+def _baseline_save(args) -> None:
+    """Snapshot current metrics to ``.codeindex/baseline.json``."""
+    import datetime
+
+    cfg = load_config(args.project)
+    store = _get_store(args.project)
+    modules = compute_metrics(store)
+    cycles = find_cycles(store)
+    gods = god_modules(store, percentile=cfg.metrics.thresholds.god_module_percentile)
+    store.close()
+
+    snapshot = {
+        "saved_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        "modules": [
+            {
+                "file_path": m.file_path,
+                "fan_in": round(m.fan_in, 3),
+                "fan_out": round(m.fan_out, 3),
+                "instability": round(m.instability, 4),
+            }
+            for m in modules
+        ],
+        "cycles": cycles,
+        "god_modules": [m.file_path for m in gods],
+    }
+
+    path = _baseline_path(args.project)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+
+    if args.json:
+        _json_out({"status": "saved", "path": str(path), "modules": len(modules)})
+    else:
+        print(f"Baseline guardado: {path}  ({len(modules)} módulos)")
+
+
+def _baseline_status(args) -> None:
+    """Compare current metrics to the stored baseline and report regressions."""
+    path = _baseline_path(args.project)
+
+    if not path.exists():
+        if args.json:
+            _json_out({"error": "no baseline — ejecuta: codeindex baseline save"})
+        else:
+            print("Sin baseline. Ejecuta primero: codeindex baseline save")
+        return
+
+    baseline = json.loads(path.read_text(encoding="utf-8"))
+    baseline_cycles = [frozenset(c) for c in baseline.get("cycles", [])]
+    baseline_gods = set(baseline.get("god_modules", []))
+
+    cfg = load_config(args.project)
+    store = _get_store(args.project)
+    current_modules = compute_metrics(store)
+    current_cycles = find_cycles(store)
+    current_gods = god_modules(store, percentile=cfg.metrics.thresholds.god_module_percentile)
+    store.close()
+
+    # Nuevos ciclos no presentes en baseline
+    new_cycles = [c for c in current_cycles if frozenset(c) not in baseline_cycles]
+    # Nuevos god modules no presentes en baseline
+    new_gods = [m.file_path for m in current_gods if m.file_path not in baseline_gods]
+
+    regressions: list[dict] = []
+    baseline_map = {m["file_path"]: m for m in baseline.get("modules", [])}
+    for m in current_modules:
+        prev = baseline_map.get(m.file_path)
+        if prev is None:
+            continue
+        if m.instability > prev["instability"] + 0.05:
+            regressions.append(
+                {
+                    "file_path": m.file_path,
+                    "metric": "instability",
+                    "before": prev["instability"],
+                    "after": round(m.instability, 4),
+                }
+            )
+
+    if args.json:
+        _json_out(
+            {
+                "regressions": regressions,
+                "new_cycles": new_cycles,
+                "new_god_modules": new_gods,
+            }
+        )
+        return
+
+    has_issues = regressions or new_cycles or new_gods
+    if not has_issues:
+        print("✓  Sin cambios respecto al baseline")
+        return
+
+    if new_cycles:
+        print(f"\n⚠  Nuevos ciclos ({len(new_cycles)}):")
+        for cycle in new_cycles:
+            print("   " + " → ".join(cycle) + " → ...")
+
+    if new_gods:
+        print(f"\n⚠  Nuevos god modules ({len(new_gods)}):")
+        for path_str in new_gods:
+            print(f"   {path_str}")
+
+    if regressions:
+        print(f"\n⚠  Regresiones de inestabilidad ({len(regressions)}):")
+        for r in regressions:
+            print(f"   {r['file_path']}  I: {r['before']:.3f} → {r['after']:.3f}")
+
+
+# ──────────────────────────────────────────────
 # Métricas de acoplamiento
 # ──────────────────────────────────────────────
 
@@ -833,6 +975,12 @@ def main() -> None:
     # status
     sub.add_parser("status", help="Estadísticas del índice")
 
+    # baseline
+    p_baseline = sub.add_parser("baseline", help="Gestión del baseline de métricas")
+    p_baseline_sub = p_baseline.add_subparsers(dest="baseline_cmd")
+    p_baseline_sub.add_parser("save", help="Guardar snapshot de métricas como baseline")
+    p_baseline_sub.add_parser("status", help="Comparar métricas actuales con el baseline")
+
     # semantic (congelado — no forma parte del objetivo CI/PR)
     p_sem = sub.add_parser(
         "semantic",
@@ -925,6 +1073,7 @@ def main() -> None:
         "imports": cmd_imports,
         "status": cmd_status,
         "metrics": cmd_metrics,
+        "baseline": cmd_baseline,
         "callers": cmd_callers,
         "untested": cmd_untested,
         "install-skill": cmd_install_skill,
