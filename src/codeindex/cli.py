@@ -16,6 +16,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import shutil
 import subprocess  # nosec B404
@@ -713,14 +714,15 @@ def cmd_baseline(args) -> None:
     """
     if args.baseline_cmd == "save":
         _baseline_save(args)
-    else:
+    elif args.baseline_cmd == "status":
         _baseline_status(args)
+    else:
+        print("Uso: codeindex baseline <save|status>", file=sys.stderr)
+        sys.exit(1)
 
 
 def _baseline_save(args) -> None:
     """Snapshot current metrics to ``.codeindex/baseline.json``."""
-    import datetime
-
     cfg = load_config(args.project)
     store = _get_store(args.project)
     modules = compute_metrics(store)
