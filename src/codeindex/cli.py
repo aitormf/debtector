@@ -22,9 +22,11 @@ import subprocess  # nosec B404
 import sys
 from pathlib import Path
 
+from .config import load_config
 from .graph_store import GraphStore
 from .indexer import Indexer
 from .logging import configure_logging
+from .metrics import compute_metrics, find_cycles, god_modules
 from .models import node_to_dict
 
 # ──────────────────────────────────────────────
@@ -683,6 +685,103 @@ def cmd_init(args) -> None:
 
 
 # ──────────────────────────────────────────────
+# ──────────────────────────────────────────────
+# Métricas de acoplamiento
+# ──────────────────────────────────────────────
+
+
+def cmd_metrics(args) -> None:
+    """Print coupling metrics (Ca, Ce, I, cycles, god modules) for every module.
+
+    Reads ``codeindex.toml`` from the project root to apply configured
+    thresholds.  With ``--json`` emits a single JSON object with keys
+    ``modules``, ``cycles``, and ``god_modules``.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Path to the project root.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
+            - ``sort`` (str): Column to sort by (``fan_in``, ``fan_out``,
+              ``instability``). Default: ``fan_in``.
+            - ``limit`` (int | None): Max rows to show. ``None`` = all.
+    """
+    cfg = load_config(args.project)
+    store = _get_store(args.project)
+    modules = compute_metrics(store)
+    cycles = find_cycles(store)
+    gods = god_modules(store, percentile=cfg.metrics.thresholds.god_module_percentile)
+    store.close()
+
+    god_paths = {m.file_path for m in gods}
+
+    if args.json:
+        _json_out(
+            {
+                "modules": [
+                    {
+                        "file_path": m.file_path,
+                        "fan_in": round(m.fan_in, 2),
+                        "fan_out": round(m.fan_out, 2),
+                        "instability": round(m.instability, 3),
+                        "god_module": m.file_path in god_paths,
+                    }
+                    for m in modules
+                ],
+                "cycles": cycles,
+                "god_modules": [m.file_path for m in gods],
+            }
+        )
+        return
+
+    if not modules:
+        print("Sin datos — ejecuta primero: codeindex index <directorio>")
+        return
+
+    # Ordenar
+    sort_key = getattr(args, "sort", "fan_in")
+    modules_sorted = sorted(modules, key=lambda m: getattr(m, sort_key, 0), reverse=True)
+    if args.limit:
+        modules_sorted = modules_sorted[: args.limit]
+
+    # Cabecera
+    col_w = max((len(m.file_path) for m in modules_sorted), default=30)
+    col_w = max(col_w, 30)
+    header = f"{'Módulo':<{col_w}}  {'Ca':>6}  {'Ce':>6}  {'I':>6}  {'Flags'}"
+    print()
+    print(header)
+    print("─" * len(header))
+
+    for m in modules_sorted:
+        flags = ""
+        if m.file_path in god_paths:
+            flags += " ● god"
+        instability_warn = cfg.metrics.thresholds.instability_threshold
+        if m.instability >= instability_warn and (m.fan_in + m.fan_out) > 0:
+            flags += " ⚠ inestable"
+        print(
+            f"{m.file_path:<{col_w}}  {m.fan_in:>6.1f}  {m.fan_out:>6.1f}"
+            f"  {m.instability:>6.3f}  {flags}"
+        )
+
+    print("─" * len(header))
+    print(f"Total: {len(modules)} módulos")
+
+    # Ciclos
+    if cycles:
+        print(f"\n⚠  Ciclos detectados ({len(cycles)}):")
+        for cycle in cycles:
+            print("   " + " → ".join(cycle) + " → ...")
+    else:
+        print("\n✓  Sin ciclos")
+
+    # God modules
+    if gods:
+        print(f"\n● God modules (Ca > p{int(cfg.metrics.thresholds.god_module_percentile)}):")
+        for m in gods:
+            print(f"   {m.file_path}  Ca={m.fan_in:.1f}")
+
+
 # Entry point
 # ──────────────────────────────────────────────
 
@@ -748,6 +847,24 @@ def main() -> None:
         help="Número máximo de resultados (default: 10)",
     )
 
+    # metrics
+    p_metrics = sub.add_parser(
+        "metrics", help="Métricas de acoplamiento (Ca, Ce, I, ciclos, god modules)"
+    )
+    p_metrics.add_argument(
+        "--sort",
+        choices=["fan_in", "fan_out", "instability"],
+        default="fan_in",
+        help="Columna de ordenación (default: fan_in)",
+    )
+    p_metrics.add_argument(
+        "--limit",
+        "-l",
+        type=int,
+        default=None,
+        help="Número máximo de filas a mostrar",
+    )
+
     # callers
     p_callers = sub.add_parser("callers", help="¿Quién llama a un símbolo?")
     p_callers.add_argument("qualified_name", help="qualified_name del símbolo")
@@ -807,6 +924,7 @@ def main() -> None:
         "impact": cmd_impact,
         "imports": cmd_imports,
         "status": cmd_status,
+        "metrics": cmd_metrics,
         "callers": cmd_callers,
         "untested": cmd_untested,
         "install-skill": cmd_install_skill,
