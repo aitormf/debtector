@@ -798,6 +798,8 @@ def _baseline_status(args) -> None:
                 }
             )
 
+    has_regressions = bool(regressions or new_cycles or new_gods)
+
     if args.json:
         _json_out(
             {
@@ -806,10 +808,11 @@ def _baseline_status(args) -> None:
                 "new_god_modules": new_gods,
             }
         )
+        if has_regressions:
+            sys.exit(1)
         return
 
-    has_issues = regressions or new_cycles or new_gods
-    if not has_issues:
+    if not has_regressions:
         print("✓  Sin cambios respecto al baseline")
         return
 
@@ -827,6 +830,8 @@ def _baseline_status(args) -> None:
         print(f"\n⚠  Regresiones de inestabilidad ({len(regressions)}):")
         for r in regressions:
             print(f"   {r['file_path']}  I: {r['before']:.3f} → {r['after']:.3f}")
+
+    sys.exit(1)
 
 
 # ──────────────────────────────────────────────
