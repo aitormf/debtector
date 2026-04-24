@@ -126,19 +126,21 @@ def load_config(project_root: str | Path) -> CodeIndexConfig:
 
     metrics_data = data.get("metrics", {})
 
-    # Thresholds
+    # Thresholds — usamos una instancia default como fuente de verdad para
+    # evitar acceder a atributos de clase de dataclass (frágil si se usara field())
+    _thr_defaults = MetricsThresholds()
     thr_data = metrics_data.get("thresholds", {})
     thresholds = MetricsThresholds(
         god_module_percentile=thr_data.get(
-            "god_module_percentile", MetricsThresholds.god_module_percentile
+            "god_module_percentile", _thr_defaults.god_module_percentile
         ),
         instability_threshold=thr_data.get(
-            "instability_threshold", MetricsThresholds.instability_threshold
+            "instability_threshold", _thr_defaults.instability_threshold
         ),
         max_inheritance_depth=thr_data.get(
-            "max_inheritance_depth", MetricsThresholds.max_inheritance_depth
+            "max_inheritance_depth", _thr_defaults.max_inheritance_depth
         ),
-        max_children=thr_data.get("max_children", MetricsThresholds.max_children),
+        max_children=thr_data.get("max_children", _thr_defaults.max_children),
     )
 
     # Severity — validamos explícitamente para dar error claro al usuario

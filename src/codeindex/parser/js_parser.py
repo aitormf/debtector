@@ -78,7 +78,18 @@ class JavaScriptParser(LanguageParser):
         )
 
         self._extract_imports(root, source, file_path, file_qn, edges)
-        self._extract_symbols(root, source, file_path, file_qn, lang, nodes, edges, parent=None)
+        uses_type_seen: set[str] = set()
+        self._extract_symbols(
+            root,
+            source,
+            file_path,
+            file_qn,
+            lang,
+            nodes,
+            edges,
+            parent=None,
+            uses_type_seen=uses_type_seen,
+        )
 
         # Segunda pasada: aristas CALLS (requiere índice completo de símbolos)
         symbol_index = self._build_symbol_index(nodes)
@@ -182,6 +193,7 @@ class JavaScriptParser(LanguageParser):
         nodes: list[NodeInfo],
         edges: list[EdgeInfo],
         parent: str | None,
+        uses_type_seen: set[str] | None = None,
     ):
         """Extract class, function, and method nodes from the direct children of *node*.
 
@@ -204,7 +216,12 @@ class JavaScriptParser(LanguageParser):
                 objects are appended in-place.
             parent: Name of the enclosing class when processing a class body,
                 or ``None`` at module level.
+            uses_type_seen: Set compartido a nivel de archivo para dedup O(1)
+                de USES_TYPE. Se crea en ``parse()`` y se reutiliza en toda
+                la extracción del archivo.
         """
+        if uses_type_seen is None:
+            uses_type_seen = set()
         for child in node.children:
             actual = child
 
@@ -293,7 +310,13 @@ class JavaScriptParser(LanguageParser):
 
                             # Aristas USES_TYPE desde las anotaciones de tipo del método
                             self._extract_uses_type_ts(
-                                member, source, file_path, file_qn, member.start_point[0] + 1, edges
+                                member,
+                                source,
+                                file_path,
+                                file_qn,
+                                member.start_point[0] + 1,
+                                edges,
+                                uses_type_seen,
                             )
 
             elif actual.type == "function_declaration":
@@ -326,7 +349,13 @@ class JavaScriptParser(LanguageParser):
 
                 # Aristas USES_TYPE desde las anotaciones de tipo de la función
                 self._extract_uses_type_ts(
-                    actual, source, file_path, file_qn, actual.start_point[0] + 1, edges
+                    actual,
+                    source,
+                    file_path,
+                    file_qn,
+                    actual.start_point[0] + 1,
+                    edges,
+                    uses_type_seen,
                 )
 
             elif actual.type == "lexical_declaration" and not parent:
@@ -472,12 +501,14 @@ class JavaScriptParser(LanguageParser):
         file_qn: str,
         line: int,
         edges: list[EdgeInfo],
+        uses_type_seen: set[str],
     ) -> None:
         """Emit USES_TYPE edges for uppercase types referenced in a TS function/method signature.
 
         Inspects ``type_annotation`` children of parameters and the function
         itself (return type).  Only type names starting with an uppercase letter
-        are emitted.  Duplicate edges within the same file are suppressed.
+        are emitted.  Duplicate edges within the same file are suppressed
+        via *uses_type_seen* (O(1) lookup).
 
         Args:
             func_node: A tree-sitter ``function_declaration`` or ``method_definition`` node.
@@ -487,8 +518,9 @@ class JavaScriptParser(LanguageParser):
             line: Line number of the function/method definition.
             edges: Mutable list to which new :class:`~codeindex.models.EdgeInfo`
                 objects are appended in-place.
+            uses_type_seen: Set de tipos ya emitidos para este archivo.
+                Se muta en-place. Permite dedup en O(1) sin escanear ``edges``.
         """
-        existing = {e.target for e in edges if e.kind == EdgeKind.USES_TYPE and e.source == file_qn}
         type_names: set[str] = set()
 
         for child in self._walk(func_node):
@@ -496,7 +528,7 @@ class JavaScriptParser(LanguageParser):
                 type_names.update(self._collect_ts_type_identifiers(child, source))
 
         for type_name in type_names:
-            if type_name not in existing:
+            if type_name not in uses_type_seen:
                 edges.append(
                     EdgeInfo(
                         kind=EdgeKind.USES_TYPE,
@@ -506,7 +538,7 @@ class JavaScriptParser(LanguageParser):
                         line=line,
                     )
                 )
-                existing.add(type_name)
+                uses_type_seen.add(type_name)
 
     def _collect_ts_type_identifiers(self, type_node, source: bytes) -> set[str]:
         """Recursively extract uppercase type identifiers from a TypeScript type annotation.
