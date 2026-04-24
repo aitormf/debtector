@@ -141,3 +141,22 @@ class TestInheritanceMetrics:
 
         result = inheritance_metrics(tmp_db)
         assert isinstance(result[0], InheritanceMetrics)
+
+    def test_cyclic_inheritance_does_not_recurse_infinitely(self, tmp_db: GraphStore) -> None:
+        """Circular inheritance (A→B→A) is cut by the visited guard; no RecursionError."""
+        tmp_db.store_file(
+            "src/a.py",
+            [_class("src/a.py", "A"), _class("src/a.py", "B")],
+            [
+                _inherits("src/a.py", "A", "B"),
+                _inherits("src/a.py", "B", "A"),
+            ],
+        )
+
+        # Must not raise; exact depths are implementation-defined for cyclic graphs
+        result = {m.qualified_name: m for m in inheritance_metrics(tmp_db)}
+        assert "src/a.py::A" in result
+        assert "src/a.py::B" in result
+        # Both have finite depth (cycle is cut)
+        assert result["src/a.py::A"].depth >= 0
+        assert result["src/a.py::B"].depth >= 0

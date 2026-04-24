@@ -40,14 +40,16 @@ class ModuleMetrics:
 
     Args:
         file_path: Ruta relativa del archivo.
-        fan_in: Fan-in (Ca) — número de aristas IMPORTS_FROM entrantes.
-        fan_out: Fan-out (Ce) — número de aristas IMPORTS_FROM salientes.
+        fan_in: Fan-in (Ca) — suma ponderada de aristas entrantes. Las aristas
+            IMPORTS_FROM cuentan 1.0; las USES_TYPE cuentan ``USES_TYPE_WEIGHT``.
+        fan_out: Fan-out (Ce) — suma ponderada de aristas salientes. Mismo
+            esquema de pesos que ``fan_in``.
         instability: I = Ce / (Ca + Ce). 0.0 si el módulo está aislado.
     """
 
     file_path: str
-    fan_in: int
-    fan_out: int
+    fan_in: float
+    fan_out: float
     instability: float
 
 
@@ -178,42 +180,70 @@ def find_cycles(store: GraphStore) -> list[list[str]]:
         if src in file_set and tgt in file_set:
             adj[src].append(tgt)
 
-    # Algoritmo de Tarjan para componentes fuertemente conectadas (SCCs)
+    # Algoritmo de Tarjan iterativo para componentes fuertemente conectadas.
+    # Se usa la versión iterativa explícita (worklist) en lugar de la recursiva
+    # para evitar RecursionError en grafos con cadenas de dependencias largas.
+    #
+    # Estado del iterador por nodo: índice en adj[node] del próximo vecino
+    # que aún hay que procesar. Cuando se agotan los vecinos se hace el check
+    # SCC del nodo igual que en la versión recursiva.
     index_counter = [0]
-    stack: list[str] = []
+    scc_stack: list[str] = []  # pila de Tarjan
     lowlink: dict[str, int] = {}
     index: dict[str, int] = {}
     on_stack: dict[str, bool] = {}
     sccs: list[list[str]] = []
 
-    def strongconnect(node: str) -> None:
-        index[node] = index_counter[0]
-        lowlink[node] = index_counter[0]
+    # worklist: (nodo, iterador-de-vecinos). Simula el call-stack de la versión
+    # recursiva sin consumir stack frames de Python.
+    for root in file_set:
+        if root in index:
+            continue
+
+        worklist: list[tuple[str, int]] = [(root, 0)]
+        index[root] = index_counter[0]
+        lowlink[root] = index_counter[0]
         index_counter[0] += 1
-        stack.append(node)
-        on_stack[node] = True
+        scc_stack.append(root)
+        on_stack[root] = True
 
-        for neighbor in adj.get(node, []):
-            if neighbor not in index:
-                strongconnect(neighbor)
-                lowlink[node] = min(lowlink[node], lowlink[neighbor])
-            elif on_stack.get(neighbor, False):
-                lowlink[node] = min(lowlink[node], index[neighbor])
+        while worklist:
+            node, nei_idx = worklist[-1]
+            neighbors = adj.get(node, [])
 
-        if lowlink[node] == index[node]:
-            scc: list[str] = []
-            while True:
-                w = stack.pop()
-                on_stack[w] = False
-                scc.append(w)
-                if w == node:
-                    break
-            if len(scc) > 1:
-                sccs.append(scc)
+            if nei_idx < len(neighbors):
+                # Avanzar al siguiente vecino sin sacar el frame
+                worklist[-1] = (node, nei_idx + 1)
+                neighbor = neighbors[nei_idx]
 
-    for node in file_set:
-        if node not in index:
-            strongconnect(node)
+                if neighbor not in index:
+                    # Descubrir vecino: "llamada recursiva"
+                    index[neighbor] = index_counter[0]
+                    lowlink[neighbor] = index_counter[0]
+                    index_counter[0] += 1
+                    scc_stack.append(neighbor)
+                    on_stack[neighbor] = True
+                    worklist.append((neighbor, 0))
+                elif on_stack.get(neighbor, False):
+                    lowlink[node] = min(lowlink[node], index[neighbor])
+            else:
+                # Todos los vecinos procesados: "retorno de llamada recursiva"
+                worklist.pop()
+                if worklist:
+                    parent = worklist[-1][0]
+                    lowlink[parent] = min(lowlink[parent], lowlink[node])
+
+                # Detectar raíz de SCC
+                if lowlink[node] == index[node]:
+                    scc: list[str] = []
+                    while True:
+                        w = scc_stack.pop()
+                        on_stack[w] = False
+                        scc.append(w)
+                        if w == node:
+                            break
+                    if len(scc) > 1:
+                        sccs.append(scc)
 
     return sccs
 
@@ -319,6 +349,9 @@ def god_modules(store: GraphStore, percentile: float = 90) -> list[ModuleMetrics
         Lista de :class:`ModuleMetrics` cuyos fan-in superan el umbral.
         Lista vacía si no hay outliers o el índice tiene < 2 módulos.
     """
+    if not (1 <= percentile <= 99):
+        raise ValueError(f"percentile must be in [1, 99], got {percentile}")
+
     metrics = compute_metrics(store)
     if len(metrics) < 2:
         return []

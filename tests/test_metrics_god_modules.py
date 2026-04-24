@@ -116,3 +116,13 @@ class TestGodModules:
         gods_p90 = god_modules(tmp_db, percentile=90)
         gods_p50 = god_modules(tmp_db, percentile=50)
         assert len(gods_p50) >= len(gods_p90)
+
+    def test_invalid_percentile_raises(self, tmp_db: GraphStore) -> None:
+        """percentile outside [1, 99] raises ValueError (not IndexError)."""
+        import pytest
+
+        with pytest.raises(ValueError, match="percentile"):
+            god_modules(tmp_db, percentile=100)
+
+        with pytest.raises(ValueError, match="percentile"):
+            god_modules(tmp_db, percentile=0)
