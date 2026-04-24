@@ -759,7 +759,15 @@ def _baseline_save(args) -> None:
 
 
 def _baseline_status(args) -> None:
-    """Compare current metrics to the stored baseline and report regressions."""
+    """Compare current metrics to the stored baseline and report regressions.
+
+    Each issue type (cycles, god_modules, instability) is filtered through the
+    severity configured in ``codeindex.toml``:
+
+    - ``error``   — contributes to exit code 1 (blocks CI).
+    - ``warning`` — printed but does not block CI (exit 0).
+    - ``info``    — silent; neither printed nor blocking.
+    """
     path = _baseline_path(args.project)
 
     if not path.exists():
@@ -774,15 +782,15 @@ def _baseline_status(args) -> None:
     baseline_gods = set(baseline.get("god_modules", []))
 
     cfg = load_config(args.project)
+    sev = cfg.metrics.severity
     store = _get_store(args.project)
     current_modules = compute_metrics(store)
     current_cycles = find_cycles(store)
     current_gods = god_modules(store, percentile=cfg.metrics.thresholds.god_module_percentile)
     store.close()
 
-    # Nuevos ciclos no presentes en baseline
+    # Detectar regresiones por tipo
     new_cycles = [c for c in current_cycles if frozenset(c) not in baseline_cycles]
-    # Nuevos god modules no presentes en baseline
     new_gods = [m.file_path for m in current_gods if m.file_path not in baseline_gods]
 
     regressions: list[dict] = []
@@ -801,7 +809,20 @@ def _baseline_status(args) -> None:
                 }
             )
 
-    has_regressions = bool(regressions or new_cycles or new_gods)
+    from .config import Severity  # noqa: PLC0415
+
+    # Determinar si cada tipo de regresión bloquea el CI según su severidad
+    def _blocks(issues: list, severity: Severity) -> bool:
+        return bool(issues) and severity == Severity.ERROR
+
+    def _warns(issues: list, severity: Severity) -> bool:
+        return bool(issues) and severity in (Severity.ERROR, Severity.WARNING)
+
+    has_blocking = (
+        _blocks(new_cycles, sev.cycles)
+        or _blocks(new_gods, sev.god_modules)
+        or _blocks(regressions, sev.instability)
+    )
 
     if args.json:
         _json_out(
@@ -811,30 +832,42 @@ def _baseline_status(args) -> None:
                 "new_god_modules": new_gods,
             }
         )
-        if has_regressions:
+        if has_blocking:
             sys.exit(1)
         return
 
-    if not has_regressions:
+    has_any_warning = (
+        _warns(new_cycles, sev.cycles)
+        or _warns(new_gods, sev.god_modules)
+        or _warns(regressions, sev.instability)
+    )
+
+    if not has_any_warning:
         print("✓  Sin cambios respecto al baseline")
+        if has_blocking:
+            sys.exit(1)
         return
 
-    if new_cycles:
-        print(f"\n⚠  Nuevos ciclos ({len(new_cycles)}):")
+    if _warns(new_cycles, sev.cycles):
+        label = "⛔" if sev.cycles == Severity.ERROR else "⚠"
+        print(f"\n{label}  Nuevos ciclos ({len(new_cycles)}):")
         for cycle in new_cycles:
             print("   " + " → ".join(cycle) + " → ...")
 
-    if new_gods:
-        print(f"\n⚠  Nuevos god modules ({len(new_gods)}):")
+    if _warns(new_gods, sev.god_modules):
+        label = "⛔" if sev.god_modules == Severity.ERROR else "⚠"
+        print(f"\n{label}  Nuevos god modules ({len(new_gods)}):")
         for path_str in new_gods:
             print(f"   {path_str}")
 
-    if regressions:
-        print(f"\n⚠  Regresiones de inestabilidad ({len(regressions)}):")
+    if _warns(regressions, sev.instability):
+        label = "⛔" if sev.instability == Severity.ERROR else "⚠"
+        print(f"\n{label}  Regresiones de inestabilidad ({len(regressions)}):")
         for r in regressions:
             print(f"   {r['file_path']}  I: {r['before']:.3f} → {r['after']:.3f}")
 
-    sys.exit(1)
+    if has_blocking:
+        sys.exit(1)
 
 
 # ──────────────────────────────────────────────

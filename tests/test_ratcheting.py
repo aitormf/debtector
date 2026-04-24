@@ -78,7 +78,11 @@ class TestRatcheting:
         assert exc.value.code == 1
 
     def test_instability_regression_exits_one(self, tmp_path: Path) -> None:
-        """Instability worsening beyond tolerance → exit code 1."""
+        """Instability worsening with severity=error → exit code 1."""
+        # Configure instability as error so it blocks CI
+        (tmp_path / "codeindex.toml").write_text(
+            '[metrics.severity]\ninstability = "error"\n', encoding="utf-8"
+        )
         # baseline: a has Ca=3, Ce=1 → I=0.25
         for i in range(3):
             imp = f"src/imp_{i}.py"
@@ -86,7 +90,7 @@ class TestRatcheting:
         _seed(str(tmp_path), {"src/a.py": [_import("src/a.py", "src/x.py")]})
         cmd_baseline(_args(str(tmp_path), "save"))
 
-        # Worsen: a now imports 5 more modules → Ce=6, Ca=3 → I=0.67
+        # Worsen: a now imports 6 modules → Ce=6, Ca=3 → I=0.67
         edges_a = [_import("src/a.py", f"src/dep_{i}.py") for i in range(6)]
         _seed(str(tmp_path), {"src/a.py": edges_a})
         with pytest.raises(SystemExit) as exc:
