@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "codeindex"
 version = "0.2.0"
 description = "Grafo de código sobre SQLite para reducir consumo de tokens en IA"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "tree-sitter-language-pack>=1.0",
     "networkx>=3.0",
@@ -45,7 +45,7 @@ where = ["src"]
 # ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "C4", "UP"]
