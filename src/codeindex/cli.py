@@ -752,11 +752,11 @@ def cmd_metrics(args) -> None:
     print(header)
     print("─" * len(header))
 
+    instability_warn = cfg.metrics.thresholds.instability_threshold
     for m in modules_sorted:
         flags = ""
         if m.file_path in god_paths:
             flags += " ● god"
-        instability_warn = cfg.metrics.thresholds.instability_threshold
         if m.instability >= instability_warn and (m.fan_in + m.fan_out) > 0:
             flags += " ⚠ inestable"
         print(
