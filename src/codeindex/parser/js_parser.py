@@ -291,6 +291,11 @@ class JavaScriptParser(LanguageParser):
                                 )
                             )
 
+                            # Aristas USES_TYPE desde las anotaciones de tipo del método
+                            self._extract_uses_type_ts(
+                                member, source, file_path, file_qn, member.start_point[0] + 1, edges
+                            )
+
             elif actual.type == "function_declaration":
                 name = self._get_name(actual, source)
                 qn = make_qualified_name(file_path, name, NodeKind.FUNCTION, parent)
@@ -317,6 +322,11 @@ class JavaScriptParser(LanguageParser):
                         file_path=file_path,
                         line=actual.start_point[0] + 1,
                     )
+                )
+
+                # Aristas USES_TYPE desde las anotaciones de tipo de la función
+                self._extract_uses_type_ts(
+                    actual, source, file_path, file_qn, actual.start_point[0] + 1, edges
                 )
 
             elif actual.type == "lexical_declaration" and not parent:
@@ -449,6 +459,75 @@ class JavaScriptParser(LanguageParser):
                             if inner.type in ("identifier", "type_identifier"):
                                 return [self._text(inner, source)]
         return []
+
+    # ──────────────────────────────────────────────
+    # USES_TYPE edge extraction (TypeScript)
+    # ──────────────────────────────────────────────
+
+    def _extract_uses_type_ts(
+        self,
+        func_node,
+        source: bytes,
+        file_path: str,
+        file_qn: str,
+        line: int,
+        edges: list[EdgeInfo],
+    ) -> None:
+        """Emit USES_TYPE edges for uppercase types referenced in a TS function/method signature.
+
+        Inspects ``type_annotation`` children of parameters and the function
+        itself (return type).  Only type names starting with an uppercase letter
+        are emitted.  Duplicate edges within the same file are suppressed.
+
+        Args:
+            func_node: A tree-sitter ``function_declaration`` or ``method_definition`` node.
+            source: Raw source bytes of the file.
+            file_path: Absolute path to the source file.
+            file_qn: Qualified name of the file node (used as edge source).
+            line: Line number of the function/method definition.
+            edges: Mutable list to which new :class:`~codeindex.models.EdgeInfo`
+                objects are appended in-place.
+        """
+        existing = {e.target for e in edges if e.kind == EdgeKind.USES_TYPE and e.source == file_qn}
+        type_names: set[str] = set()
+
+        for child in self._walk(func_node):
+            if child.type == "type_annotation":
+                type_names.update(self._collect_ts_type_identifiers(child, source))
+
+        for type_name in type_names:
+            if type_name not in existing:
+                edges.append(
+                    EdgeInfo(
+                        kind=EdgeKind.USES_TYPE,
+                        source=file_qn,
+                        target=type_name,
+                        file_path=file_path,
+                        line=line,
+                    )
+                )
+                existing.add(type_name)
+
+    def _collect_ts_type_identifiers(self, type_node, source: bytes) -> set[str]:
+        """Recursively extract uppercase type identifiers from a TypeScript type annotation.
+
+        Handles ``type_identifier``, ``generic_type``, and plain ``identifier``
+        nodes within the annotation subtree.
+
+        Args:
+            type_node: A tree-sitter ``type_annotation`` node.
+            source: Raw source bytes.
+
+        Returns:
+            Set of type name strings starting with an uppercase letter.
+        """
+        names: set[str] = set()
+        for node in self._walk(type_node):
+            if node.type in ("type_identifier", "identifier"):
+                text = self._text(node, source)
+                if text and text[0].isupper():
+                    names.add(text)
+        return names
 
     # ──────────────────────────────────────────────
     # CALLS edge extraction (second pass)

@@ -28,6 +28,11 @@ from .models import EdgeKind, NodeKind
 # Tipos de aristas que se consideran para la detección de ciclos
 _CYCLE_EDGE_KINDS = (EdgeKind.IMPORTS_FROM, EdgeKind.CALLS)
 
+# Peso de las aristas USES_TYPE en el cálculo de Ca/Ce.
+# Menor que IMPORTS_FROM (peso 1.0) porque una referencia de tipo en
+# una firma es un acoplamiento más débil que un import explícito.
+USES_TYPE_WEIGHT: float = 0.5
+
 
 @dataclass
 class ModuleMetrics:
@@ -73,27 +78,50 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     if not file_rows:
         return []
 
-    # Ce por archivo: conteo de aristas IMPORTS_FROM salientes
+    # Ce por archivo: aristas IMPORTS_FROM salientes (peso 1.0)
     ce_rows = conn.execute(
         "SELECT source_qualified, COUNT(*) AS cnt FROM edges"
         " WHERE kind = ? GROUP BY source_qualified",
         (EdgeKind.IMPORTS_FROM,),
     ).fetchall()
-    ce_map: dict[str, int] = {r["source_qualified"]: r["cnt"] for r in ce_rows}
+    ce_map: dict[str, float] = {r["source_qualified"]: float(r["cnt"]) for r in ce_rows}
 
-    # Ca por archivo: conteo de aristas IMPORTS_FROM entrantes
+    # Ce adicional: aristas USES_TYPE salientes (peso USES_TYPE_WEIGHT)
+    ut_ce_rows = conn.execute(
+        "SELECT source_qualified, COUNT(*) AS cnt FROM edges"
+        " WHERE kind = ? GROUP BY source_qualified",
+        (EdgeKind.USES_TYPE,),
+    ).fetchall()
+    for r in ut_ce_rows:
+        ce_map[r["source_qualified"]] = (
+            ce_map.get(r["source_qualified"], 0.0) + r["cnt"] * USES_TYPE_WEIGHT
+        )
+
+    # Ca por archivo: aristas IMPORTS_FROM entrantes (peso 1.0)
     ca_rows = conn.execute(
         "SELECT target_qualified, COUNT(*) AS cnt FROM edges"
         " WHERE kind = ? GROUP BY target_qualified",
         (EdgeKind.IMPORTS_FROM,),
     ).fetchall()
-    ca_map: dict[str, int] = {r["target_qualified"]: r["cnt"] for r in ca_rows}
+    ca_map: dict[str, float] = {r["target_qualified"]: float(r["cnt"]) for r in ca_rows}
+
+    # Ca adicional: aristas USES_TYPE entrantes (peso USES_TYPE_WEIGHT).
+    # Solo cuentan si el target es un nodo File indexado (resolución interna).
+    ut_ca_rows = conn.execute(
+        "SELECT target_qualified, COUNT(*) AS cnt FROM edges"
+        " WHERE kind = ? GROUP BY target_qualified",
+        (EdgeKind.USES_TYPE,),
+    ).fetchall()
+    for r in ut_ca_rows:
+        ca_map[r["target_qualified"]] = (
+            ca_map.get(r["target_qualified"], 0.0) + r["cnt"] * USES_TYPE_WEIGHT
+        )
 
     results: list[ModuleMetrics] = []
     for row in file_rows:
         qn: str = row["qualified_name"]
-        ce = ce_map.get(qn, 0)
-        ca = ca_map.get(qn, 0)
+        ce = ce_map.get(qn, 0.0)
+        ca = ca_map.get(qn, 0.0)
         total = ca + ce
         instability = ce / total if total > 0 else 0.0
         results.append(

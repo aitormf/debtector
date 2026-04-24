@@ -41,6 +41,7 @@ class EdgeKind(str, Enum):
     INHERITS = "INHERITS"  # clase hereda de otra
     DEPENDS_ON = "DEPENDS_ON"  # dependencia genérica
     COVERS = "COVERS"  # función/método de test ejerce a símbolo de producción
+    USES_TYPE = "USES_TYPE"  # función/método referencia un tipo en su firma
 
 
 # ──────────────────────────────────────────────
