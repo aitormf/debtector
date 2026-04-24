@@ -10,6 +10,7 @@ Uso:
     codeindex status
     codeindex install-skill --global
     codeindex install-hook [--add-to-stage]
+    codeindex init
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import subprocess  # nosec B404
 import sys
 from pathlib import Path
 
@@ -528,6 +530,171 @@ def cmd_install_hook(args) -> None:
 
 
 # ──────────────────────────────────────────────
+# codeindex init — git filter + hook setup
+# ──────────────────────────────────────────────
+
+# Marker and hook snippet for post-checkout / post-merge / post-rewrite
+_INIT_MARKER = "# codeindex-init-hook"
+
+_INIT_HOOK_SNIPPET = """\
+{marker}
+# Re-index the project after checkout/merge/rebase to keep the index current.
+# Logs go to .codeindex/codeindex.log — never blocks git.
+codeindex index . >/dev/null 2>&1 || true
+"""
+
+# .gitattributes line that activates the codeindex filter/diff drivers
+_GITATTRIBUTES_MARKER = "filter=codeindex"
+_GITATTRIBUTES_LINE = ".codeindex/index.db filter=codeindex diff=codeindex merge=ours\n"
+
+# Git config keys/values for filter and diff drivers
+_GIT_CONFIG = [
+    ("filter.codeindex.clean", "codeindex-clean"),
+    ("filter.codeindex.smudge", "codeindex-smudge"),
+    ("filter.codeindex.required", "false"),
+    ("diff.codeindex.textconv", "codeindex-clean"),
+]
+
+
+def _find_git_root(start: str) -> Path | None:
+    """Walk up from *start* to find the git repository root.
+
+    Args:
+        start: Starting directory path (typically the project root).
+
+    Returns:
+        The :class:`~pathlib.Path` of the directory containing ``.git/``, or
+        ``None`` if no git repository is found in any ancestor.
+    """
+    current = Path(start).resolve()
+    while True:
+        if (current / ".git").is_dir():
+            return current
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
+
+
+def _patch_gitattributes(path: Path) -> bool:
+    """Add the codeindex filter line to *path* if not already present.
+
+    Args:
+        path: Path to the ``.gitattributes`` file (may not exist yet).
+
+    Returns:
+        ``True`` if the file was modified, ``False`` if it was already
+        configured.
+    """
+    if path.exists():
+        content = path.read_text(encoding="utf-8")
+        if _GITATTRIBUTES_MARKER in content:
+            return False
+        if not content.endswith("\n"):
+            content += "\n"
+        path.write_text(content + _GITATTRIBUTES_LINE, encoding="utf-8")
+    else:
+        path.write_text(_GITATTRIBUTES_LINE, encoding="utf-8")
+    return True
+
+
+def _install_init_hook(hooks_dir: Path, hook_name: str) -> str:
+    """Install or append the codeindex re-index snippet to *hook_name*.
+
+    Calling this function a second time is idempotent (marker check).
+
+    Args:
+        hooks_dir: Path to the ``.git/hooks/`` directory.
+        hook_name: Hook filename (e.g. ``"post-checkout"``).
+
+    Returns:
+        A short action string: ``"created"``, ``"appended"``, or
+        ``"already_installed"``.
+    """
+    hook_path = hooks_dir / hook_name
+    snippet = _INIT_HOOK_SNIPPET.format(marker=_INIT_MARKER)
+
+    if hook_path.exists() and _INIT_MARKER in hook_path.read_text(encoding="utf-8"):
+        return "already_installed"
+
+    if hook_path.exists():
+        existing = hook_path.read_text(encoding="utf-8")
+        if not existing.endswith("\n"):
+            existing += "\n"
+        hook_path.write_text(existing + "\n" + snippet, encoding="utf-8")
+        action = "appended"
+    else:
+        hook_path.write_text(_HOOK_SHEBANG + "\n" + snippet, encoding="utf-8")
+        action = "created"
+
+    hook_path.chmod(hook_path.stat().st_mode | 0o111)
+    return action
+
+
+def cmd_init(args) -> None:
+    """Configure the git repository to share the codeindex database.
+
+    Performs three idempotent steps:
+
+    1. Writes ``filter.codeindex`` and ``diff.codeindex`` drivers to the
+       local git config (never the global one).
+    2. Adds the ``.codeindex/index.db`` filter line to ``.gitattributes``.
+    3. Installs ``post-checkout``, ``post-merge``, and ``post-rewrite`` hooks
+       that re-index the project after any git operation that changes files.
+
+    Once set up, the binary SQLite database is stored in git as a portable
+    SQL text dump.  On checkout the dump is converted back to SQLite
+    automatically.  After every merge or checkout git re-runs the indexer so
+    the local index always reflects the current working tree.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Project root used to locate ``.git/``.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
+    """
+    git_root = _find_git_root(args.project)
+    if git_root is None:
+        msg = f"no .git/ directory found from '{args.project}'"
+        if args.json:
+            _json_out({"error": msg})
+        else:
+            print(f"Error: {msg}", file=sys.stderr)
+        sys.exit(1)
+
+    steps: list[str] = []
+
+    # 1. Configure git filter / diff drivers (local config only)
+    # nosec B603 B607 — fixed args, no user input in the command list
+    for key, value in _GIT_CONFIG:
+        subprocess.run(  # nosec B603 B607
+            ["git", "config", key, value],
+            cwd=git_root,
+            check=True,
+            capture_output=True,
+        )
+    steps.append("Configurados filtros git (filter.codeindex, diff.codeindex)")
+
+    # 2. Patch .gitattributes
+    ga_path = git_root / ".gitattributes"
+    changed = _patch_gitattributes(ga_path)
+    steps.append(f"Parcheado {ga_path}" if changed else f"Ya configurado: {ga_path}")
+
+    # 3. Install post-checkout / post-merge / post-rewrite hooks
+    hooks_dir = git_root / ".git" / "hooks"
+    for hook_name in ("post-checkout", "post-merge", "post-rewrite"):
+        action = _install_init_hook(hooks_dir, hook_name)
+        steps.append(f"Hook {hook_name}: {action}")
+
+    if args.json:
+        _json_out({"status": "ok", "steps": steps})
+    else:
+        for step in steps:
+            print(f"  ✓ {step}")
+        print("\ncodeindex init completado. El índice se compartirá automáticamente vía git.")
+
+
+# ──────────────────────────────────────────────
 # Entry point
 # ──────────────────────────────────────────────
 
@@ -623,6 +790,15 @@ def main() -> None:
         help="El hook también hace 'git add .codeindex/index.db' para commitear el índice",
     )
 
+    # init
+    sub.add_parser(
+        "init",
+        help=(
+            "Configurar el repo git para compartir el índice entre desarrolladores: "
+            "instala filtros git clean/smudge y hooks post-checkout/merge/rewrite"
+        ),
+    )
+
     args = parser.parse_args()
 
     # Configure logging after parsing so the project path is known
@@ -644,6 +820,7 @@ def main() -> None:
         "untested": cmd_untested,
         "install-skill": cmd_install_skill,
         "install-hook": cmd_install_hook,
+        "init": cmd_init,
     }
     cmds[args.command](args)
 

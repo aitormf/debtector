@@ -27,6 +27,8 @@ dev = [
 
 [project.scripts]
 codeindex = "codeindex.cli:main"
+codeindex-clean = "codeindex.gitfilter:cmd_clean"
+codeindex-smudge = "codeindex.gitfilter:cmd_smudge"
 
 [tool.setuptools.packages.find]
 where = ["src"]
