@@ -8,6 +8,8 @@ Calcula métricas estructurales a nivel de módulo (archivo):
 - Inestabilidad (I = Ce / (Ca + Ce)): 0 = muy estable, 1 = muy inestable.
 - Ciclos: componentes fuertemente conectados de tamaño > 1 sobre
   aristas IMPORTS_FROM y CALLS.
+- God modules: outliers estadísticos de Ca por encima del percentil 90
+  del proyecto (umbral relativo, no absoluto).
 
 Las métricas se calculan sobre aristas IMPORTS_FROM del grafo.
 Los imports a paquetes externos (sin nodo File en el índice) también
@@ -16,6 +18,7 @@ contribuyen al fan-out del módulo importador.
 
 from __future__ import annotations
 
+import statistics
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -185,3 +188,32 @@ def find_cycles(store: GraphStore) -> list[list[str]]:
             strongconnect(node)
 
     return sccs
+
+
+def god_modules(store: GraphStore, percentile: float = 90) -> list[ModuleMetrics]:
+    """Detecta módulos dios: outliers estadísticos de fan-in (Ca).
+
+    Un módulo es "dios" si su Ca supera el percentil ``percentile`` del
+    proyecto. El umbral es relativo al proyecto, no absoluto, para
+    adaptarse a bases de código de cualquier tamaño.
+
+    Requiere al menos 2 módulos para que el cálculo tenga sentido;
+    con menos módulos devuelve siempre una lista vacía.
+
+    Args:
+        store: GraphStore con el índice del proyecto.
+        percentile: Percentil de Ca usado como umbral (por defecto 90).
+
+    Returns:
+        Lista de :class:`ModuleMetrics` cuyos fan-in superan el umbral.
+        Lista vacía si no hay outliers o el índice tiene < 2 módulos.
+    """
+    metrics = compute_metrics(store)
+    if len(metrics) < 2:
+        return []
+
+    fan_ins = [m.fan_in for m in metrics]
+    threshold = statistics.quantiles(fan_ins, n=100)[int(percentile) - 1]
+
+    # Solo son outliers los que estén estrictamente por encima del umbral
+    return [m for m in metrics if m.fan_in > threshold]
