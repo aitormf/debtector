@@ -23,7 +23,7 @@ import subprocess  # nosec B404
 import sys
 from pathlib import Path
 
-from .config import load_config
+from .config import Severity, load_config
 from .graph_store import GraphStore
 from .indexer import Indexer
 from .logging import configure_logging
@@ -809,8 +809,6 @@ def _baseline_status(args) -> None:
                 }
             )
 
-    from .config import Severity  # noqa: PLC0415
-
     # Determinar si cada tipo de regresión bloquea el CI según su severidad
     def _blocks(issues: list, severity: Severity) -> bool:
         return bool(issues) and severity == Severity.ERROR
@@ -844,8 +842,6 @@ def _baseline_status(args) -> None:
 
     if not has_any_warning:
         print("✓  Sin cambios respecto al baseline")
-        if has_blocking:
-            sys.exit(1)
         return
 
     if _warns(new_cycles, sev.cycles):
