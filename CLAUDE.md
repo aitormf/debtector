@@ -2,9 +2,11 @@
 
 ## Qué es este proyecto
 
-CodeIndex indexa repositorios de código fuente y almacena su estructura (clases, funciones, métodos, imports, llamadas) como un grafo en SQLite. El objetivo es que una IA consulte el grafo en lugar de leer archivos enteros, reduciendo drásticamente el consumo de tokens.
+CodeIndex indexa repositorios de código fuente y almacena su estructura (clases, funciones, métodos, imports, llamadas) como un grafo en SQLite. El objetivo es **detectar acoplamiento de código en pipelines de CI y PR reviews**, dando al desarrollador contexto arquitectónico antes de mergear.
 
-El índice vive en `.codeindex/index.db`. Los logs van a `.codeindex/codeindex.log`, nunca a stdout.
+ICP: desarrollador o tech lead que usa agentes de código (Claude Code, Copilot, Codex). Los agentes generan acoplamiento oculto a una velocidad que ningún humano alcanza; codeIndex actúa como guardarraíl arquitectónico en el pipeline.
+
+El índice vive en `.codeindex/index.db`. El baseline de métricas vive en `.codeindex/baseline.json` (commiteado al repo). Los logs van a `.codeindex/codeindex.log`, nunca a stdout.
 
 ---
 
@@ -38,8 +40,10 @@ src/codeindex/
 ├── models.py         # NodeInfo, EdgeInfo, GraphNode, GraphEdge, enums NodeKind/EdgeKind
 ├── graph_store.py    # GraphStore: SQLite + NetworkX cache en memoria
 ├── indexer.py        # Orquestador: recorre archivos, detecta cambios por SHA-256, parsea
-├── cli.py            # Typer CLI: index, search, summary, impact, imports, status, callers
+├── metrics.py        # [Fase 1] Ca, Ce, inestabilidad, ciclos, god modules — TODO
+├── cli.py            # CLI: index, search, summary, impact, imports, status, callers, metrics, baseline
 ├── logging.py        # Configuración structlog (dev vs prod)
+├── embedder.py       # [CONGELADO] Embeddings semánticos — no desarrollar más
 └── parser/
     ├── base.py           # LanguageParser (abstracta)
     ├── python_parser.py  # Tree-sitter Python
@@ -61,8 +65,12 @@ Archivo fuente → Parser (Tree-sitter) → (NodeInfo[], EdgeInfo[]) → GraphSt
 Tres tablas: `nodes`, `edges`, `metadata`.
 
 - **nodes**: `id`, `kind` (File/Class/Function/Method), `name`, `qualified_name` (UNIQUE), `file_path`, `line_start`, `line_end`, `language`, `parent_name`, `signature`, `docstring`, `decorators` (JSON), `file_hash`, `extra` (JSON), `updated_at`
-- **edges**: `id`, `kind` (CONTAINS/HAS_METHOD/IMPORTS_FROM/INHERITS/CALLS/DEPENDS_ON), `source_qualified`, `target_qualified`, `file_path`, `line`, `extra` (JSON), `updated_at`
+- **edges**: `id`, `kind` (CONTAINS/HAS_METHOD/IMPORTS_FROM/INHERITS/CALLS/COVERS/USES_TYPE), `source_qualified`, `target_qualified`, `file_path`, `line`, `extra` (JSON), `updated_at`
 - **metadata**: `key`, `value` — almacenamiento genérico clave-valor
+
+### Persistencia del baseline
+
+`.codeindex/baseline.json` — snapshot de métricas de acoplamiento (Ca, Ce, ciclos, god modules) guardado con `codeindex baseline save`. Se commitea al repo; es la referencia para el ratcheting en CI. El `.codeindex/.gitignore` es gestionado por codeIndex y siempre se sobreescribe: ignora todo excepto `.gitignore` y `baseline.json`.
 
 ### qualified_name
 

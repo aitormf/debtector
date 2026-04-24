@@ -2,9 +2,11 @@
 
 ## Visión general
 
-CodeIndex analiza repositorios de código fuente, extrae su estructura (clases, funciones, métodos, imports, llamadas) y la almacena como un **grafo en SQLite**. El objetivo es que una IA pueda consultar el grafo en lugar de leer archivos enteros, reduciendo drásticamente el consumo de tokens.
+CodeIndex analiza repositorios de código fuente, extrae su estructura (clases, funciones, métodos, imports, llamadas) y la almacena como un **grafo en SQLite**. El objetivo es **detectar acoplamiento de código en pipelines de CI y PR reviews**, dando al desarrollador contexto arquitectónico antes de mergear.
 
-Un proyecto con 200 archivos Python puede tener ~150.000 tokens de contenido. La misma información estructural cabe en ~500 tokens de consultas al grafo.
+ICP: desarrollador o tech lead que usa agentes de código (Claude Code, Copilot, Codex). Los agentes generan acoplamiento oculto a una velocidad que ningún humano alcanza; codeIndex actúa como guardarraíl arquitectónico en el pipeline.
+
+Ver [ADR-002](decisions/002-pivot-ci-coupling.md) para el contexto completo del pivote.
 
 ---
 
@@ -13,12 +15,15 @@ Un proyecto con 200 archivos Python puede tener ~150.000 tokens de contenido. La
 ```
 src/codeindex/
 ├── models.py         # Tipos de datos: NodeInfo, EdgeInfo, GraphNode, GraphEdge, enums
-├── graph_store.py    # Persistencia: SQLite + sqlite-vec + NetworkX cache en memoria
+├── graph_store.py    # Persistencia: SQLite + NetworkX cache en memoria
 ├── indexer.py        # Orquestación: recorre archivos, detecta cambios, llama a parsers
-├── embedder.py       # Generación de embeddings (fastembed, BAAI/bge-small-en-v1.5, 384 dims)
-├── cli.py            # Interfaz CLI: index, search, semantic, summary, impact, imports, callers, untested, status
+├── metrics.py        # [Fase 1 — TODO] Ca, Ce, inestabilidad, ciclos, god modules
+├── cli.py            # CLI: index, search, summary, impact, imports, callers, untested,
+│                     #       status, metrics (TODO), baseline (TODO)
 ├── utils.py          # Utilidades compartidas: is_test_file()
 ├── logging.py        # Configuración structlog (dev coloreado / prod JSON)
+├── embedder.py       # [CONGELADO] Embeddings semánticos — no desarrollar más
+│                     #   Disponible con uv add 'codeindex[semantic]'
 └── parser/
     ├── base.py           # LanguageParser — clase abstracta
     ├── python_parser.py  # PythonParser — Tree-sitter Python
@@ -30,16 +35,19 @@ src/codeindex/
 | Módulo | Responsabilidad |
 |---|---|
 | `models.py` | Define los tipos de entrada (`NodeInfo`, `EdgeInfo`) y salida (`GraphNode`, `GraphEdge`) sin dependencias internas |
-| `graph_store.py` | Única fuente de verdad. Escribe en SQLite, gestiona embeddings en sqlite-vec, mantiene un DiGraph de NetworkX como cache para traversals |
-| `indexer.py` | Recorre el sistema de archivos, detecta cambios por SHA-256, delega el parseo y llama a `GraphStore.store_file()`. Genera embeddings y aristas COVERS tras cada indexación (no-fatal) |
-| `embedder.py` | Convierte nodos a texto y genera vectores float32 con fastembed (ONNX, sin PyTorch). Lazy-loaded singleton del modelo |
+| `graph_store.py` | Única fuente de verdad. Escribe en SQLite, mantiene un DiGraph de NetworkX como cache para traversals |
+| `indexer.py` | Recorre el sistema de archivos, detecta cambios por SHA-256, delega el parseo y llama a `GraphStore.store_file()`. Genera aristas COVERS tras cada indexación (no-fatal) |
+| `metrics.py` | **[Fase 1 — pendiente]** Computa métricas de acoplamiento sobre el grafo: Ca, Ce, inestabilidad, ciclos, god modules |
+| `embedder.py` | **[Congelado]** Convierte nodos a texto y genera vectores float32 con fastembed. No desarrollar más |
 | `utils.py` | Utilidades compartidas sin dependencias internas: `is_test_file()` |
 | `parser/*` | Transforman un archivo fuente en `(list[NodeInfo], list[EdgeInfo])` usando Tree-sitter. Sin acceso a la DB |
-| `cli.py` | Traduce argumentos de línea de comandos a llamadas al GraphStore. Sin lógica de negocio propia |
+| `cli.py` | Traduce argumentos de línea de comandos a llamadas al GraphStore y metrics. Sin lógica de negocio propia |
 
 ---
 
 ## Flujo de datos
+
+### Indexación
 
 ```
 Archivo fuente
@@ -56,22 +64,25 @@ GraphStore.store_file()
     └── NetworkX DiGraph  (cache invalidable para traversals)
 ```
 
-El flujo inverso (consulta):
+### Consulta y análisis
 
 ```
-CLI / AI query
+CLI / CI pipeline
     │
-    ├── Búsqueda léxica   → SQLite FTS5         (search)
-    ├── Búsqueda semántica → sqlite-vec KNN      (semantic)
-    ├── Lookup directo    → SQLite SQL            (summary, callers, imports)
-    └── Traversal         → NetworkX             (impact, dependency chain)
+    ├── Búsqueda léxica      → SQLite FTS5              (codeindex search)
+    ├── Lookup directo       → SQLite SQL                (summary, callers, imports)
+    ├── Traversal de impacto → NetworkX                  (codeindex impact)
+    ├── Métricas acoplamiento→ metrics.py sobre el grafo (codeindex metrics) [Fase 1]
+    └── Baseline / ratcheting→ baseline.json + delta     (codeindex baseline) [Fase 1]
 ```
+
+> La búsqueda semántica (`sqlite-vec` KNN) está congelada. Ver sección [Semántica congelada](#semántica-congelada).
 
 ---
 
 ## Schema SQLite
 
-El índice vive en `.codeindex/index.db`. Cuatro tablas: tres relacionales y una tabla virtual de vectores (sqlite-vec):
+El índice vive en `.codeindex/index.db`. Tres tablas relacionales:
 
 ```sql
 CREATE TABLE nodes (
@@ -107,12 +118,6 @@ CREATE TABLE metadata (
     key    TEXT PRIMARY KEY,
     value  TEXT NOT NULL
 );
-
--- Tabla virtual sqlite-vec
-CREATE VIRTUAL TABLE node_embeddings USING vec0(
-    embedding float[384]   -- BAAI/bge-small-en-v1.5, 384 dims, float32
-);
--- La rowid de node_embeddings coincide con nodes.id
 ```
 
 ### Índices
@@ -141,6 +146,30 @@ Ranking BM25 con camelCase splitting: `"UserService"` → tokens `user`, `servic
 
 ---
 
+## Persistencia del baseline
+
+`.codeindex/baseline.json` — snapshot de métricas de acoplamiento en el momento de ejecutar `codeindex baseline save`. Se commitea al repo; es la referencia compartida para el ratcheting en CI.
+
+```json
+{
+  "version": 1,
+  "created_at": "2026-04-24T10:00:00Z",
+  "git_commit": "abc123def",
+  "metrics": {
+    "cycles": [["src/auth.py", "src/user.py", "src/auth.py"]],
+    "modules": {
+      "src/auth.py": { "fan_in": 8, "fan_out": 3, "instability": 0.27 }
+    },
+    "god_modules": ["src/models.py"],
+    "summary": { "total_cycles": 1, "mean_instability": 0.42 }
+  }
+}
+```
+
+El `.codeindex/.gitignore` es gestionado por codeIndex (siempre sobreescrito): ignora `*.db` y `*.log`, trackea `baseline.json` y el propio `.gitignore`.
+
+---
+
 ## Tipos de nodos y aristas
 
 ### NodeKind
@@ -160,15 +189,10 @@ Ranking BM25 con camelCase splitting: `"UserService"` → tokens `user`, `servic
 | `HAS_METHOD` | Clase tiene método | `app.py::UserService` → `app.py::UserService.get_user` |
 | `IMPORTS_FROM` | Archivo importa módulo o símbolo | `app.py` → `flask` |
 | `INHERITS` | Clase hereda de otra | `app.py::AdminService` → `UserService` |
-| `CALLS` | Función/método llama a otro símbolo (intra-fichero resuelto; en archivos test también se emiten llamadas cross-fichero con `extra.unresolved=true`) | `app.py::create_app` → `app.py::UserService.__init__` |
-| `COVERS` | Función/método de test ejerce a símbolo de producción. Derivado automáticamente tras cada indexación a partir de CALLS no resueltos en archivos test | `tests/test_auth.py::test_login` → `src/auth.py::login` |
+| `CALLS` | Función/método llama a otro símbolo | `app.py::create_app` → `app.py::UserService.__init__` |
+| `COVERS` | Test ejerce a símbolo de producción. Derivado automáticamente de CALLS no resueltos en archivos test | `tests/test_auth.py::test_login` → `src/auth.py::login` |
+| `USES_TYPE` | **[Fase 1 — pendiente]** Función referencia un tipo en sus type hints | `app.py::get_user` → `User` |
 | `DEPENDS_ON` | Dependencia genérica (uso futuro) | — |
-
-#### Aristas pendientes de diseño
-
-| Valor propuesto | Propósito |
-|---|---|
-| `USES_TYPE` | Une una función con los tipos que referencia en sus type hints |
 
 ---
 
@@ -183,19 +207,16 @@ src/auth/service.py::AuthService.validate  → Method
 src/auth/service.py::create_app            → Function
 ```
 
-Es la "dirección completa" que elimina la ambigüedad entre símbolos con el mismo nombre en archivos distintos. Se usa como clave primaria lógica en consultas y como referencia en aristas.
-
 ---
 
 ## Patrones de implementación clave
 
 ### Escritura atómica por archivo
 
-Cuando un archivo cambia, se reemplazan todos sus nodos, aristas **y embeddings** dentro de una sola transacción:
+Cuando un archivo cambia, se reemplazan todos sus nodos y aristas dentro de una sola transacción:
 
 ```
 BEGIN IMMEDIATE
-  DELETE FROM node_embeddings WHERE rowid IN (SELECT id FROM nodes WHERE file_path = ?)
   DELETE FROM nodes WHERE file_path = ?
   DELETE FROM edges WHERE file_path = ?
   INSERT INTO nodes ...
@@ -203,35 +224,11 @@ BEGIN IMMEDIATE
 COMMIT
 ```
 
-Si algo falla, nada cambia. Esto simplifica la indexación incremental: no hay merges parciales.
-
-### Búsqueda semántica con sqlite-vec
-
-sqlite-vec es una extensión SQLite para almacenar y buscar vectores de embeddings. Se carga dinámicamente; si no está disponible, la indexación continúa sin embeddings y el comando `semantic` devuelve un error claro.
-
-```
-# Indexación (update_file_embeddings):
-nodes del archivo → node_to_text() → fastembed → float32 bytes → INSERT INTO node_embeddings
-
-# Búsqueda (semantic_search):
-query string → fastembed → float32 bytes → KNN query → JOIN nodes → list[(GraphNode, distance)]
-```
-
-La consulta KNN usa la sintaxis de sqlite-vec:
-
-```sql
-SELECT n.id, n.*, e.distance
-FROM node_embeddings e
-JOIN nodes n ON n.id = e.rowid
-WHERE e.embedding MATCH ? AND k = ?
-ORDER BY e.distance
-```
-
-Los embeddings se generan con `BAAI/bge-small-en-v1.5` (384 dimensiones, ~24 MB, ONNX Runtime sin PyTorch). El modelo se descarga una sola vez y se cachea en `~/.cache/fastembed/`.
+Si algo falla, nada cambia. Simplifica la indexación incremental: no hay merges parciales.
 
 ### NetworkX como cache de traversal
 
-SQLite persiste los datos. Para consultas de grafo complejas (BFS de impacto, cadenas de dependencia transitivas) se carga todo en un `DiGraph` de NetworkX en memoria. El cache se invalida automáticamente tras cada escritura — la próxima consulta de traversal reconstruye el grafo desde SQLite.
+SQLite persiste los datos. Para consultas de grafo complejas (BFS de impacto, cadenas de dependencia transitivas) se carga todo en un `DiGraph` de NetworkX en memoria. El cache se invalida automáticamente tras cada escritura.
 
 ### Batch queries de 450
 
@@ -239,7 +236,19 @@ SQLite tiene un límite de 999 variables por consulta. Las queries con `IN (...)
 
 ### Detección de cambios por SHA-256
 
-El Indexer compara el hash SHA-256 del archivo en disco con el almacenado en `nodes.file_hash`. Solo re-parsea los archivos que han cambiado. Los archivos eliminados se detectan por diferencia entre el conjunto en disco y el conjunto en DB.
+El Indexer compara el hash SHA-256 del archivo en disco con el almacenado en `nodes.file_hash`. Solo re-parsea los archivos que han cambiado.
+
+---
+
+## Semántica congelada
+
+`embedder.py`, `sqlite-vec` y `fastembed` están congelados: el código existe pero no se desarrollará más. No forman parte del objetivo CI/PR.
+
+- Disponibles como dependencia opcional: `uv add 'codeindex[semantic]'`
+- El comando `codeindex semantic` devuelve un error con mensaje de deprecación
+- Los tests de embeddings siguen existiendo pero no cubren el objetivo actual
+
+Ver [ADR-002](decisions/002-pivot-ci-coupling.md) para el razonamiento completo.
 
 ---
 
@@ -251,11 +260,7 @@ Cada parser implementa `LanguageParser` (abstracta en `parser/base.py`) y recibe
 
 - Nodo `File` para el archivo en sí
 - Nodos `Class`, `Function`, `Method` para cada símbolo
-- Aristas `CONTAINS` (archivo → símbolo top-level)
-- Aristas `HAS_METHOD` (clase → método)
-- Aristas `IMPORTS_FROM` (archivo → módulo importado)
-- Aristas `INHERITS` (clase → clase base)
-- Aristas `CALLS` (función/método → símbolo llamado)
+- Aristas `CONTAINS`, `HAS_METHOD`, `IMPORTS_FROM`, `INHERITS`, `CALLS`
 - `signature` y `docstring` cuando están disponibles
 
 ### Lenguajes soportados
@@ -271,14 +276,13 @@ Cada parser implementa `LanguageParser` (abstracta en `parser/base.py`) y recibe
 
 `.git`, `__pycache__`, `node_modules`, `.next`, `dist`, `build`, `.venv`, `venv`, `.idea`, `.vscode`
 
-Soporte adicional para `.codeindexignore` (gitignore-style): patrones por nombre, glob, directorio con o sin `/`. Se carga automáticamente desde la raíz del proyecto antes de cada indexación.
+Soporte adicional para `.codeindexignore` (gitignore-style).
 
 ---
 
 ## Decisiones de arquitectura
 
-Ver [`docs/decisions/`](decisions/) para los ADRs formales.
-
 | ADR | Decisión |
 |---|---|
-| [001](decisions/001-semantic-search.md) | FTS5 (fase 1, implementado) + sqlite-vec + fastembed (fase 2, implementado) para búsqueda semántica |
+| [001](decisions/001-semantic-search.md) | FTS5 + sqlite-vec + fastembed para búsqueda semántica (implementado, luego congelado) |
+| [002](decisions/002-pivot-ci-coupling.md) | Pivote: de navegación para IA a análisis de acoplamiento para CI/PR |

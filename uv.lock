@@ -201,12 +201,16 @@ name = "codeindex"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
-    { name = "fastembed" },
     { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "sqlite-vec" },
     { name = "structlog" },
     { name = "tree-sitter-language-pack" },
+]
+
+[package.optional-dependencies]
+semantic = [
+    { name = "fastembed" },
+    { name = "sqlite-vec" },
 ]
 
 [package.dev-dependencies]
@@ -221,12 +225,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastembed", specifier = ">=0.3.0" },
+    { name = "fastembed", marker = "extra == 'semantic'", specifier = ">=0.3.0" },
     { name = "networkx", specifier = ">=3.0" },
-    { name = "sqlite-vec", specifier = ">=0.1.0" },
+    { name = "sqlite-vec", marker = "extra == 'semantic'", specifier = ">=0.1.0" },
     { name = "structlog", specifier = ">=24.0" },
     { name = "tree-sitter-language-pack", specifier = ">=1.0" },
 ]
+provides-extras = ["semantic"]
 
 [package.metadata.requires-dev]
 dev = [

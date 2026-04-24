@@ -44,11 +44,10 @@ def _codeindex_dir(project: str) -> Path:
     d = Path(project) / ".codeindex"
     d.mkdir(parents=True, exist_ok=True)
     gitignore = d / ".gitignore"
-    if not gitignore.exists():
-        gitignore.write_text(
-            "# Managed by codeindex — do not edit manually\n*\n!.gitignore\n!*.db\n",
-            encoding="utf-8",
-        )
+    gitignore.write_text(
+        "# Managed by codeindex — do not edit manually\n*\n!.gitignore\n!baseline.json\n",
+        encoding="utf-8",
+    )
     return d
 
 
@@ -286,10 +285,13 @@ def cmd_status(args) -> None:
 
 
 def cmd_semantic(args) -> None:
-    """Search for symbols semantically similar to a natural-language query.
+    """[DEPRECADO] Búsqueda semántica por concepto.
 
-    Requires sqlite-vec and fastembed to be installed (``uv add 'codeindex[search]'``).
-    Embeddings must have been generated during the last ``codeindex index`` run.
+    Este comando está congelado. La búsqueda semántica (embeddings + sqlite-vec)
+    no forma parte del objetivo actual de codeIndex (análisis de acoplamiento para CI/PR).
+    El código se conserva pero no se desarrollará más.
+
+    Instala ``codeindex[semantic]`` si necesitas usar esta funcionalidad.
 
     Args:
         args: Parsed argument namespace.  Expected attributes:
@@ -299,30 +301,16 @@ def cmd_semantic(args) -> None:
             - ``limit`` (int): Maximum number of results.
             - ``json`` (bool): Emit JSON instead of human-readable text.
     """
-    store = _get_store(args.project)
-    try:
-        results = store.semantic_search(args.query, limit=args.limit)
-    except (RuntimeError, ImportError) as exc:
-        if args.json:
-            _json_out({"error": str(exc)})
-        else:
-            print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
-    finally:
-        store.close()
-
+    msg = (
+        "El comando 'semantic' está deprecado y congelado.\n"
+        "La búsqueda semántica no forma parte del objetivo actual de codeIndex.\n"
+        "Si aún necesitas esta funcionalidad: uv add 'codeindex[semantic]'"
+    )
     if args.json:
-        _json_out([{"distance": dist, **node_to_dict(n)} for n, dist in results])
+        _json_out({"error": msg})
     else:
-        if not results:
-            print("No se encontraron resultados.")
-            return
-        print(f"\nBúsqueda semántica: '{args.query}'")
-        print("─" * 60)
-        for n, dist in results:
-            print(f"  [{dist:.4f}] {n.kind:8s} {n.name}")
-            print(f"           {n.file_path}:{n.line_start}")
-        print(f"\nTotal: {len(results)}")
+        print(f"DEPRECADO: {msg}", file=sys.stderr)
+    sys.exit(1)
 
 
 def cmd_callers(args) -> None:
@@ -746,8 +734,11 @@ def main() -> None:
     # status
     sub.add_parser("status", help="Estadísticas del índice")
 
-    # semantic
-    p_sem = sub.add_parser("semantic", help="Búsqueda semántica por concepto (requiere [search])")
+    # semantic (congelado — no forma parte del objetivo CI/PR)
+    p_sem = sub.add_parser(
+        "semantic",
+        help="[DEPRECADO] Búsqueda semántica por concepto. Congelado; no se desarrollará más.",
+    )
     p_sem.add_argument("query", help="Query en lenguaje natural")
     p_sem.add_argument(
         "--limit",

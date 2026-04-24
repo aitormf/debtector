@@ -11,6 +11,10 @@ dependencies = [
     "tree-sitter-language-pack>=1.0",
     "networkx>=3.0",
     "structlog>=24.0",
+]
+
+[project.optional-dependencies]
+semantic = [
     "sqlite-vec>=0.1.0",
     "fastembed>=0.3.0",
 ]
