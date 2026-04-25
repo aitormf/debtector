@@ -21,6 +21,7 @@ import json
 import shutil
 import subprocess  # nosec B404
 import sys
+import time
 from pathlib import Path
 
 from .config import Severity, load_config
@@ -882,6 +883,22 @@ def _annotation_level(severity: Severity) -> str:
     return "error" if severity == Severity.ERROR else "warning"
 
 
+def _safe_annotation_path(path: str) -> str:
+    """Sanitize a file path for use in a GitHub Actions annotation.
+
+    GitHub's ``::level file=<path>,...::`` format uses ``::`` as a delimiter.
+    If a path contains ``::`` (e.g. a CodeIndex qualified_name), the annotation
+    would be malformed.  Replace any occurrence with ``/`` to keep it readable.
+
+    Args:
+        path: Raw file path or qualified_name string.
+
+    Returns:
+        Path safe to embed inside a GitHub annotation parameter value.
+    """
+    return path.replace("::", "/")
+
+
 def _emit_github_annotations(
     new_cycles: list,
     new_gods: list,
@@ -901,22 +918,24 @@ def _emit_github_annotations(
     if _warns(new_cycles, sev.cycles):
         level = _annotation_level(sev.cycles)
         for cycle in new_cycles:
+            safe_path = _safe_annotation_path(cycle[0])
             msg = f"Ciclo de importación: {' → '.join(cycle)}"
-            # Annotate first file in the cycle
-            print(f"::{level} file={cycle[0]},line=1::{msg}")
+            print(f"::{level} file={safe_path},line=1::{msg}")
 
     if _warns(new_gods, sev.god_modules):
         level = _annotation_level(sev.god_modules)
         for path_str in new_gods:
+            safe_path = _safe_annotation_path(path_str)
             print(
-                f"::{level} file={path_str},line=1::God module: Ca excede el percentil configurado"
+                f"::{level} file={safe_path},line=1::God module: Ca excede el percentil configurado"
             )
 
     if _warns(regressions, sev.instability):
         level = _annotation_level(sev.instability)
         for r in regressions:
+            safe_path = _safe_annotation_path(r["file_path"])
             msg = f"Inestabilidad: {r['before']:.3f} → {r['after']:.3f}"
-            print(f"::{level} file={r['file_path']},line=1::{msg}")
+            print(f"::{level} file={safe_path},line=1::{msg}")
 
 
 def _emit_gitlab_report(
@@ -936,9 +955,7 @@ def _emit_gitlab_report(
         regressions: List of instability regression dicts.
         sev: :class:`~codeindex.config.MetricsSeverity` instance.
     """
-    import time as _time  # noqa: PLC0415
-
-    ts = int(_time.time())
+    ts = int(time.time())
 
     if _warns(new_cycles, sev.cycles):
         label = "ERROR" if sev.cycles == Severity.ERROR else "WARNING"
