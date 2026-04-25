@@ -53,6 +53,95 @@ class ModuleMetrics:
     instability: float
 
 
+def _build_module_map(file_paths: set[str]) -> dict[str, str]:
+    """Construye un mapa de nombre-de-módulo → file_path para resolución de imports.
+
+    Permite traducir targets de aristas IMPORTS_FROM (e.g. ``"codeindex.models"``,
+    ``".graph_store"``) a los file paths reales indexados (e.g.
+    ``"codeindex/models.py"``), de modo que Ca refleje las dependencias internas.
+
+    Genera las siguientes claves por cada file path:
+
+    - Nombre con puntos: ``"codeindex/models.py"`` → ``"codeindex.models"``
+    - ``__init__.py``: ``"codeindex/parser/__init__.py"`` → ``"codeindex.parser"``
+
+    Args:
+        file_paths: Conjunto de file paths de los nodos File indexados.
+
+    Returns:
+        Diccionario de nombre de módulo → file path.
+    """
+    module_map: dict[str, str] = {}
+    for fp in file_paths:
+        # "codeindex/models.py" → "codeindex.models"
+        dot_name = fp.replace("/", ".").replace("\\", ".")
+        for ext in (".py", ".js", ".ts", ".jsx", ".tsx"):
+            if dot_name.endswith(ext):
+                dot_name = dot_name[: -len(ext)]
+                break
+        # Eliminar sufijo .__init__ para paquetes
+        if dot_name.endswith(".__init__"):
+            dot_name = dot_name[:-9]
+        module_map[dot_name] = fp
+    return module_map
+
+
+def _resolve_import_target(
+    target: str,
+    source_file: str,
+    module_map: dict[str, str],
+) -> str:
+    """Resuelve un target de IMPORTS_FROM a un file path si es un módulo interno.
+
+    Maneja tres formas:
+
+    1. Nombre absoluto con puntos: ``"codeindex.models"``
+    2. Import relativo con punto inicial: ``".models"`` (desde ``"codeindex/cli.py"``)
+    3. Ya es un file path indexado: devuelve tal cual.
+
+    Args:
+        target: Valor almacenado en ``edges.target_qualified`` para la arista.
+        source_file: ``file_path`` del archivo que contiene la arista.
+        module_map: Mapa construido por :func:`_build_module_map`.
+
+    Returns:
+        File path del módulo importado si se resuelve; *target* sin cambios si no.
+    """
+    # Coincidencia directa (ya es un file path)
+    if target in module_map.values():
+        return target
+
+    # Nombre absoluto con puntos: "codeindex.models"
+    if target in module_map:
+        return module_map[target]
+
+    # Import relativo con punto explícito: ".models", "..utils"
+    if target.startswith("."):
+        parts = source_file.replace("\\", "/").split("/")
+        dots = len(target) - len(target.lstrip("."))
+        base_parts = parts[:-dots] if dots <= len(parts) else []
+        rel_name = target.lstrip(".")
+        if base_parts:
+            abs_module = ".".join(base_parts) + ("." + rel_name if rel_name else "")
+        else:
+            abs_module = rel_name
+        if abs_module in module_map:
+            return module_map[abs_module]
+
+    # Import relativo almacenado sin punto (el parser extrae solo el nombre):
+    # "from .config import X" → target="config", source="codeindex/cli.py"
+    # Intentamos resolverlo como módulo del mismo paquete.
+    if "." not in target:
+        parts = source_file.replace("\\", "/").split("/")
+        package = ".".join(parts[:-1])  # "codeindex" desde "codeindex/cli.py"
+        if package:
+            candidate = f"{package}.{target}"
+            if candidate in module_map:
+                return module_map[candidate]
+
+    return target  # no resuelto → paquete externo
+
+
 def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     """Calcula Ca, Ce e I para todos los módulos indexados.
 
@@ -60,7 +149,9 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     Los imports a paquetes externos (e.g. ``"flask"``) incrementan el Ce
     del importador aunque no tengan nodo propio en el índice.
 
-    Usa tres consultas SQL agregadas para evitar N queries por archivo.
+    Los targets de aristas IMPORTS_FROM se resuelven de nombre-de-módulo a
+    file path mediante :func:`_resolve_import_target`, de modo que Ca
+    refleje correctamente las dependencias internas del proyecto.
 
     Args:
         store: GraphStore con el índice del proyecto.
@@ -80,13 +171,27 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     if not file_rows:
         return []
 
+    file_paths: set[str] = {r["qualified_name"] for r in file_rows}
+    module_map = _build_module_map(file_paths)
+
     # Ce por archivo: aristas IMPORTS_FROM salientes (peso 1.0)
-    ce_rows = conn.execute(
-        "SELECT source_qualified, COUNT(*) AS cnt FROM edges"
-        " WHERE kind = ? GROUP BY source_qualified",
+    # Ca por archivo: aristas IMPORTS_FROM con resolución de nombre de módulo
+    ce_map: dict[str, float] = {}
+    ca_map: dict[str, float] = {}
+
+    import_rows = conn.execute(
+        "SELECT source_qualified, target_qualified, file_path FROM edges WHERE kind = ?",
         (EdgeKind.IMPORTS_FROM,),
     ).fetchall()
-    ce_map: dict[str, float] = {r["source_qualified"]: float(r["cnt"]) for r in ce_rows}
+
+    for r in import_rows:
+        src = r["source_qualified"]
+        raw_tgt = r["target_qualified"]
+        resolved = _resolve_import_target(raw_tgt, r["file_path"], module_map)
+
+        ce_map[src] = ce_map.get(src, 0.0) + 1.0
+        if resolved in file_paths:
+            ca_map[resolved] = ca_map.get(resolved, 0.0) + 1.0
 
     # Ce adicional: aristas USES_TYPE salientes (peso USES_TYPE_WEIGHT)
     ut_ce_rows = conn.execute(
@@ -98,14 +203,6 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
         ce_map[r["source_qualified"]] = (
             ce_map.get(r["source_qualified"], 0.0) + r["cnt"] * USES_TYPE_WEIGHT
         )
-
-    # Ca por archivo: aristas IMPORTS_FROM entrantes (peso 1.0)
-    ca_rows = conn.execute(
-        "SELECT target_qualified, COUNT(*) AS cnt FROM edges"
-        " WHERE kind = ? GROUP BY target_qualified",
-        (EdgeKind.IMPORTS_FROM,),
-    ).fetchall()
-    ca_map: dict[str, float] = {r["target_qualified"]: float(r["cnt"]) for r in ca_rows}
 
     # Ca adicional: aristas USES_TYPE entrantes (peso USES_TYPE_WEIGHT).
     # Solo cuentan si el target es un nodo File indexado (resolución interna).
