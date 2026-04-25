@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "codeindex"
 version = "0.2.0"
-description = "Grafo de código sobre SQLite para reducir consumo de tokens en IA"
+description = "Guardarraíl de acoplamiento para CI/PR: detecta ciclos, god modules y regresiones de acoplamiento antes del merge"
 requires-python = ">=3.12"
 dependencies = [
     "tree-sitter-language-pack>=1.0",
