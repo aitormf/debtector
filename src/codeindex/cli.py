@@ -700,6 +700,16 @@ def _baseline_path(project: str) -> Path:
     return Path(project) / _BASELINE_FILE
 
 
+def _blocks(issues: list, severity: Severity) -> bool:
+    """Return True if *issues* are non-empty and *severity* is ERROR."""
+    return bool(issues) and severity == Severity.ERROR
+
+
+def _warns(issues: list, severity: Severity) -> bool:
+    """Return True if *issues* are non-empty and *severity* is ERROR or WARNING."""
+    return bool(issues) and severity in (Severity.ERROR, Severity.WARNING)
+
+
 def cmd_baseline(args) -> None:
     """Save or compare coupling metrics against a stored baseline.
 
@@ -810,12 +820,6 @@ def _baseline_status(args) -> None:
             )
 
     # Determinar si cada tipo de regresión bloquea el CI según su severidad
-    def _blocks(issues: list, severity: Severity) -> bool:
-        return bool(issues) and severity == Severity.ERROR
-
-    def _warns(issues: list, severity: Severity) -> bool:
-        return bool(issues) and severity in (Severity.ERROR, Severity.WARNING)
-
     has_blocking = (
         _blocks(new_cycles, sev.cycles)
         or _blocks(new_gods, sev.god_modules)
@@ -840,30 +844,130 @@ def _baseline_status(args) -> None:
         or _warns(regressions, sev.instability)
     )
 
+    reporter = getattr(args, "reporter", None)
+
     if not has_any_warning:
         print("✓  Sin cambios respecto al baseline")
         return
 
-    if _warns(new_cycles, sev.cycles):
-        label = "⛔" if sev.cycles == Severity.ERROR else "⚠"
-        print(f"\n{label}  Nuevos ciclos ({len(new_cycles)}):")
-        for cycle in new_cycles:
-            print("   " + " → ".join(cycle) + " → ...")
+    if reporter == "github":
+        _emit_github_annotations(new_cycles, new_gods, regressions, sev)
+    elif reporter == "gitlab":
+        _emit_gitlab_report(new_cycles, new_gods, regressions, sev)
+    else:
+        if _warns(new_cycles, sev.cycles):
+            label = "⛔" if sev.cycles == Severity.ERROR else "⚠"
+            print(f"\n{label}  Nuevos ciclos ({len(new_cycles)}):")
+            for cycle in new_cycles:
+                print("   " + " → ".join(cycle) + " → ...")
 
-    if _warns(new_gods, sev.god_modules):
-        label = "⛔" if sev.god_modules == Severity.ERROR else "⚠"
-        print(f"\n{label}  Nuevos god modules ({len(new_gods)}):")
-        for path_str in new_gods:
-            print(f"   {path_str}")
+        if _warns(new_gods, sev.god_modules):
+            label = "⛔" if sev.god_modules == Severity.ERROR else "⚠"
+            print(f"\n{label}  Nuevos god modules ({len(new_gods)}):")
+            for path_str in new_gods:
+                print(f"   {path_str}")
 
-    if _warns(regressions, sev.instability):
-        label = "⛔" if sev.instability == Severity.ERROR else "⚠"
-        print(f"\n{label}  Regresiones de inestabilidad ({len(regressions)}):")
-        for r in regressions:
-            print(f"   {r['file_path']}  I: {r['before']:.3f} → {r['after']:.3f}")
+        if _warns(regressions, sev.instability):
+            label = "⛔" if sev.instability == Severity.ERROR else "⚠"
+            print(f"\n{label}  Regresiones de inestabilidad ({len(regressions)}):")
+            for r in regressions:
+                print(f"   {r['file_path']}  I: {r['before']:.3f} → {r['after']:.3f}")
 
     if has_blocking:
         sys.exit(1)
+
+
+def _annotation_level(severity: Severity) -> str:
+    """Map a :class:`Severity` to its GitHub Annotation level string."""
+    return "error" if severity == Severity.ERROR else "warning"
+
+
+def _emit_github_annotations(
+    new_cycles: list,
+    new_gods: list,
+    regressions: list,
+    sev,
+) -> None:
+    """Print GitHub Actions workflow commands for each regression.
+
+    Format: ``::level file=<path>,line=1::<message>``
+
+    Args:
+        new_cycles: List of cycle node lists.
+        new_gods: List of god module file paths.
+        regressions: List of instability regression dicts.
+        sev: :class:`~codeindex.config.MetricsSeverity` instance.
+    """
+    if _warns(new_cycles, sev.cycles):
+        level = _annotation_level(sev.cycles)
+        for cycle in new_cycles:
+            msg = f"Ciclo de importación: {' → '.join(cycle)}"
+            # Annotate first file in the cycle
+            print(f"::{level} file={cycle[0]},line=1::{msg}")
+
+    if _warns(new_gods, sev.god_modules):
+        level = _annotation_level(sev.god_modules)
+        for path_str in new_gods:
+            print(
+                f"::{level} file={path_str},line=1::God module: Ca excede el percentil configurado"
+            )
+
+    if _warns(regressions, sev.instability):
+        level = _annotation_level(sev.instability)
+        for r in regressions:
+            msg = f"Inestabilidad: {r['before']:.3f} → {r['after']:.3f}"
+            print(f"::{level} file={r['file_path']},line=1::{msg}")
+
+
+def _emit_gitlab_report(
+    new_cycles: list,
+    new_gods: list,
+    regressions: list,
+    sev,
+) -> None:
+    """Print a GitLab CI–friendly report for each regression.
+
+    Uses GitLab's ``section_start``/``section_end`` markers for collapsible
+    log sections when issues are found.
+
+    Args:
+        new_cycles: List of cycle node lists.
+        new_gods: List of god module file paths.
+        regressions: List of instability regression dicts.
+        sev: :class:`~codeindex.config.MetricsSeverity` instance.
+    """
+    import time as _time  # noqa: PLC0415
+
+    ts = int(_time.time())
+
+    if _warns(new_cycles, sev.cycles):
+        label = "ERROR" if sev.cycles == Severity.ERROR else "WARNING"
+        print(
+            f"\x1b[0Ksection_start:{ts}:cycles\r\x1b[0K[{label}] Nuevos ciclos ({len(new_cycles)})"
+        )
+        for cycle in new_cycles:
+            print("  " + " → ".join(cycle) + " → ...")
+        print(f"\x1b[0Ksection_end:{ts}:cycles\r\x1b[0K")
+
+    if _warns(new_gods, sev.god_modules):
+        label = "ERROR" if sev.god_modules == Severity.ERROR else "WARNING"
+        print(
+            f"\x1b[0Ksection_start:{ts}:god_modules\r\x1b[0K"
+            f"[{label}] Nuevos god modules ({len(new_gods)})"
+        )
+        for path_str in new_gods:
+            print(f"  {path_str}")
+        print(f"\x1b[0Ksection_end:{ts}:god_modules\r\x1b[0K")
+
+    if _warns(regressions, sev.instability):
+        label = "ERROR" if sev.instability == Severity.ERROR else "WARNING"
+        print(
+            f"\x1b[0Ksection_start:{ts}:instability\r\x1b[0K"
+            f"[{label}] Regresiones de inestabilidad ({len(regressions)})"
+        )
+        for r in regressions:
+            print(f"  {r['file_path']}  I: {r['before']:.3f} → {r['after']:.3f}")
+        print(f"\x1b[0Ksection_end:{ts}:instability\r\x1b[0K")
 
 
 # ──────────────────────────────────────────────
@@ -1018,8 +1122,15 @@ def main() -> None:
     p_baseline = sub.add_parser("baseline", help="Gestión del baseline de métricas")
     p_baseline_sub = p_baseline.add_subparsers(dest="baseline_cmd")
     p_baseline_sub.add_parser("save", help="Guardar snapshot de métricas como baseline")
-    p_baseline_sub.add_parser("status", help="Comparar métricas actuales con el baseline")
-
+    p_status = p_baseline_sub.add_parser(
+        "status", help="Comparar métricas actuales con el baseline"
+    )
+    p_status.add_argument(
+        "--reporter",
+        choices=["github", "gitlab"],
+        default=None,
+        help="Formato CI: github (Annotations) o gitlab (section markers)",
+    )
     # semantic (congelado — no forma parte del objetivo CI/PR)
     p_sem = sub.add_parser(
         "semantic",
