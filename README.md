@@ -15,10 +15,35 @@ codeindex baseline status   # exit 1 si hay nuevos ciclos o el acoplamiento empe
 
 ## Instalación
 
+CodeIndex es una **herramienta de línea de comandos**, no una librería. Instálala globalmente para usarla en cualquier proyecto.
+
+### Con uv (recomendado)
+
 ```bash
-pip install codeindex
-# o con uv
-uv add codeindex
+uv tool install /ruta/a/codeIndex
+```
+
+`uv tool install` no soporta modo editable. Para reflejar cambios en el código, reinstala con `--force` (es rápido):
+
+```bash
+uv tool install /ruta/a/codeIndex --force
+```
+
+### Con pip
+
+```bash
+# Instalación normal
+pip install /ruta/a/codeIndex
+
+# Editable — los cambios en el código se reflejan inmediatamente sin reinstalar
+pip install -e /ruta/a/codeIndex
+```
+
+Verificar que está disponible globalmente:
+
+```bash
+codeindex --help
+which codeindex
 ```
 
 **Requisitos:** Python ≥ 3.12
