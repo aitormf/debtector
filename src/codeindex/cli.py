@@ -1059,7 +1059,7 @@ def cmd_metrics(args) -> None:
         flags = ""
         if m.file_path in god_paths:
             flags += " ● god"
-        if m.instability >= instability_warn and (m.fan_in + m.fan_out) > 0:
+        if m.fan_in > 0 and m.instability >= instability_warn:
             flags += " ⚠ inestable"
         print(
             f"{m.file_path:<{col_w}}  {m.fan_in:>6.1f}  {m.fan_out:>6.1f}"

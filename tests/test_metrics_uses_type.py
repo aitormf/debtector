@@ -40,14 +40,14 @@ def _uses_type(source: str, target: str) -> EdgeInfo:
 
 
 class TestUsesTypeWeight:
-    """USES_TYPE edges contribute USES_TYPE_WEIGHT (0.5) to Ce."""
+    """USES_TYPE edges contribute USES_TYPE_WEIGHT (1.0) to Ce."""
 
     def test_uses_type_weight_constant(self) -> None:
-        """USES_TYPE_WEIGHT is 0.5."""
-        assert USES_TYPE_WEIGHT == 0.5
+        """USES_TYPE_WEIGHT is 1.0."""
+        assert USES_TYPE_WEIGHT == 1.0
 
     def test_uses_type_adds_to_fan_out(self, tmp_db: GraphStore) -> None:
-        """A USES_TYPE edge increases Ce by 0.5."""
+        """A USES_TYPE edge increases Ce by 1.0."""
         tmp_db.store_file(
             "src/a.py",
             [_file("src/a.py")],
@@ -55,7 +55,7 @@ class TestUsesTypeWeight:
         )
 
         metrics = {m.file_path: m for m in compute_metrics(tmp_db)}
-        assert metrics["src/a.py"].fan_out == pytest.approx(0.5)
+        assert metrics["src/a.py"].fan_out == pytest.approx(1.0)
 
     def test_imports_from_weight_one(self, tmp_db: GraphStore) -> None:
         """An IMPORTS_FROM edge still contributes 1.0 to Ce."""
@@ -69,7 +69,7 @@ class TestUsesTypeWeight:
         assert metrics["src/a.py"].fan_out == pytest.approx(1.0)
 
     def test_mixed_edges_sum_correctly(self, tmp_db: GraphStore) -> None:
-        """1 IMPORTS_FROM + 2 USES_TYPE = Ce of 2.0."""
+        """1 IMPORTS_FROM + 2 USES_TYPE = Ce of 3.0."""
         tmp_db.store_file(
             "src/a.py",
             [_file("src/a.py")],
@@ -81,12 +81,12 @@ class TestUsesTypeWeight:
         )
 
         metrics = {m.file_path: m for m in compute_metrics(tmp_db)}
-        # 1 * 1.0 + 2 * 0.5 = 2.0
-        assert metrics["src/a.py"].fan_out == pytest.approx(2.0)
+        # 1 * 1.0 + 2 * 1.0 = 3.0
+        assert metrics["src/a.py"].fan_out == pytest.approx(3.0)
 
     def test_uses_type_instability_effect(self, tmp_db: GraphStore) -> None:
         """USES_TYPE contributes to instability via Ce."""
-        # src/a.py has only USES_TYPE (Ce=0.5, Ca=0) → I=1.0
+        # src/a.py has only USES_TYPE (Ce=1.0, Ca=0) → I=1.0
         tmp_db.store_file(
             "src/a.py",
             [_file("src/a.py")],

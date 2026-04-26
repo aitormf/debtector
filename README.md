@@ -126,7 +126,7 @@ codeindex --json search "AuthService"
 
 | Métrica | Descripción |
 |---------|-------------|
-| **Ca (fan-in)** | Cuántos módulos dependen de éste. Peso 1.0 por `IMPORTS_FROM`, 0.5 por `USES_TYPE` |
+| **Ca (fan-in)** | Cuántos módulos dependen de éste. Peso 1.0 por `IMPORTS_FROM` y `USES_TYPE` |
 | **Ce (fan-out)** | Cuántos módulos importa éste. Mismo esquema de pesos |
 | **I (inestabilidad)** | `Ce / (Ca + Ce)`. 0 = muy estable, 1 = muy inestable |
 
@@ -213,7 +213,7 @@ Severidades: `error` (exit 1) · `warning` (imprime, exit 0) · `info` (silencio
 | `INHERITS` | Clase → clase base |
 | `CALLS` | Función/método → función/método llamado |
 | `COVERS` | Función de test → símbolo de producción que ejercita |
-| `USES_TYPE` | Función → tipo referenciado en type hints (peso 0.5 en Ca/Ce) |
+| `USES_TYPE` | Función → tipo referenciado en type hints (peso 1.0 en Ca/Ce) |
 
 ---
 
@@ -294,7 +294,7 @@ Los logs siempre van a `.codeindex/codeindex.log`, nunca a stdout.
 - [x] **Ciclos** — detección con algoritmo de Tarjan
 - [x] **God modules** — outliers de fan-in (percentil 90)
 - [x] **Herencia** — profundidad y número de hijos
-- [x] **USES_TYPE** — acoplamiento por type hints (peso 0.5)
+- [x] **USES_TYPE** — acoplamiento por type hints (peso 1.0)
 - [x] **`codeindex metrics`** — output tabular con flags
 - [x] **Baseline + ratcheting** — CI solo falla si empeoran las métricas
 - [x] **Severidad configurable** — `codeindex.toml` error/warning/info por tipo

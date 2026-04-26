@@ -28,10 +28,22 @@ from .models import EdgeKind, NodeKind
 # Tipos de aristas que se consideran para la detección de ciclos
 _CYCLE_EDGE_KINDS = (EdgeKind.IMPORTS_FROM, EdgeKind.CALLS)
 
-# Peso de las aristas USES_TYPE en el cálculo de Ca/Ce.
-# Menor que IMPORTS_FROM (peso 1.0) porque una referencia de tipo en
-# una firma es un acoplamiento más débil que un import explícito.
-USES_TYPE_WEIGHT: float = 0.5
+# ──────────────────────────────────────────────
+# Pesos de aristas en el cálculo de Ca/Ce
+#
+# Todas las constantes son públicas para facilitar ajustes durante
+# experimentos y en tests. Cambiar un peso aquí afecta a compute_metrics
+# globalmente sin tocar la lógica de cálculo.
+# ──────────────────────────────────────────────
+
+#: Peso de aristas IMPORTS_FROM: acoplamiento estructural explícito.
+IMPORTS_FROM_WEIGHT: float = 1.0
+
+#: Peso de aristas USES_TYPE: acoplamiento por type hints en firmas.
+#: Se equipara a IMPORTS_FROM porque un type hint implica una dependencia
+#: real en tiempo de importación (para type checkers y en runtime con
+#: ``from __future__ import annotations`` desactivado).
+USES_TYPE_WEIGHT: float = 1.0
 
 
 @dataclass
@@ -189,9 +201,9 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
         raw_tgt = r["target_qualified"]
         resolved = _resolve_import_target(raw_tgt, r["file_path"], module_map)
 
-        ce_map[src] = ce_map.get(src, 0.0) + 1.0
+        ce_map[src] = ce_map.get(src, 0.0) + IMPORTS_FROM_WEIGHT
         if resolved in file_paths:
-            ca_map[resolved] = ca_map.get(resolved, 0.0) + 1.0
+            ca_map[resolved] = ca_map.get(resolved, 0.0) + IMPORTS_FROM_WEIGHT
 
     # Ce adicional: aristas USES_TYPE salientes (peso USES_TYPE_WEIGHT)
     ut_ce_rows = conn.execute(
