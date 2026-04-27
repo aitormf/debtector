@@ -10,7 +10,7 @@ Para traversals complejos (impacto, dependencias transitivas) usa
 NetworkX como grafo en memoria con cache invalidable.
 
 Uso:
-    store = GraphStore(".codeindex.db")
+    store = GraphStore(".debtector.db")
     store.store_file(file_path, nodes, edges, file_hash)
     results = store.search_nodes("UserService")
     impact = store.get_impact_radius(["src/auth.py"])
@@ -55,7 +55,7 @@ class SchemaTooNewError(RuntimeError):
     """Raised when the stored schema version exceeds :data:`CURRENT_SCHEMA_VERSION`.
 
     This usually means the database was created by a newer version of
-    codeindex and cannot be safely opened by this version.
+    debtector and cannot be safely opened by this version.
     """
 
 
@@ -166,7 +166,7 @@ class GraphStore:
     invalida automáticamente tras cada escritura.
     """
 
-    def __init__(self, db_path: str | Path = ".codeindex.db") -> None:
+    def __init__(self, db_path: str | Path = ".debtector.db") -> None:
         """Initialize the GraphStore and create the SQLite database if needed.
 
         Args:
@@ -223,7 +223,7 @@ class GraphStore:
         if stored > CURRENT_SCHEMA_VERSION:
             raise SchemaTooNewError(
                 f"Database schema version {stored} is newer than the supported "
-                f"version {CURRENT_SCHEMA_VERSION}. Please upgrade codeindex."
+                f"version {CURRENT_SCHEMA_VERSION}. Please upgrade debtector."
             )
 
         for target in range(stored + 1, CURRENT_SCHEMA_VERSION + 1):
@@ -536,7 +536,7 @@ class GraphStore:
         Args:
             query: Free-text search string (e.g. ``"auth service"``,
                 ``"create user"``).
-            kind: Optional :class:`~codeindex.models.NodeKind` string to filter
+            kind: Optional :class:`~debtector.models.NodeKind` string to filter
                 results (e.g. ``"Class"``, ``"Method"``).
             limit: Maximum number of results to return. Defaults to 20.
 
@@ -636,7 +636,7 @@ class GraphStore:
             file_path: Relative path of the source file.
             embed_fn: Optional callable ``(texts: list[str]) -> list[list[float]]``
                 used to generate embeddings.  When ``None``, the default
-                fastembed-based embedder from :mod:`~codeindex.embedder` is used.
+                fastembed-based embedder from :mod:`~debtector.embedder` is used.
 
         Returns:
             Number of embeddings stored.  Returns ``0`` if sqlite-vec is
@@ -772,7 +772,7 @@ class GraphStore:
         """
         if not self._vec_available:
             raise RuntimeError(
-                "sqlite-vec no está disponible. Instálalo con: uv add 'codeindex[search]'"
+                "sqlite-vec no está disponible. Instálalo con: uv add 'debtector[search]'"
             )
 
         if embed_fn is not None:
@@ -880,7 +880,7 @@ class GraphStore:
 
         Args:
             qualified_name: Source node identifier.
-            edge_kind: Optional :class:`~codeindex.models.EdgeKind` to filter
+            edge_kind: Optional :class:`~debtector.models.EdgeKind` to filter
                 by (e.g. ``"IMPORTS_FROM"``).
 
         Returns:
@@ -903,7 +903,7 @@ class GraphStore:
 
         Args:
             qualified_name: Target node identifier.
-            edge_kind: Optional :class:`~codeindex.models.EdgeKind` to filter
+            edge_kind: Optional :class:`~debtector.models.EdgeKind` to filter
                 by (e.g. ``"CALLS"``).
 
         Returns:
@@ -1197,7 +1197,7 @@ class GraphStore:
                 this string are returned (e.g. ``"src/auth.py"`` or ``"src/"``).
 
         Returns:
-            List of :class:`~codeindex.models.GraphNode` instances that have no
+            List of :class:`~debtector.models.GraphNode` instances that have no
             incoming COVERS edge.
         """
         query = f"""
@@ -1223,7 +1223,7 @@ class GraphStore:
         """Return aggregate statistics for the current index.
 
         Returns:
-            A :class:`~codeindex.models.GraphStats` instance with total node
+            A :class:`~debtector.models.GraphStats` instance with total node
             and edge counts, per-kind breakdowns, language list, and file count.
         """
         total_nodes = self._conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]

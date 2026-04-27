@@ -1,4 +1,4 @@
-"""Integration tests for codeindex.indexer.Indexer."""
+"""Integration tests for debtector.indexer.Indexer."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.graph_store import GraphStore
-from codeindex.indexer import Indexer
+from debtector.graph_store import GraphStore
+from debtector.indexer import Indexer
 
 
 @pytest.fixture()
@@ -23,7 +23,7 @@ def project_dir(tmp_path: Path, sample_fixture_path: Path) -> Path:
 @pytest.fixture()
 def store_and_indexer(tmp_path: Path, project_dir: Path):
     """Return (GraphStore, Indexer) pair pointed at the temp project."""
-    db_path = tmp_path / ".codeindex.db"
+    db_path = tmp_path / ".debtector.db"
     store = GraphStore(db_path)
     indexer = Indexer(store)
     yield store, indexer

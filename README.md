@@ -1,21 +1,21 @@
-# CodeIndex
+# Debtector
 
-**Guardarraíl de acoplamiento para CI/PR.** CodeIndex indexa un repositorio de código como un grafo en SQLite, calcula métricas de acoplamiento estructural (Ca, Ce, inestabilidad, ciclos, god modules) y bloquea el merge cuando las métricas empeoran.
+**Guardarraíl de acoplamiento para CI/PR.** Debtector indexa un repositorio de código como un grafo en SQLite, calcula métricas de acoplamiento estructural (Ca, Ce, inestabilidad, ciclos, god modules) y bloquea el merge cuando las métricas empeoran.
 
-ICP: dev/tech lead que usa agentes de código. Los agentes generan acoplamiento oculto a una velocidad que ningún humano alcanza; CodeIndex actúa como guardarraíl arquitectónico en el pipeline.
+ICP: dev/tech lead que usa agentes de código. Los agentes generan acoplamiento oculto a una velocidad que ningún humano alcanza; Debtector actúa como guardarraíl arquitectónico en el pipeline.
 
 ```bash
 # Indexar, guardar baseline y comprobar regresiones (típico en CI)
-codeindex index ./src
-codeindex baseline save
-codeindex baseline status   # exit 1 si hay nuevos ciclos o el acoplamiento empeora
+debtector index ./src
+debtector baseline save
+debtector baseline status   # exit 1 si hay nuevos ciclos o el acoplamiento empeora
 ```
 
 ---
 
 ## Instalación
 
-CodeIndex es una **herramienta de línea de comandos**, no una librería. Instálala globalmente para usarla en cualquier proyecto.
+Debtector es una **herramienta de línea de comandos**, no una librería. Instálala globalmente para usarla en cualquier proyecto.
 
 ### Con uv (recomendado)
 
@@ -42,8 +42,8 @@ pip install -e /ruta/a/codeIndex
 Verificar que está disponible globalmente:
 
 ```bash
-codeindex --help
-which codeindex
+debtector --help
+which debtector
 ```
 
 **Requisitos:** Python ≥ 3.12
@@ -54,20 +54,20 @@ which codeindex
 
 ```bash
 # 1. Indexar el proyecto (incremental: solo reparsea ficheros cambiados)
-codeindex index ./src
+debtector index ./src
 
 # 2. Ver métricas de acoplamiento
-codeindex metrics
+debtector metrics
 
-# 3. Guardar baseline (commitear .codeindex/baseline.json al repo)
-codeindex baseline save
-git add .codeindex/baseline.json && git commit -m "chore: save metrics baseline"
+# 3. Guardar baseline (commitear .debtector/baseline.json al repo)
+debtector baseline save
+git add .debtector/baseline.json && git commit -m "chore: save metrics baseline"
 
 # 4. En CI: comprobar que las métricas no empeoran
-codeindex baseline status
+debtector baseline status
 ```
 
-El índice vive en `.codeindex/index.db`. El baseline en `.codeindex/baseline.json`. Los logs en `.codeindex/codeindex.log`.
+El índice vive en `.debtector/index.db`. El baseline en `.debtector/baseline.json`. Los logs en `.debtector/debtector.log`.
 
 ---
 
@@ -96,7 +96,7 @@ El índice vive en `.codeindex/index.db`. El baseline en `.codeindex/baseline.js
 | Comando | Descripción |
 |---------|-------------|
 | `metrics` | Tabla de Ca, Ce, I por módulo + ciclos + god modules. `--sort fan_in\|fan_out\|instability`, `--limit N`, `--json` |
-| `baseline save` | Guarda snapshot de métricas en `.codeindex/baseline.json` |
+| `baseline save` | Guarda snapshot de métricas en `.debtector/baseline.json` |
 | `baseline status` | Compara métricas actuales con el baseline. Exit 1 si hay regresiones (configurable) |
 | `baseline status --reporter github` | Igual pero emite GitHub Actions Annotations (`::error/::warning`) |
 | `baseline status --reporter gitlab` | Igual pero emite GitLab CI section markers |
@@ -113,16 +113,16 @@ El índice vive en `.codeindex/index.db`. El baseline en `.codeindex/baseline.js
 Todos los comandos admiten `--json` para emitir JSON compacto en stdout:
 
 ```bash
-codeindex --json metrics
-codeindex --json baseline status
-codeindex --json search "AuthService"
+debtector --json metrics
+debtector --json baseline status
+debtector --json search "AuthService"
 ```
 
 ---
 
 ## Métricas disponibles
 
-### Por módulo (`codeindex metrics`)
+### Por módulo (`debtector metrics`)
 
 | Métrica | Descripción |
 |---------|-------------|
@@ -153,7 +153,7 @@ Detección de ciclos de importación con el algoritmo de Tarjan (SCCs). Consider
 
 Módulos cuyo fan-in supera el percentil 90 del proyecto. Umbral relativo, no absoluto.
 
-### Herencia (`codeindex metrics --json`)
+### Herencia (`debtector metrics --json`)
 
 Profundidad de jerarquía de herencia y número de hijos directos por clase.
 
@@ -167,15 +167,15 @@ El flujo típico en CI es:
 # .github/workflows/ci.yml
 - name: Check coupling ratchet
   run: |
-    codeindex index ./src
-    codeindex baseline status --reporter github
+    debtector index ./src
+    debtector baseline status --reporter github
 ```
 
 - Si no existe `baseline.json` → exit 0 (modo silencioso, no bloquea)
 - Si existe y las métricas mejoran o son iguales → exit 0
 - Si hay nuevos ciclos, nuevos god modules o la inestabilidad empeora → exit 1
 
-### Configuración de severidad (`codeindex.toml`)
+### Configuración de severidad (`debtector.toml`)
 
 ```toml
 [metrics.thresholds]
@@ -217,25 +217,25 @@ Severidades: `error` (exit 1) · `warning` (imprime, exit 0) · `info` (silencio
 
 ---
 
-## Directorio `.codeindex/`
+## Directorio `.debtector/`
 
 ```
-.codeindex/
+.debtector/
   index.db        # grafo SQLite (commiteable si se quiere compartir)
   baseline.json   # snapshot de métricas (committear al repo)
-  codeindex.log   # logs estructurados (ignorado por git)
+  debtector.log   # logs estructurados (ignorado por git)
   .gitignore      # generado automáticamente
 ```
 
-El `.gitignore` de `.codeindex/` está gestionado por CodeIndex: ignora todo excepto `baseline.json` y el propio `.gitignore`.
+El `.gitignore` de `.debtector/` está gestionado por Debtector: ignora todo excepto `baseline.json` y el propio `.gitignore`.
 
 ---
 
 ## Auto-indexado con git hook
 
 ```bash
-codeindex install-hook              # re-indexa en cada pre-commit
-codeindex install-hook --add-to-stage  # también hace git add del index.db
+debtector install-hook              # re-indexa en cada pre-commit
+debtector install-hook --add-to-stage  # también hace git add del index.db
 ```
 
 El hook es incremental (solo reparsea ficheros con hash distinto) y nunca bloquea un commit.
@@ -245,8 +245,8 @@ El hook es incremental (solo reparsea ficheros con hash distinto) y nunca bloque
 ## Integración con Claude Code
 
 ```bash
-codeindex install-skill --global   # instala en ~/.claude/skills/
-codeindex install-skill            # instala en .claude/skills/ del proyecto
+debtector install-skill --global   # instala en ~/.claude/skills/
+debtector install-skill            # instala en .claude/skills/ del proyecto
 ```
 
 Con los skills instalados, Claude Code reconoce frases como *"analiza el impacto de cambiar AuthService"* o *"¿quién importa flask?"* y llama automáticamente al CLI con `--json`.
@@ -276,11 +276,11 @@ uv run pre-commit install --hook-type pre-push
 ## Logging
 
 ```bash
-CODEINDEX_LOG_JSON=false codeindex index ./src   # coloreado (default)
-CODEINDEX_LOG_JSON=true  codeindex index ./src   # JSON lines (prod/observabilidad)
+DEBTECTOR_LOG_JSON=false debtector index ./src   # coloreado (default)
+DEBTECTOR_LOG_JSON=true  debtector index ./src   # JSON lines (prod/observabilidad)
 ```
 
-Los logs siempre van a `.codeindex/codeindex.log`, nunca a stdout.
+Los logs siempre van a `.debtector/debtector.log`, nunca a stdout.
 
 ---
 
@@ -288,16 +288,16 @@ Los logs siempre van a `.codeindex/codeindex.log`, nunca a stdout.
 
 - [x] FTS5 — búsqueda léxica/ranked
 - [x] CALLS — aristas de llamadas intra-fichero
-- [x] COVERS + `codeindex untested` — cobertura de tests
-- [x] `.codeindexignore` — rutas adicionales ignoradas
+- [x] COVERS + `debtector untested` — cobertura de tests
+- [x] `.debtectorignore` — rutas adicionales ignoradas
 - [x] **Ca, Ce, inestabilidad** — métricas de acoplamiento por módulo
 - [x] **Ciclos** — detección con algoritmo de Tarjan
 - [x] **God modules** — outliers de fan-in (percentil 90)
 - [x] **Herencia** — profundidad y número de hijos
 - [x] **USES_TYPE** — acoplamiento por type hints (peso 1.0)
-- [x] **`codeindex metrics`** — output tabular con flags
+- [x] **`debtector metrics`** — output tabular con flags
 - [x] **Baseline + ratcheting** — CI solo falla si empeoran las métricas
-- [x] **Severidad configurable** — `codeindex.toml` error/warning/info por tipo
+- [x] **Severidad configurable** — `debtector.toml` error/warning/info por tipo
 - [x] **CI reporter** — GitHub Annotations + GitLab CI section markers
 - [ ] Git history — churn por módulo, hotspot score, temporal coupling
 - [ ] Graph diff — delta de métricas entre rama base y PR

@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "codeindex"
+name = "debtector"
 version = "0.3.1"
 description = "Guardarraíl de acoplamiento para CI/PR: detecta ciclos, god modules y regresiones de acoplamiento antes del merge"
 requires-python = ">=3.12"
@@ -30,15 +30,11 @@ dev = [
 ]
 
 [project.scripts]
-codeindex = "codeindex.cli:main"
-codeindex-clean = "codeindex.gitfilter:cmd_clean"
-codeindex-smudge = "codeindex.gitfilter:cmd_smudge"
+debtector = "debtector.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools.package-data]
-"codeindex" = ["skills/*.md"]
 
 # ---------------------------------------------------------------------------
 # Ruff — linter + formatter
@@ -66,7 +62,7 @@ skips = []
 [tool.commitizen]
 name = "cz_conventional_commits"
 version = "0.3.1"
-version_files = ["pyproject.toml:version", "src/codeindex/__init__.py"]
+version_files = ["pyproject.toml:version", "src/debtector/__init__.py"]
 tag_format = "v$version"
 annotated_tag = true  # git push --follow-tags solo sube tags anotados
 
@@ -75,5 +71,5 @@ annotated_tag = true  # git push --follow-tags solo sube tags anotados
 # ---------------------------------------------------------------------------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=codeindex --cov-report=term-missing"
+addopts = "--cov=debtector --cov-report=term-missing"
 norecursedirs = ["tests/fixtures"]

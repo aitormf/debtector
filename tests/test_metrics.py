@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from codeindex.graph_store import GraphStore
-from codeindex.metrics import ModuleMetrics, compute_metrics
-from codeindex.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
+from debtector.graph_store import GraphStore
+from debtector.metrics import ModuleMetrics, compute_metrics
+from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
 # ──────────────────────────────────────────────
 # Helpers

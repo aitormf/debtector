@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from codeindex.graph_store import GraphStore
-from codeindex.metrics import USES_TYPE_WEIGHT, compute_metrics
-from codeindex.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
+from debtector.graph_store import GraphStore
+from debtector.metrics import USES_TYPE_WEIGHT, compute_metrics
+from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
 
 def _file(path: str) -> NodeInfo:

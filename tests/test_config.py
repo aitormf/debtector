@@ -1,4 +1,4 @@
-"""Tests for codeindex.config — codeindex.toml loading and defaults."""
+"""Tests for debtector.config — debtector.toml loading and defaults."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.config import (
-    CodeIndexConfig,
+from debtector.config import (
+    DebtectorConfig,
     MetricsSeverity,
     MetricsThresholds,
     Severity,
@@ -20,7 +20,7 @@ class TestDefaults:
 
     def test_returns_config_instance(self, tmp_path: Path) -> None:
         cfg = load_config(tmp_path)
-        assert isinstance(cfg, CodeIndexConfig)
+        assert isinstance(cfg, DebtectorConfig)
 
     def test_default_thresholds(self, tmp_path: Path) -> None:
         cfg = load_config(tmp_path)
@@ -38,10 +38,10 @@ class TestDefaults:
 
 
 class TestTomlLoading:
-    """load_config() reads values from codeindex.toml when present."""
+    """load_config() reads values from debtector.toml when present."""
 
     def _write_toml(self, tmp_path: Path, content: str) -> None:
-        (tmp_path / "codeindex.toml").write_text(content, encoding="utf-8")
+        (tmp_path / "debtector.toml").write_text(content, encoding="utf-8")
 
     def test_loads_toml_file(self, tmp_path: Path) -> None:
         self._write_toml(tmp_path, "[metrics.thresholds]\ngod_module_percentile = 75\n")
@@ -98,7 +98,7 @@ class TestSeverityEnum:
         assert Severity.INFO == "info"
 
     def test_invalid_severity_raises(self, tmp_path: Path) -> None:
-        (tmp_path / "codeindex.toml").write_text(
+        (tmp_path / "debtector.toml").write_text(
             '[metrics.severity]\ncycles = "critical"\n', encoding="utf-8"
         )
         with pytest.raises((ValueError, KeyError)):

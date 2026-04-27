@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.models import EdgeKind
-from codeindex.parser.js_parser import JavaScriptParser
-from codeindex.parser.python_parser import PythonParser
+from debtector.models import EdgeKind
+from debtector.parser.js_parser import JavaScriptParser
+from debtector.parser.python_parser import PythonParser
 
 # ──────────────────────────────────────────────
 # Python

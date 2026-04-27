@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.cli import _get_store, cmd_baseline
-from codeindex.logging import configure_logging
-from codeindex.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
+from debtector.cli import _get_store, cmd_baseline
+from debtector.logging import configure_logging
+from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
 
 @pytest.fixture(autouse=True)
@@ -106,7 +106,7 @@ class TestGitHubAnnotations:
 
     def test_severity_maps_to_annotation_level(self, tmp_path: Path, capsys) -> None:
         """error severity → ::error, warning severity → ::warning."""
-        (tmp_path / "codeindex.toml").write_text(
+        (tmp_path / "debtector.toml").write_text(
             '[metrics.severity]\ncycles = "warning"\n', encoding="utf-8"
         )
         _seed(str(tmp_path), {"src/a.py": [], "src/b.py": []})

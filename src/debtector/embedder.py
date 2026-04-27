@@ -5,7 +5,7 @@ Usa fastembed (ONNX Runtime, sin PyTorch) con el modelo BAAI/bge-small-en-v1.5.
 El modelo se descarga una sola vez y se cachea en ~/.cache/fastembed/.
 
 Uso:
-    from codeindex.embedder import embed_text, embed_texts, build_rich_node_text
+    from debtector.embedder import embed_text, embed_texts, build_rich_node_text
 
     vec = embed_text("authentication middleware")
     vecs = embed_texts(["auth service", "payment gateway"])
@@ -41,7 +41,7 @@ def _get_model():
             from fastembed import TextEmbedding
         except ImportError as exc:
             raise ImportError(
-                "fastembed no está instalado. Instálalo con: uv add 'codeindex[search]'"
+                "fastembed no está instalado. Instálalo con: uv add 'debtector[search]'"
             ) from exc
         _model = TextEmbedding(_MODEL_NAME)
     return _model
@@ -130,8 +130,8 @@ def node_to_text(node) -> str:
     la query en ``semantic_search``.
 
     Args:
-        node: Instancia de :class:`~codeindex.models.NodeInfo` o
-            :class:`~codeindex.models.GraphNode`.
+        node: Instancia de :class:`~debtector.models.NodeInfo` o
+            :class:`~debtector.models.GraphNode`.
 
     Returns:
         Cadena de texto normalizada lista para pasar a un modelo de embeddings.

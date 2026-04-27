@@ -1,0 +1,99 @@
+{
+  "saved_at": "2026-04-27T08:15:42.112451+00:00",
+  "modules": [
+    {
+      "file_path": "debtector/__init__.py",
+      "fan_in": 0.0,
+      "fan_out": 3.0,
+      "instability": 1.0
+    },
+    {
+      "file_path": "debtector/logging.py",
+      "fan_in": 2.0,
+      "fan_out": 5.5,
+      "instability": 0.7333
+    },
+    {
+      "file_path": "debtector/embedder.py",
+      "fan_in": 3.0,
+      "fan_out": 3.0,
+      "instability": 0.5
+    },
+    {
+      "file_path": "debtector/graph_store.py",
+      "fan_in": 4.0,
+      "fan_out": 20.5,
+      "instability": 0.8367
+    },
+    {
+      "file_path": "debtector/indexer.py",
+      "fan_in": 2.0,
+      "fan_out": 9.5,
+      "instability": 0.8261
+    },
+    {
+      "file_path": "debtector/utils.py",
+      "fan_in": 0.0,
+      "fan_out": 1.0,
+      "instability": 1.0
+    },
+    {
+      "file_path": "debtector/gitfilter.py",
+      "fan_in": 0.0,
+      "fan_out": 6.5,
+      "instability": 1.0
+    },
+    {
+      "file_path": "debtector/config.py",
+      "fan_in": 1.0,
+      "fan_out": 5.0,
+      "instability": 0.8333
+    },
+    {
+      "file_path": "debtector/models.py",
+      "fan_in": 5.0,
+      "fan_out": 3.0,
+      "instability": 0.375
+    },
+    {
+      "file_path": "debtector/parser/base.py",
+      "fan_in": 3.0,
+      "fan_out": 5.0,
+      "instability": 0.625
+    },
+    {
+      "file_path": "debtector/parser/__init__.py",
+      "fan_in": 1.0,
+      "fan_out": 5.5,
+      "instability": 0.8462
+    },
+    {
+      "file_path": "debtector/parser/js_parser.py",
+      "fan_in": 1.0,
+      "fan_out": 6.0,
+      "instability": 0.8571
+    },
+    {
+      "file_path": "debtector/parser/python_parser.py",
+      "fan_in": 1.0,
+      "fan_out": 6.0,
+      "instability": 0.8571
+    },
+    {
+      "file_path": "debtector/metrics.py",
+      "fan_in": 1.0,
+      "fan_out": 6.5,
+      "instability": 0.8667
+    },
+    {
+      "file_path": "debtector/cli.py",
+      "fan_in": 0.0,
+      "fan_out": 15.5,
+      "instability": 1.0
+    }
+  ],
+  "cycles": [],
+  "god_modules": [
+    "debtector/models.py"
+  ]
+}

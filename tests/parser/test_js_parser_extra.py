@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.models import EdgeKind, NodeKind
-from codeindex.parser.js_parser import JavaScriptParser
+from debtector.models import EdgeKind, NodeKind
+from debtector.parser.js_parser import JavaScriptParser
 
 
 @pytest.fixture()

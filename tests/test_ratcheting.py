@@ -1,4 +1,4 @@
-"""Tests for ratcheting CI — exit codes from `codeindex baseline status`."""
+"""Tests for ratcheting CI — exit codes from `debtector baseline status`."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.cli import _get_store, cmd_baseline
-from codeindex.logging import configure_logging
-from codeindex.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
+from debtector.cli import _get_store, cmd_baseline
+from debtector.logging import configure_logging
+from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
 
 @pytest.fixture(autouse=True)
@@ -80,7 +80,7 @@ class TestRatcheting:
     def test_instability_regression_exits_one(self, tmp_path: Path) -> None:
         """Instability worsening with severity=error → exit code 1."""
         # Configure instability as error so it blocks CI
-        (tmp_path / "codeindex.toml").write_text(
+        (tmp_path / "debtector.toml").write_text(
             '[metrics.severity]\ninstability = "error"\n', encoding="utf-8"
         )
         # baseline: a has Ca=3, Ce=1 → I=0.25

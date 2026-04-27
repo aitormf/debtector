@@ -114,7 +114,7 @@ class JavaScriptParser(LanguageParser):
             source: Raw source bytes of the file.
             file_path: Absolute path to the source file.
             file_qn: Qualified name of the file node (used as edge source).
-            edges: Mutable list to which new :class:`~codeindex.models.EdgeInfo`
+            edges: Mutable list to which new :class:`~debtector.models.EdgeInfo`
                 objects are appended in-place.
         """
         for node in self._walk(root):
@@ -210,9 +210,9 @@ class JavaScriptParser(LanguageParser):
             file_qn: Qualified name of the file node (used as CONTAINS edge source).
             lang: Language label to attach to nodes (``"javascript"`` or
                 ``"typescript"``).
-            nodes: Mutable list to which new :class:`~codeindex.models.NodeInfo`
+            nodes: Mutable list to which new :class:`~debtector.models.NodeInfo`
                 objects are appended in-place.
-            edges: Mutable list to which new :class:`~codeindex.models.EdgeInfo`
+            edges: Mutable list to which new :class:`~debtector.models.EdgeInfo`
                 objects are appended in-place.
             parent: Name of the enclosing class when processing a class body,
                 or ``None`` at module level.
@@ -384,9 +384,9 @@ class JavaScriptParser(LanguageParser):
             file_path: Absolute path to the source file.
             file_qn: Qualified name of the file node (used as CONTAINS edge source).
             lang: Language label to attach to nodes.
-            nodes: Mutable list to which new :class:`~codeindex.models.NodeInfo`
+            nodes: Mutable list to which new :class:`~debtector.models.NodeInfo`
                 objects are appended in-place.
-            edges: Mutable list to which new :class:`~codeindex.models.EdgeInfo`
+            edges: Mutable list to which new :class:`~debtector.models.EdgeInfo`
                 objects are appended in-place.
         """
         for child in node.children:
@@ -516,7 +516,7 @@ class JavaScriptParser(LanguageParser):
             file_path: Absolute path to the source file.
             file_qn: Qualified name of the file node (used as edge source).
             line: Line number of the function/method definition.
-            edges: Mutable list to which new :class:`~codeindex.models.EdgeInfo`
+            edges: Mutable list to which new :class:`~debtector.models.EdgeInfo`
                 objects are appended in-place.
             uses_type_seen: Set de tipos ya emitidos para este archivo.
                 Se muta en-place. Permite dedup en O(1) sin escanear ``edges``.
@@ -781,7 +781,7 @@ class JavaScriptParser(LanguageParser):
         """Extract the bare name of a callee without resolving to a qualified name.
 
         Used to capture cross-file call targets in test files so that
-        :meth:`~codeindex.graph_store.GraphStore.update_covers_edges` can later
+        :meth:`~debtector.graph_store.GraphStore.update_covers_edges` can later
         resolve them against the full node index.
 
         Args:

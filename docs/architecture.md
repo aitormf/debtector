@@ -1,8 +1,8 @@
-# Arquitectura de CodeIndex
+# Arquitectura de Debtector
 
 ## Visión general
 
-CodeIndex analiza repositorios de código fuente, extrae su estructura (clases, funciones, métodos, imports, llamadas) y la almacena como un **grafo en SQLite**. El objetivo es **detectar acoplamiento de código en pipelines de CI y PR reviews**, dando al desarrollador contexto arquitectónico antes de mergear.
+Debtector analiza repositorios de código fuente, extrae su estructura (clases, funciones, métodos, imports, llamadas) y la almacena como un **grafo en SQLite**. El objetivo es **detectar acoplamiento de código en pipelines de CI y PR reviews**, dando al desarrollador contexto arquitectónico antes de mergear.
 
 ICP: desarrollador o tech lead que usa agentes de código (Claude Code, Copilot, Codex). Los agentes generan acoplamiento oculto a una velocidad que ningún humano alcanza; codeIndex actúa como guardarraíl arquitectónico en el pipeline.
 
@@ -13,18 +13,18 @@ Ver [ADR-002](decisions/002-pivot-ci-coupling.md) para el contexto completo del 
 ## Módulos
 
 ```
-src/codeindex/
+src/debtector/
 ├── models.py         # Tipos de datos: NodeInfo, EdgeInfo, GraphNode, GraphEdge, enums
 ├── graph_store.py    # Persistencia: SQLite + NetworkX cache en memoria
 ├── indexer.py        # Orquestación: recorre archivos, detecta cambios, llama a parsers
 ├── metrics.py        # Ca, Ce, inestabilidad, ciclos, god modules, herencia
-├── config.py         # Carga y valida codeindex.toml (umbrales y severidad)
+├── config.py         # Carga y valida debtector.toml (umbrales y severidad)
 ├── cli.py            # CLI: index, search, summary, impact, imports, callers,
 │                     #       untested, status, metrics, baseline
 ├── utils.py          # Utilidades compartidas: is_test_file()
 ├── logging.py        # Configuración structlog (dev coloreado / prod JSON)
 ├── embedder.py       # [CONGELADO] Embeddings semánticos — no desarrollar más
-│                     #   Disponible con uv add 'codeindex[semantic]'
+│                     #   Disponible con uv add 'debtector[semantic]'
 └── parser/
     ├── base.py           # LanguageParser — clase abstracta
     ├── python_parser.py  # PythonParser — Tree-sitter Python
@@ -39,7 +39,7 @@ src/codeindex/
 | `graph_store.py` | Única fuente de verdad. Escribe en SQLite, mantiene un DiGraph de NetworkX como cache para traversals |
 | `indexer.py` | Recorre el sistema de archivos, detecta cambios por SHA-256, delega el parseo y llama a `GraphStore.store_file()`. Genera aristas COVERS tras cada indexación (no-fatal) |
 | `metrics.py` | Computa métricas de acoplamiento sobre el grafo: Ca, Ce, inestabilidad, ciclos (Tarjan), god modules (p90), profundidad de herencia |
-| `config.py` | Lee `codeindex.toml` con `tomllib` (stdlib). Expone `CodeIndexConfig` con umbrales y severidades configurables |
+| `config.py` | Lee `debtector.toml` con `tomllib` (stdlib). Expone `DebtectorConfig` con umbrales y severidades configurables |
 | `embedder.py` | **[Congelado]** Convierte nodos a texto y genera vectores float32 con fastembed. No desarrollar más |
 | `utils.py` | Utilidades compartidas sin dependencias internas: `is_test_file()` |
 | `parser/*` | Transforman un archivo fuente en `(list[NodeInfo], list[EdgeInfo])` usando Tree-sitter. Sin acceso a la DB |
@@ -71,11 +71,11 @@ GraphStore.store_file()
 ```
 CLI / CI pipeline
     │
-    ├── Búsqueda léxica       → SQLite FTS5              (codeindex search)
+    ├── Búsqueda léxica       → SQLite FTS5              (debtector search)
     ├── Lookup directo        → SQLite SQL                (summary, callers, imports)
-    ├── Traversal de impacto  → NetworkX                  (codeindex impact)
-    ├── Métricas acoplamiento → metrics.py sobre el grafo (codeindex metrics)
-    └── Baseline / ratcheting → baseline.json + delta     (codeindex baseline)
+    ├── Traversal de impacto  → NetworkX                  (debtector impact)
+    ├── Métricas acoplamiento → metrics.py sobre el grafo (debtector metrics)
+    └── Baseline / ratcheting → baseline.json + delta     (debtector baseline)
 ```
 
 > La búsqueda semántica (`sqlite-vec` KNN) está congelada. Ver sección [Semántica congelada](#semántica-congelada).
@@ -84,7 +84,7 @@ CLI / CI pipeline
 
 ## Schema SQLite
 
-El índice vive en `.codeindex/index.db`. Tres tablas relacionales:
+El índice vive en `.debtector/index.db`. Tres tablas relacionales:
 
 ```sql
 CREATE TABLE nodes (
@@ -150,7 +150,7 @@ Ranking BM25 con camelCase splitting: `"UserService"` → tokens `user`, `servic
 
 ## Persistencia del baseline
 
-`.codeindex/baseline.json` — snapshot de métricas de acoplamiento generado con `codeindex baseline save`. Se commitea al repo; es la referencia compartida para el ratcheting en CI.
+`.debtector/baseline.json` — snapshot de métricas de acoplamiento generado con `debtector baseline save`. Se commitea al repo; es la referencia compartida para el ratcheting en CI.
 
 ```json
 {
@@ -163,7 +163,7 @@ Ranking BM25 con camelCase splitting: `"UserService"` → tokens `user`, `servic
 }
 ```
 
-El `.codeindex/.gitignore` es gestionado por codeIndex (siempre sobreescrito): ignora todo excepto `baseline.json` y el propio `.gitignore`.
+El `.debtector/.gitignore` es gestionado por codeIndex (siempre sobreescrito): ignora todo excepto `baseline.json` y el propio `.gitignore`.
 
 ---
 
@@ -224,7 +224,7 @@ Detección mediante el **algoritmo de Tarjan iterativo** (evita RecursionError e
 
 ### God modules
 
-Outlier estadístico en Ca: módulos cuyo fan-in supera el **percentil 90** del proyecto (umbral relativo, no absoluto). Configurable en `codeindex.toml`.
+Outlier estadístico en Ca: módulos cuyo fan-in supera el **percentil 90** del proyecto (umbral relativo, no absoluto). Configurable en `debtector.toml`.
 
 ### Herencia
 
@@ -232,7 +232,7 @@ Profundidad (camino más largo desde la raíz) y número de hijos directos, trav
 
 ---
 
-## Configuración (`codeindex.toml`)
+## Configuración (`debtector.toml`)
 
 Archivo opcional en la raíz del proyecto. Usa `tomllib` de la stdlib (Python 3.12+):
 
@@ -259,7 +259,7 @@ inheritance = "info"     # (default: info)
 
 ## Ratcheting CI
 
-`codeindex baseline status` compara el estado actual contra el baseline guardado:
+`debtector baseline status` compara el estado actual contra el baseline guardado:
 
 - **Nuevos ciclos** no presentes en baseline → según `severity.cycles`
 - **Nuevos god modules** → según `severity.god_modules`
@@ -316,8 +316,8 @@ El extractor de type hints mantiene un `set[str]` compartido por archivo (`uses_
 
 `embedder.py`, `sqlite-vec` y `fastembed` están congelados: el código existe pero no se desarrollará más. No forman parte del objetivo CI/PR.
 
-- Disponibles como dependencia opcional: `uv add 'codeindex[semantic]'`
-- El comando `codeindex semantic` devuelve un error con mensaje de deprecación
+- Disponibles como dependencia opcional: `uv add 'debtector[semantic]'`
+- El comando `debtector semantic` devuelve un error con mensaje de deprecación
 - Los tests de embeddings siguen existiendo pero no cubren el objetivo actual
 
 Ver [ADR-002](decisions/002-pivot-ci-coupling.md) para el razonamiento completo.
@@ -349,7 +349,7 @@ Cada parser implementa `LanguageParser` (abstracta en `parser/base.py`) y recibe
 
 `.git`, `__pycache__`, `node_modules`, `.next`, `dist`, `build`, `.venv`, `venv`, `.idea`, `.vscode`
 
-Soporte adicional para `.codeindexignore` (gitignore-style).
+Soporte adicional para `.debtectorignore` (gitignore-style).
 
 ---
 

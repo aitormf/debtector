@@ -1,4 +1,4 @@
-"""Tests for codeindex.parser.python_parser.PythonParser.
+"""Tests for debtector.parser.python_parser.PythonParser.
 
 Parses tests/fixtures/sample.py and verifies the extracted structure matches
 the expected counts documented in CONTEXT.md §19.
@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.models import EdgeKind, NodeKind
-from codeindex.parser.python_parser import PythonParser
+from debtector.models import EdgeKind, NodeKind
+from debtector.parser.python_parser import PythonParser
 
 
 @pytest.fixture()

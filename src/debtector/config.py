@@ -1,10 +1,10 @@
 """
-Configuración de CodeIndex desde ``codeindex.toml``.
+Configuración de Debtector desde ``debtector.toml``.
 
 El archivo de configuración es opcional. Si no existe, se aplican los valores
 por defecto. Los campos no especificados también usan sus valores por defecto.
 
-Ejemplo de ``codeindex.toml``:
+Ejemplo de ``debtector.toml``:
 
 .. code-block:: toml
 
@@ -89,8 +89,8 @@ class MetricsConfig:
 
 
 @dataclass
-class CodeIndexConfig:
-    """Configuración raíz de CodeIndex.
+class DebtectorConfig:
+    """Configuración raíz de Debtector.
 
     Args:
         metrics: Configuración del subsistema de métricas.
@@ -99,27 +99,27 @@ class CodeIndexConfig:
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
 
 
-def load_config(project_root: str | Path) -> CodeIndexConfig:
-    """Carga la configuración desde ``codeindex.toml`` en el directorio raíz.
+def load_config(project_root: str | Path) -> DebtectorConfig:
+    """Carga la configuración desde ``debtector.toml`` en el directorio raíz.
 
     Si el archivo no existe, devuelve la configuración por defecto.
     Los campos no especificados en el toml mantienen sus valores por defecto.
 
     Args:
         project_root: Directorio raíz del proyecto donde buscar
-            ``codeindex.toml``.
+            ``debtector.toml``.
 
     Returns:
-        :class:`CodeIndexConfig` con los valores del toml fusionados con
+        :class:`DebtectorConfig` con los valores del toml fusionados con
         los valores por defecto.
 
     Raises:
         ValueError: Si algún valor de severidad no es válido.
     """
-    path = Path(project_root) / "codeindex.toml"
+    path = Path(project_root) / "debtector.toml"
 
     if not path.exists():
-        return CodeIndexConfig()
+        return DebtectorConfig()
 
     with path.open("rb") as f:
         data = tomllib.load(f)
@@ -155,8 +155,8 @@ def load_config(project_root: str | Path) -> CodeIndexConfig:
     except ValueError as exc:
         valid = [s.value for s in Severity]
         raise ValueError(
-            f"Valor de severidad inválido en codeindex.toml. "
+            f"Valor de severidad inválido en debtector.toml. "
             f"Valores permitidos: {valid}. Detalle: {exc}"
         ) from exc
 
-    return CodeIndexConfig(metrics=MetricsConfig(thresholds=thresholds, severity=severity))
+    return DebtectorConfig(metrics=MetricsConfig(thresholds=thresholds, severity=severity))

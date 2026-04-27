@@ -1,4 +1,4 @@
-"""Tests for silent mode — without baseline, codeindex never fails CI."""
+"""Tests for silent mode — without baseline, debtector never fails CI."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.cli import _get_store, cmd_baseline, cmd_metrics
-from codeindex.logging import configure_logging
-from codeindex.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
+from debtector.cli import _get_store, cmd_baseline, cmd_metrics
+from debtector.logging import configure_logging
+from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
 
 @pytest.fixture(autouse=True)
@@ -60,7 +60,7 @@ class TestSilentMode:
     """Without baseline, no command exits with code 1."""
 
     def test_metrics_never_exits_one(self, tmp_path: Path) -> None:
-        """codeindex metrics always exits 0 — it only reports, never blocks."""
+        """debtector metrics always exits 0 — it only reports, never blocks."""
         # Even with cycles and high Ca, metrics command must not raise SystemExit
         _seed(
             str(tmp_path),
@@ -99,7 +99,7 @@ class TestSilentMode:
         cmd_baseline(_args_baseline(str(tmp_path), "status"))  # must not raise
 
     def test_metrics_json_never_exits_one(self, tmp_path: Path, capsys) -> None:
-        """codeindex metrics --json also never exits 1."""
+        """debtector metrics --json also never exits 1."""
         _seed(
             str(tmp_path),
             {

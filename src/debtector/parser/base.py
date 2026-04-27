@@ -42,7 +42,7 @@ class LanguageParser(ABC):
 
         Returns:
             A tuple ``(nodes, edges)`` ready to be stored via
-            :meth:`~codeindex.graph_store.GraphStore.store_file`.
+            :meth:`~debtector.graph_store.GraphStore.store_file`.
         """
         ...
 

@@ -2,7 +2,7 @@
 
 **Estado:** Aceptado
 **Fecha:** 2026-04-24
-**Contexto:** CodeIndex v0.2
+**Contexto:** Debtector v0.2
 
 ---
 
@@ -63,7 +63,7 @@ ratcheting, severidad configurable, CI reporter.
 Hotspots (churn × acoplamiento), temporal coupling, bus factor, integración Karajan.
 
 **Fase 3 — Graph diff para PRs** (feature premium)
-`codeindex diff <db_base> <db_pr>`, GitHub Action.
+`debtector diff <db_base> <db_pr>`, GitHub Action.
 
 **Fase 4 — Features avanzadas**
 Architectural layer violations, abstractness, tendencias históricas.
@@ -81,7 +81,7 @@ nunca se necesita búsqueda por concepto semántico.
 Decisión: **congelar, no eliminar**.
 
 - `fastembed` y `sqlite-vec` movidos a grupo opcional `[semantic]` en `pyproject.toml`
-- `codeindex semantic` devuelve error con mensaje de deprecación
+- `debtector semantic` devuelve error con mensaje de deprecación
 - El código se conserva; se eliminará cuando el roadmap de CI esté avanzado
 - Motivo de no eliminar de golpe: hay código funcional y 23 tests — el riesgo de
   romper algo en el refactor no compensa la ganancia inmediata
@@ -100,10 +100,10 @@ Solución obligatoria desde el día uno:
 
 ### Persistencia del baseline
 
-`.codeindex/baseline.json` commiteado al repo (no en `index.db`):
+`.debtector/baseline.json` commiteado al repo (no en `index.db`):
 - Compartido entre todos los miembros del equipo y el CI sin infraestructura adicional
 - Human-readable y diffable en git
-- El `.codeindex/.gitignore` se gestiona automáticamente: siempre sobreescrito por
+- El `.debtector/.gitignore` se gestiona automáticamente: siempre sobreescrito por
   codeIndex, trackea `baseline.json`, ignora `*.db` y `*.log`
 
 ### Qué no cambia

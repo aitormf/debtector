@@ -1,4 +1,4 @@
-# TODO — CodeIndex
+# TODO — Debtector
 
 Roadmap orientado a análisis de acoplamiento para CI/PR.
 ICP: dev/tech lead que usa agentes de código.
@@ -16,10 +16,10 @@ ICP: dev/tech lead que usa agentes de código.
 - [ ] **God module detection** — outliers estadísticos en Ca (percentil 90 del proyecto, no umbral absoluto)
 - [ ] **Profundidad de herencia y número de hijos** — traverse INHERITS edges
 - [ ] **Arista `USES_TYPE`** — `def f(x: User) -> Response` genera aristas hacia `User` y `Response`; enriquece Ca/Ce sin nueva fuente de datos
-- [ ] **Comando `codeindex metrics`** — output tabular con Ca, Ce, I, ciclos, god modules por módulo
-- [ ] **Baseline** — `codeindex baseline save` guarda snapshot de métricas en `.codeindex/baseline.json`; `codeindex baseline status` muestra delta respecto al baseline
+- [ ] **Comando `debtector metrics`** — output tabular con Ca, Ce, I, ciclos, god modules por módulo
+- [ ] **Baseline** — `debtector baseline save` guarda snapshot de métricas en `.debtector/baseline.json`; `debtector baseline status` muestra delta respecto al baseline
 - [ ] **Ratcheting** — CI solo falla si las métricas empeoran respecto al baseline; deuda existente no bloquea
-- [ ] **Severidad configurable** en `codeindex.toml` — `error` (bloquea CI) / `warning` (comenta PR) / `info` (solo reporta)
+- [ ] **Severidad configurable** en `debtector.toml` — `error` (bloquea CI) / `warning` (comenta PR) / `info` (solo reporta)
 - [ ] **Modo silencioso por defecto** — sin baseline configurado, primera ejecución solo reporta, no falla
 - [ ] **CI reporter** — salida compatible con GitHub Annotations (`::warning file=auth.py,line=14::...`) y GitLab CI
 
@@ -39,16 +39,16 @@ ICP: dev/tech lead que usa agentes de código.
 ## Fase 3 — Graph diff para PRs
 *El más diferencial técnicamente. Construir cuando Fase 1+2 tengan tracción.*
 
-- [ ] **`codeindex diff <db_base> <db_pr>`** — compara dos índices SQLite y reporta el delta
+- [ ] **`debtector diff <db_base> <db_pr>`** — compara dos índices SQLite y reporta el delta
 - [ ] **Delta de métricas por PR** — qué módulos empeoraron, qué mejoraron, nuevos ciclos, nuevos god modules
-- [ ] **GitHub Action `codeindex-action`** — indexa rama base + rama PR y publica comentario con el diff
+- [ ] **GitHub Action `debtector-action`** — indexa rama base + rama PR y publica comentario con el diff
 
 ---
 
 ## Fase 4 — Features avanzadas
 *Solo si las fases anteriores tienen tracción.*
 
-- [ ] **Architectural layer violations** — usuario define capas en `codeindex.toml`; analizador detecta imports que violan el sentido
+- [ ] **Architectural layer violations** — usuario define capas en `debtector.toml`; analizador detecta imports que violan el sentido
 - [ ] **Abstractness + distancia a la secuencia principal** — ratio clases abstractas, zona del dolor, zona inútil (precisión limitada en Python/JS)
 - [ ] **Tendencias históricas** — evolución del acoplamiento a lo largo del tiempo
 
@@ -71,11 +71,11 @@ ICP: dev/tech lead que usa agentes de código.
 
 - [x] Tests unitarios — parsers Python/JS/TS, GraphStore, indexer
 - [x] Fixture JS/TS equivalente a `tests/fixtures/sample.py`
-- [x] `.codeindexignore` — soporte para ignorar rutas adicionales
-- [x] Arista `COVERS` + `codeindex untested` — símbolos sin cobertura de tests
-- [x] FTS5 con BM25 y camelCase splitting — `codeindex search`
+- [x] `.debtectorignore` — soporte para ignorar rutas adicionales
+- [x] Arista `COVERS` + `debtector untested` — símbolos sin cobertura de tests
+- [x] FTS5 con BM25 y camelCase splitting — `debtector search`
 - [x] Aristas `CALLS` en parsers Python y JS/TS
-- [x] `codeindex install-hook` — pre-commit hook de git
-- [x] `codeindex install-skill` — skills para Claude Code
-- [x] `codeindex impact` — radio de impacto de cambios
+- [x] `debtector install-hook` — pre-commit hook de git
+- [x] `debtector install-skill` — skills para Claude Code
+- [x] `debtector impact` — radio de impacto de cambios
 - [x] Búsqueda semántica (`sqlite-vec` + `fastembed`) — congelada, movida a `[semantic]`

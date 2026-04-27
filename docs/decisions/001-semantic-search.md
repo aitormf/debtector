@@ -2,7 +2,7 @@
 
 **Estado:** Aceptado
 **Fecha:** 2026-04-07
-**Contexto:** CodeIndex v0.2
+**Contexto:** Debtector v0.2
 
 ---
 
@@ -35,7 +35,7 @@ integrado en SQLite. Indexa: `name`, `qualified_name`, `signature`, `docstring`.
 - Mismo fichero DB, misma transacción al insertar nodos
 - Mejora inmediata y reversible
 
-**Nuevo subcomando / flag:** `codeindex --json search "auth middleware"` usará FTS5
+**Nuevo subcomando / flag:** `debtector --json search "auth middleware"` usará FTS5
 automáticamente cuando el término no contiene wildcards.
 
 ---
@@ -85,7 +85,7 @@ Los embeddings se generan en `index time` (incrementales, solo ficheros cambiado
 y se almacenan en una tabla `node_embeddings(node_id, embedding)` con extensión
 `sqlite-vec`.
 
-**Nuevo subcomando:** `codeindex --json semantic "authentication middleware"`
+**Nuevo subcomando:** `debtector --json semantic "authentication middleware"`
 
 ---
 
@@ -94,7 +94,7 @@ y se almacenan en una tabla `node_embeddings(node_id, embedding)` con extensión
 - `pyproject.toml`: añadir `sqlite-vec` y `fastembed` como optional deps en `[mcp]`
   o nuevo grupo `[search]` — la instalación base sigue ligera.
 - Primera ejecución con semántica descarga el modelo (~24MB) y lo cachea.
-- El `.codeindex/.gitignore` ya ignora todo excepto `*.db` — los vectores van al
+- El `.debtector/.gitignore` ya ignora todo excepto `*.db` — los vectores van al
   mismo `index.db`, se commitean junto con el índice estructural si el equipo lo desea.
 - `get_stats()` deberá reportar si hay embeddings disponibles.
 
@@ -104,6 +104,6 @@ y se almacenan en una tabla `node_embeddings(node_id, embedding)` con extensión
 
 - [x] FTS5: tabla `nodes_fts`, actualización incremental, flag `--fts` o auto-detect
 - [x] sqlite-vec: schema de tabla `node_embeddings`, integración en `store_file`/`remove_file`
-- [x] fastembed: `src/codeindex/embedder.py` — `embed_text/embed_texts`, lazy import
-- [x] `codeindex semantic "<query>"` subcomando
+- [x] fastembed: `src/debtector/embedder.py` — `embed_text/embed_texts`, lazy import
+- [x] `debtector semantic "<query>"` subcomando
 - [x] Tests de integración con fixtures conocidos (23 tests, embedder fake determinista)

@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.cli import _get_store, cmd_baseline
-from codeindex.logging import configure_logging
-from codeindex.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
+from debtector.cli import _get_store, cmd_baseline
+from debtector.logging import configure_logging
+from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
 
 @pytest.fixture(autouse=True)
@@ -51,7 +51,7 @@ def _seed(project: str, files: dict[str, list[EdgeInfo]]) -> None:
 
 
 def _write_toml(project: str, content: str) -> None:
-    (Path(project) / "codeindex.toml").write_text(content, encoding="utf-8")
+    (Path(project) / "debtector.toml").write_text(content, encoding="utf-8")
 
 
 class TestSeverityError:

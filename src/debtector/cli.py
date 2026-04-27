@@ -1,16 +1,13 @@
 """
-CLI para CodeIndex.
+CLI para Debtector.
 
 Uso:
-    codeindex index ./mi-proyecto
-    codeindex --json search "UserService"
-    codeindex summary src/auth/service.py
-    codeindex impact src/auth/service.py
-    codeindex imports flask
-    codeindex status
-    codeindex install-skill --global
-    codeindex install-hook [--add-to-stage]
-    codeindex init
+    debtector index ./mi-proyecto
+    debtector --json search "UserService"
+    debtector summary src/auth/service.py
+    debtector impact src/auth/service.py
+    debtector imports flask
+    debtector status
 """
 
 from __future__ import annotations
@@ -18,8 +15,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
-import shutil
-import subprocess  # nosec B404
 import sys
 import time
 from pathlib import Path
@@ -36,37 +31,37 @@ from .models import node_to_dict
 # ──────────────────────────────────────────────
 
 
-def _codeindex_dir(project: str) -> Path:
-    """Return the ``.codeindex/`` directory for *project*, creating it if needed.
+def _debtector_dir(project: str) -> Path:
+    """Return the ``.debtector/`` directory for *project*, creating it if needed.
 
     Args:
         project: Path to the project root.
 
     Returns:
-        A :class:`~pathlib.Path` pointing to ``{project}/.codeindex/``.
+        A :class:`~pathlib.Path` pointing to ``{project}/.debtector/``.
     """
-    d = Path(project) / ".codeindex"
+    d = Path(project) / ".debtector"
     d.mkdir(parents=True, exist_ok=True)
     gitignore = d / ".gitignore"
     gitignore.write_text(
-        "# Managed by codeindex — do not edit manually\n*\n!.gitignore\n!baseline.json\n",
+        "# Managed by debtector — do not edit manually\n*\n!.gitignore\n!baseline.json\n",
         encoding="utf-8",
     )
     return d
 
 
 def _get_store(project: str) -> GraphStore:
-    """Open the :class:`~codeindex.graph_store.GraphStore` for *project*.
+    """Open the :class:`~debtector.graph_store.GraphStore` for *project*.
 
-    The SQLite database lives at ``{project}/.codeindex/index.db``.
+    The SQLite database lives at ``{project}/.debtector/index.db``.
 
     Args:
         project: Path to the project root directory.
 
     Returns:
-        An open :class:`~codeindex.graph_store.GraphStore` instance.
+        An open :class:`~debtector.graph_store.GraphStore` instance.
     """
-    db_path = _codeindex_dir(project) / "index.db"
+    db_path = _debtector_dir(project) / "index.db"
     return GraphStore(str(db_path))
 
 
@@ -90,7 +85,7 @@ def cmd_index(args) -> None:
     Args:
         args: Parsed argument namespace.  Expected attributes:
 
-            - ``project`` (str): Root directory where ``.codeindex/`` is stored.
+            - ``project`` (str): Root directory where ``.debtector/`` is stored.
             - ``path`` (str): Directory tree to scan and index.
             - ``json`` (bool): Emit JSON instead of human-readable text.
     """
@@ -292,10 +287,10 @@ def cmd_semantic(args) -> None:
     """[DEPRECADO] Búsqueda semántica por concepto.
 
     Este comando está congelado. La búsqueda semántica (embeddings + sqlite-vec)
-    no forma parte del objetivo actual de codeIndex (análisis de acoplamiento para CI/PR).
+    no forma parte del objetivo actual de debtector (análisis de acoplamiento para CI/PR).
     El código se conserva pero no se desarrollará más.
 
-    Instala ``codeindex[semantic]`` si necesitas usar esta funcionalidad.
+    Instala ``debtector[semantic]`` si necesitas usar esta funcionalidad.
 
     Args:
         args: Parsed argument namespace.  Expected attributes:
@@ -307,8 +302,8 @@ def cmd_semantic(args) -> None:
     """
     msg = (
         "El comando 'semantic' está deprecado y congelado.\n"
-        "La búsqueda semántica no forma parte del objetivo actual de codeIndex.\n"
-        "Si aún necesitas esta funcionalidad: uv add 'codeindex[semantic]'"
+        "La búsqueda semántica no forma parte del objetivo actual de debtector.\n"
+        "Si aún necesitas esta funcionalidad: uv add 'debtector[semantic]'"
     )
     if args.json:
         _json_out({"error": msg})
@@ -369,329 +364,12 @@ def cmd_untested(args) -> None:
             print(f"             {n.file_path}:{n.line_start}")
 
 
-def cmd_install_skill(args) -> None:
-    """Copy CodeIndex skill files to the Claude Code skills directory.
-
-    Installs ``codeindex.md`` and ``codeindex-bootstrap.md`` to either the
-    global (``~/.claude/skills/``) or project-level (``.claude/skills/``)
-    skills directory.
-
-    Args:
-        args: Parsed argument namespace.  Expected attributes:
-
-            - ``project`` (str): Path to the project root (used for project-level install).
-            - ``global_install`` (bool): Install to ``~/.claude/skills/`` when ``True``.
-            - ``json`` (bool): Emit JSON instead of human-readable text.
-    """
-    skills_src = Path(__file__).parent / "skills"
-    if not skills_src.exists():
-        msg = "skills directory not found in package"
-        if args.json:
-            _json_out({"error": msg})
-        else:
-            print(f"Error: {msg}", file=sys.stderr)
-        sys.exit(1)
-
-    if args.global_install:
-        dest = Path.home() / ".claude" / "skills"
-    else:
-        dest = Path(args.project) / ".claude" / "skills"
-
-    dest.mkdir(parents=True, exist_ok=True)
-
-    installed = []
-    for skill_file in sorted(skills_src.glob("*.md")):
-        target = dest / skill_file.name
-        shutil.copy2(skill_file, target)
-        installed.append(str(target))
-
-    if args.json:
-        _json_out({"installed": installed, "dest": str(dest)})
-    else:
-        for path in installed:
-            print(f"  Instalado: {path}")
-        print(f"\nSkills instalados en: {dest}")
-
-
-# ──────────────────────────────────────────────
-# Git hook
-# ──────────────────────────────────────────────
-
-# Marker used to detect whether the hook is already installed
-_HOOK_MARKER = "# codeindex-hook"
-
-# Shell snippet appended to (or used as) the pre-commit hook
-_HOOK_SNIPPET_BASE = """\
-{marker}
-# Re-index changed files before every commit (incremental, fast).
-# Logs go to .codeindex/codeindex.log — never blocks the commit.
-codeindex index . >/dev/null 2>&1 || true
-"""
-
-_HOOK_SNIPPET_STAGE = """\
-{marker}
-# Re-index changed files and stage the updated index before every commit.
-codeindex index . >/dev/null 2>&1 || true
-git add .codeindex/index.db 2>/dev/null || true
-"""
-
-_HOOK_SHEBANG = "#!/bin/sh\n"
-
-
-def _find_git_hooks(start: str) -> Path | None:
-    """Walk up from *start* to find the ``.git/hooks/`` directory.
-
-    Args:
-        start: Starting directory path (typically the project root).
-
-    Returns:
-        The :class:`~pathlib.Path` to the ``.git/hooks/`` directory, or
-        ``None`` if no ``.git/`` directory is found in any ancestor.
-    """
-    current = Path(start).resolve()
-    while True:
-        hooks = current / ".git" / "hooks"
-        if hooks.is_dir():
-            return hooks
-        parent = current.parent
-        if parent == current:
-            return None
-        current = parent
-
-
-def cmd_install_hook(args) -> None:
-    """Install a git pre-commit hook that re-indexes files before every commit.
-
-    If a pre-commit hook already exists and does not contain the codeindex
-    marker, the snippet is appended rather than overwriting.  Calling this
-    command twice is idempotent.
-
-    Args:
-        args: Parsed argument namespace.  Expected attributes:
-
-            - ``project`` (str): Project root used to locate ``.git/``.
-            - ``add_to_stage`` (bool): When ``True``, the hook also runs
-              ``git add .codeindex/index.db`` so the updated index is included
-              in the commit.
-            - ``json`` (bool): Emit JSON instead of human-readable text.
-    """
-    hooks_dir = _find_git_hooks(args.project)
-    if hooks_dir is None:
-        msg = f"no .git/ directory found from '{args.project}'"
-        if args.json:
-            _json_out({"error": msg})
-        else:
-            print(f"Error: {msg}", file=sys.stderr)
-        sys.exit(1)
-
-    hook_path = hooks_dir / "pre-commit"
-    template = _HOOK_SNIPPET_STAGE if args.add_to_stage else _HOOK_SNIPPET_BASE
-    snippet = template.format(marker=_HOOK_MARKER)
-
-    # Idempotency: skip if already installed
-    if hook_path.exists() and _HOOK_MARKER in hook_path.read_text(encoding="utf-8"):
-        msg = f"hook already installed at {hook_path}"
-        if args.json:
-            _json_out({"status": "already_installed", "path": str(hook_path)})
-        else:
-            print(f"  Ya instalado: {hook_path}")
-        return
-
-    if hook_path.exists():
-        # Append to existing hook
-        existing = hook_path.read_text(encoding="utf-8")
-        if not existing.endswith("\n"):
-            existing += "\n"
-        hook_path.write_text(existing + "\n" + snippet, encoding="utf-8")
-        action = "appended"
-    else:
-        # Create new hook with shebang
-        hook_path.write_text(_HOOK_SHEBANG + "\n" + snippet, encoding="utf-8")
-        action = "created"
-
-    # Make executable
-    hook_path.chmod(hook_path.stat().st_mode | 0o111)
-
-    if args.json:
-        _json_out({"status": action, "path": str(hook_path)})
-    else:
-        print(f"  Hook {action}: {hook_path}")
-        print("\nEl índice se actualizará automáticamente antes de cada commit.")
-        if args.add_to_stage:
-            print("El fichero .codeindex/index.db se añadirá al stage automáticamente.")
-
-
-# ──────────────────────────────────────────────
-# codeindex init — git filter + hook setup
-# ──────────────────────────────────────────────
-
-# Marker and hook snippet for post-checkout / post-merge / post-rewrite
-_INIT_MARKER = "# codeindex-init-hook"
-
-_INIT_HOOK_SNIPPET = """\
-{marker}
-# Re-index the project after checkout/merge/rebase to keep the index current.
-# Logs go to .codeindex/codeindex.log — never blocks git.
-codeindex index . >/dev/null 2>&1 || true
-"""
-
-# .gitattributes line that activates the codeindex filter/diff drivers
-_GITATTRIBUTES_MARKER = "filter=codeindex"
-_GITATTRIBUTES_LINE = ".codeindex/index.db filter=codeindex diff=codeindex merge=ours\n"
-
-# Git config keys/values for filter and diff drivers
-_GIT_CONFIG = [
-    ("filter.codeindex.clean", "codeindex-clean"),
-    ("filter.codeindex.smudge", "codeindex-smudge"),
-    ("filter.codeindex.required", "false"),
-    ("diff.codeindex.textconv", "codeindex-clean"),
-]
-
-
-def _find_git_root(start: str) -> Path | None:
-    """Walk up from *start* to find the git repository root.
-
-    Args:
-        start: Starting directory path (typically the project root).
-
-    Returns:
-        The :class:`~pathlib.Path` of the directory containing ``.git/``, or
-        ``None`` if no git repository is found in any ancestor.
-    """
-    current = Path(start).resolve()
-    while True:
-        if (current / ".git").is_dir():
-            return current
-        parent = current.parent
-        if parent == current:
-            return None
-        current = parent
-
-
-def _patch_gitattributes(path: Path) -> bool:
-    """Add the codeindex filter line to *path* if not already present.
-
-    Args:
-        path: Path to the ``.gitattributes`` file (may not exist yet).
-
-    Returns:
-        ``True`` if the file was modified, ``False`` if it was already
-        configured.
-    """
-    if path.exists():
-        content = path.read_text(encoding="utf-8")
-        if _GITATTRIBUTES_MARKER in content:
-            return False
-        if not content.endswith("\n"):
-            content += "\n"
-        path.write_text(content + _GITATTRIBUTES_LINE, encoding="utf-8")
-    else:
-        path.write_text(_GITATTRIBUTES_LINE, encoding="utf-8")
-    return True
-
-
-def _install_init_hook(hooks_dir: Path, hook_name: str) -> str:
-    """Install or append the codeindex re-index snippet to *hook_name*.
-
-    Calling this function a second time is idempotent (marker check).
-
-    Args:
-        hooks_dir: Path to the ``.git/hooks/`` directory.
-        hook_name: Hook filename (e.g. ``"post-checkout"``).
-
-    Returns:
-        A short action string: ``"created"``, ``"appended"``, or
-        ``"already_installed"``.
-    """
-    hook_path = hooks_dir / hook_name
-    snippet = _INIT_HOOK_SNIPPET.format(marker=_INIT_MARKER)
-
-    if hook_path.exists() and _INIT_MARKER in hook_path.read_text(encoding="utf-8"):
-        return "already_installed"
-
-    if hook_path.exists():
-        existing = hook_path.read_text(encoding="utf-8")
-        if not existing.endswith("\n"):
-            existing += "\n"
-        hook_path.write_text(existing + "\n" + snippet, encoding="utf-8")
-        action = "appended"
-    else:
-        hook_path.write_text(_HOOK_SHEBANG + "\n" + snippet, encoding="utf-8")
-        action = "created"
-
-    hook_path.chmod(hook_path.stat().st_mode | 0o111)
-    return action
-
-
-def cmd_init(args) -> None:
-    """Configure the git repository to share the codeindex database.
-
-    Performs three idempotent steps:
-
-    1. Writes ``filter.codeindex`` and ``diff.codeindex`` drivers to the
-       local git config (never the global one).
-    2. Adds the ``.codeindex/index.db`` filter line to ``.gitattributes``.
-    3. Installs ``post-checkout``, ``post-merge``, and ``post-rewrite`` hooks
-       that re-index the project after any git operation that changes files.
-
-    Once set up, the binary SQLite database is stored in git as a portable
-    SQL text dump.  On checkout the dump is converted back to SQLite
-    automatically.  After every merge or checkout git re-runs the indexer so
-    the local index always reflects the current working tree.
-
-    Args:
-        args: Parsed argument namespace.  Expected attributes:
-
-            - ``project`` (str): Project root used to locate ``.git/``.
-            - ``json`` (bool): Emit JSON instead of human-readable text.
-    """
-    git_root = _find_git_root(args.project)
-    if git_root is None:
-        msg = f"no .git/ directory found from '{args.project}'"
-        if args.json:
-            _json_out({"error": msg})
-        else:
-            print(f"Error: {msg}", file=sys.stderr)
-        sys.exit(1)
-
-    steps: list[str] = []
-
-    # 1. Configure git filter / diff drivers (local config only)
-    # nosec B603 B607 — fixed args, no user input in the command list
-    for key, value in _GIT_CONFIG:
-        subprocess.run(  # nosec B603 B607
-            ["git", "config", key, value],
-            cwd=git_root,
-            check=True,
-            capture_output=True,
-        )
-    steps.append("Configurados filtros git (filter.codeindex, diff.codeindex)")
-
-    # 2. Patch .gitattributes
-    ga_path = git_root / ".gitattributes"
-    changed = _patch_gitattributes(ga_path)
-    steps.append(f"Parcheado {ga_path}" if changed else f"Ya configurado: {ga_path}")
-
-    # 3. Install post-checkout / post-merge / post-rewrite hooks
-    hooks_dir = git_root / ".git" / "hooks"
-    for hook_name in ("post-checkout", "post-merge", "post-rewrite"):
-        action = _install_init_hook(hooks_dir, hook_name)
-        steps.append(f"Hook {hook_name}: {action}")
-
-    if args.json:
-        _json_out({"status": "ok", "steps": steps})
-    else:
-        for step in steps:
-            print(f"  ✓ {step}")
-        print("\ncodeindex init completado. El índice se compartirá automáticamente vía git.")
-
-
 # ──────────────────────────────────────────────
 # ──────────────────────────────────────────────
 # Baseline
 # ──────────────────────────────────────────────
 
-_BASELINE_FILE = ".codeindex/baseline.json"
+_BASELINE_FILE = ".debtector/baseline.json"
 # Tolerancia de inestabilidad: diferencia mínima para considerar una regresión.
 # Un delta < 5% se trata como ruido de redondeo, no como degradación real.
 _INSTABILITY_TOLERANCE = 0.05
@@ -716,7 +394,7 @@ def cmd_baseline(args) -> None:
 
     Sub-commands:
 
-    * ``save``   — snapshot current metrics to ``.codeindex/baseline.json``.
+    * ``save``   — snapshot current metrics to ``.debtector/baseline.json``.
     * ``status`` — compare current metrics to the baseline and report regressions.
 
     Args:
@@ -731,12 +409,12 @@ def cmd_baseline(args) -> None:
     elif args.baseline_cmd == "status":
         _baseline_status(args)
     else:
-        print("Uso: codeindex baseline <save|status>", file=sys.stderr)
+        print("Uso: debtector baseline <save|status>", file=sys.stderr)
         sys.exit(1)
 
 
 def _baseline_save(args) -> None:
-    """Snapshot current metrics to ``.codeindex/baseline.json``."""
+    """Snapshot current metrics to ``.debtector/baseline.json``."""
     cfg = load_config(args.project)
     store = _get_store(args.project)
     modules = compute_metrics(store)
@@ -773,7 +451,7 @@ def _baseline_status(args) -> None:
     """Compare current metrics to the stored baseline and report regressions.
 
     Each issue type (cycles, god_modules, instability) is filtered through the
-    severity configured in ``codeindex.toml``:
+    severity configured in ``debtector.toml``:
 
     - ``error``   — contributes to exit code 1 (blocks CI).
     - ``warning`` — printed but does not block CI (exit 0).
@@ -783,9 +461,9 @@ def _baseline_status(args) -> None:
 
     if not path.exists():
         if args.json:
-            _json_out({"error": "no baseline — ejecuta: codeindex baseline save"})
+            _json_out({"error": "no baseline — ejecuta: debtector baseline save"})
         else:
-            print("Sin baseline. Ejecuta primero: codeindex baseline save")
+            print("Sin baseline. Ejecuta primero: debtector baseline save")
         return
 
     baseline = json.loads(path.read_text(encoding="utf-8"))
@@ -887,7 +565,7 @@ def _safe_annotation_path(path: str) -> str:
     """Sanitize a file path for use in a GitHub Actions annotation.
 
     GitHub's ``::level file=<path>,...::`` format uses ``::`` as a delimiter.
-    If a path contains ``::`` (e.g. a CodeIndex qualified_name), the annotation
+    If a path contains ``::`` (e.g. a Debtector qualified_name), the annotation
     would be malformed.  Replace any occurrence with ``/`` to keep it readable.
 
     Args:
@@ -913,7 +591,7 @@ def _emit_github_annotations(
         new_cycles: List of cycle node lists.
         new_gods: List of god module file paths.
         regressions: List of instability regression dicts.
-        sev: :class:`~codeindex.config.MetricsSeverity` instance.
+        sev: :class:`~debtector.config.MetricsSeverity` instance.
     """
     if _warns(new_cycles, sev.cycles):
         level = _annotation_level(sev.cycles)
@@ -953,7 +631,7 @@ def _emit_gitlab_report(
         new_cycles: List of cycle node lists.
         new_gods: List of god module file paths.
         regressions: List of instability regression dicts.
-        sev: :class:`~codeindex.config.MetricsSeverity` instance.
+        sev: :class:`~debtector.config.MetricsSeverity` instance.
     """
     ts = int(time.time())
 
@@ -995,7 +673,7 @@ def _emit_gitlab_report(
 def cmd_metrics(args) -> None:
     """Print coupling metrics (Ca, Ce, I, cycles, god modules) for every module.
 
-    Reads ``codeindex.toml`` from the project root to apply configured
+    Reads ``debtector.toml`` from the project root to apply configured
     thresholds.  With ``--json`` emits a single JSON object with keys
     ``modules``, ``cycles``, and ``god_modules``.
 
@@ -1037,7 +715,7 @@ def cmd_metrics(args) -> None:
         return
 
     if not modules:
-        print("Sin datos — ejecuta primero: codeindex index <directorio>")
+        print("Sin datos — ejecuta primero: debtector index <directorio>")
         return
 
     # Ordenar
@@ -1089,7 +767,7 @@ def cmd_metrics(args) -> None:
 
 
 def main() -> None:
-    """Entry point for the ``codeindex`` CLI.
+    """Entry point for the ``debtector`` CLI.
 
     Parses arguments first, then configures structured logging so that the
     correct project path (and therefore log file location) is known.
@@ -1097,8 +775,8 @@ def main() -> None:
     Prints help and exits with status 0 if no sub-command is provided.
     """
     parser = argparse.ArgumentParser(
-        prog="codeindex",
-        description="CodeIndex - Grafo de código para reducir tokens de IA",
+        prog="debtector",
+        description="Debtector - Guardarraíl de acoplamiento para CI/PR",
     )
     parser.add_argument("--project", "-p", default=".", help="Ruta al proyecto")
     parser.add_argument(
@@ -1193,35 +871,6 @@ def main() -> None:
         help="Ruta o prefijo de directorio para filtrar (opcional)",
     )
 
-    # install-skill
-    p_skill = sub.add_parser("install-skill", help="Instalar skills en Claude Code")
-    p_skill.add_argument(
-        "--global",
-        dest="global_install",
-        action="store_true",
-        default=False,
-        help="Instalar en ~/.claude/skills/ (global) en lugar de .claude/skills/ (proyecto)",
-    )
-
-    # install-hook
-    p_hook = sub.add_parser("install-hook", help="Instalar hook git pre-commit para auto-indexado")
-    p_hook.add_argument(
-        "--add-to-stage",
-        dest="add_to_stage",
-        action="store_true",
-        default=False,
-        help="El hook también hace 'git add .codeindex/index.db' para commitear el índice",
-    )
-
-    # init
-    sub.add_parser(
-        "init",
-        help=(
-            "Configurar el repo git para compartir el índice entre desarrolladores: "
-            "instala filtros git clean/smudge y hooks post-checkout/merge/rewrite"
-        ),
-    )
-
     args = parser.parse_args()
 
     # Configure logging after parsing so the project path is known
@@ -1243,9 +892,6 @@ def main() -> None:
         "baseline": cmd_baseline,
         "callers": cmd_callers,
         "untested": cmd_untested,
-        "install-skill": cmd_install_skill,
-        "install-hook": cmd_install_hook,
-        "init": cmd_init,
     }
     cmds[args.command](args)
 

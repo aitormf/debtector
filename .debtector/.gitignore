@@ -1,0 +1,4 @@
+# Managed by debtector — do not edit manually
+*
+!.gitignore
+!baseline.json

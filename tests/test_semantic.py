@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.graph_store import GraphStore
-from codeindex.models import NodeInfo, NodeKind
+from debtector.graph_store import GraphStore
+from debtector.models import NodeInfo, NodeKind
 
 # Saltar todo el módulo si sqlite-vec no está instalado
 sqlite_vec = pytest.importorskip(
@@ -57,7 +57,7 @@ def _fake_embed(texts: list[str]) -> list[list[float]]:
 @pytest.fixture()
 def store(tmp_path: Path) -> GraphStore:
     """GraphStore respaldado por archivo temporal."""
-    db = tmp_path / ".codeindex" / "index.db"
+    db = tmp_path / ".debtector" / "index.db"
     db.parent.mkdir()
     s = GraphStore(db)
     yield s
@@ -227,7 +227,7 @@ class TestSemanticSearch:
             assert len(item) == 2
 
     def test_results_contain_graph_nodes(self, populated_store: GraphStore) -> None:
-        from codeindex.models import GraphNode
+        from debtector.models import GraphNode
 
         results = populated_store.semantic_search("auth", embed_fn=_fake_embed)
         assert all(isinstance(n, GraphNode) for n, _ in results)

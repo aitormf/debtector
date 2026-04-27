@@ -1,4 +1,4 @@
-"""Tests for the CLI --json output mode and .codeindex/ directory layout."""
+"""Tests for the CLI --json output mode and .debtector/ directory layout."""
 
 from __future__ import annotations
 
@@ -7,15 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.cli import (
-    _HOOK_MARKER,
-    _codeindex_dir,
-    _find_git_hooks,
+from debtector.cli import (
+    _debtector_dir,
     _get_store,
     cmd_imports,
     cmd_index,
-    cmd_install_hook,
-    cmd_install_skill,
     cmd_search,
     cmd_status,
     cmd_untested,
@@ -37,7 +33,7 @@ def _args(**kwargs):
 
 def _seed_store(project: str, tmp_src: Path) -> None:
     """Index *tmp_src* into the store at *project*."""
-    from codeindex.indexer import Indexer
+    from debtector.indexer import Indexer
 
     store = _get_store(project)
     Indexer(store).index(str(tmp_src))
@@ -58,37 +54,37 @@ def project(tmp_path: Path) -> tuple[str, Path]:
 
 
 # ──────────────────────────────────────────────
-# .codeindex/ directory layout
+# .debtector/ directory layout
 # ──────────────────────────────────────────────
 
 
 class TestCodeindexDir:
-    """The .codeindex/ directory is created automatically."""
+    """The .debtector/ directory is created automatically."""
 
     def test_creates_directory(self, tmp_path: Path) -> None:
-        """`_codeindex_dir` creates the directory if absent."""
-        d = _codeindex_dir(str(tmp_path))
+        """`_debtector_dir` creates the directory if absent."""
+        d = _debtector_dir(str(tmp_path))
         assert d.exists()
         assert d.is_dir()
-        assert d.name == ".codeindex"
+        assert d.name == ".debtector"
 
-    def test_db_inside_codeindex_dir(self, tmp_path: Path) -> None:
-        """`_get_store` places index.db inside .codeindex/."""
+    def test_db_inside_debtector_dir(self, tmp_path: Path) -> None:
+        """`_get_store` places index.db inside .debtector/."""
         store = _get_store(str(tmp_path))
         store.close()
-        assert (tmp_path / ".codeindex" / "index.db").exists()
+        assert (tmp_path / ".debtector" / "index.db").exists()
 
     def test_log_file_created(self, tmp_path: Path) -> None:
-        """configure_logging creates codeindex.log inside .codeindex/."""
-        from codeindex.logging import configure_logging
+        """configure_logging creates debtector.log inside .debtector/."""
+        from debtector.logging import configure_logging
 
         configure_logging(project=str(tmp_path))
-        assert (tmp_path / ".codeindex" / "codeindex.log").exists()
+        assert (tmp_path / ".debtector" / "debtector.log").exists()
 
     def test_gitignore_created(self, tmp_path: Path) -> None:
-        """`_codeindex_dir` writes a .gitignore that ignores everything except baseline.json."""
-        _codeindex_dir(str(tmp_path))
-        gi = tmp_path / ".codeindex" / ".gitignore"
+        """`_debtector_dir` writes a .gitignore that ignores everything except baseline.json."""
+        _debtector_dir(str(tmp_path))
+        gi = tmp_path / ".debtector" / ".gitignore"
         assert gi.exists()
         content = gi.read_text(encoding="utf-8")
         assert "*\n" in content
@@ -96,11 +92,11 @@ class TestCodeindexDir:
         assert "!.gitignore\n" in content
 
     def test_gitignore_always_overwritten(self, tmp_path: Path) -> None:
-        """Calling `_codeindex_dir` always rewrites the .gitignore (managed file)."""
-        _codeindex_dir(str(tmp_path))
-        gi = tmp_path / ".codeindex" / ".gitignore"
+        """Calling `_debtector_dir` always rewrites the .gitignore (managed file)."""
+        _debtector_dir(str(tmp_path))
+        gi = tmp_path / ".debtector" / ".gitignore"
         gi.write_text("custom\n", encoding="utf-8")
-        _codeindex_dir(str(tmp_path))
+        _debtector_dir(str(tmp_path))
         content = gi.read_text(encoding="utf-8")
         assert "!baseline.json\n" in content
 
@@ -227,175 +223,22 @@ class TestJsonImports:
         assert any("service.py" in r["file_path"] for r in out)
 
 
-# ──────────────────────────────────────────────
-# install-skill
-# ──────────────────────────────────────────────
-
-
-class TestInstallSkill:
-    """cmd_install_skill copies skill files to the target directory."""
-
-    def test_installs_to_project(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        dest = tmp_path / ".claude" / "skills"
-        cmd_install_skill(_args(project=str(tmp_path), json=False, global_install=False))
-        assert dest.exists()
-        md_files = list(dest.glob("*.md"))
-        assert len(md_files) >= 2
-
-    def test_installs_codeindex_skill(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        cmd_install_skill(_args(project=str(tmp_path), json=False, global_install=False))
-        dest = tmp_path / ".claude" / "skills"
-        assert (dest / "codeindex.md").exists()
-
-    def test_installs_bootstrap_skill(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        cmd_install_skill(_args(project=str(tmp_path), json=False, global_install=False))
-        dest = tmp_path / ".claude" / "skills"
-        assert (dest / "codeindex-bootstrap.md").exists()
-
-    def test_json_output(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        cmd_install_skill(_args(project=str(tmp_path), json=True, global_install=False))
-        out = json.loads(capsys.readouterr().out)
-        assert "installed" in out
-        assert "dest" in out
-        assert len(out["installed"]) >= 2
-
-
-# ──────────────────────────────────────────────
-# install-hook
-# ──────────────────────────────────────────────
-
-
-def _fake_git_repo(base: Path) -> Path:
-    """Create a minimal .git/hooks/ structure and return the hooks dir."""
-    hooks = base / ".git" / "hooks"
-    hooks.mkdir(parents=True)
-    return hooks
-
-
-class TestFindGitHooks:
-    """_find_git_hooks walks up to find .git/hooks/."""
-
-    def test_finds_in_current_dir(self, tmp_path: Path) -> None:
-        _fake_git_repo(tmp_path)
-        result = _find_git_hooks(str(tmp_path))
-        assert result is not None
-        assert result.name == "hooks"
-
-    def test_finds_in_parent(self, tmp_path: Path) -> None:
-        _fake_git_repo(tmp_path)
-        subdir = tmp_path / "src" / "deep"
-        subdir.mkdir(parents=True)
-        result = _find_git_hooks(str(subdir))
-        assert result is not None
-
-    def test_returns_none_when_no_git(self, tmp_path: Path) -> None:
-        result = _find_git_hooks(str(tmp_path))
-        assert result is None
-
-
-class TestInstallHook:
-    """cmd_install_hook installs a pre-commit hook."""
-
-    def test_creates_hook_file(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        _fake_git_repo(tmp_path)
-        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
-        hook = tmp_path / ".git" / "hooks" / "pre-commit"
-        assert hook.exists()
-
-    def test_hook_contains_marker(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        _fake_git_repo(tmp_path)
-        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
-        hook = tmp_path / ".git" / "hooks" / "pre-commit"
-        assert _HOOK_MARKER in hook.read_text(encoding="utf-8")
-
-    def test_hook_is_executable(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        _fake_git_repo(tmp_path)
-        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
-        hook = tmp_path / ".git" / "hooks" / "pre-commit"
-        assert hook.stat().st_mode & 0o111
-
-    def test_hook_has_shebang(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        _fake_git_repo(tmp_path)
-        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
-        hook = tmp_path / ".git" / "hooks" / "pre-commit"
-        assert hook.read_text(encoding="utf-8").startswith("#!/bin/sh")
-
-    def test_idempotent(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        _fake_git_repo(tmp_path)
-        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
-        content_first = (tmp_path / ".git" / "hooks" / "pre-commit").read_text()
-        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
-        content_second = (tmp_path / ".git" / "hooks" / "pre-commit").read_text()
-        assert content_first == content_second
-        # Marker appears exactly once
-        assert content_first.count(_HOOK_MARKER) == 1
-
-    def test_appends_to_existing_hook(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        hooks = _fake_git_repo(tmp_path)
-        existing = hooks / "pre-commit"
-        existing.write_text("#!/bin/sh\necho 'existing hook'\n", encoding="utf-8")
-        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
-        content = existing.read_text(encoding="utf-8")
-        assert "existing hook" in content
-        assert _HOOK_MARKER in content
-
-    def test_add_to_stage_includes_git_add(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture
-    ) -> None:
-        _fake_git_repo(tmp_path)
-        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=True))
-        hook = tmp_path / ".git" / "hooks" / "pre-commit"
-        assert "git add .codeindex/index.db" in hook.read_text(encoding="utf-8")
-
-    def test_json_output_created(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        _fake_git_repo(tmp_path)
-        cmd_install_hook(_args(project=str(tmp_path), json=True, add_to_stage=False))
-        out = json.loads(capsys.readouterr().out)
-        assert out["status"] == "created"
-        assert "path" in out
-
-    def test_json_output_already_installed(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture
-    ) -> None:
-        _fake_git_repo(tmp_path)
-        cmd_install_hook(_args(project=str(tmp_path), json=True, add_to_stage=False))
-        capsys.readouterr()
-        cmd_install_hook(_args(project=str(tmp_path), json=True, add_to_stage=False))
-        out = json.loads(capsys.readouterr().out)
-        assert out["status"] == "already_installed"
-
-    def test_error_when_no_git(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        with pytest.raises(SystemExit) as exc:
-            cmd_install_hook(_args(project=str(tmp_path), json=True, add_to_stage=False))
-        assert exc.value.code == 1
-        out = json.loads(capsys.readouterr().out)
-        assert "error" in out
-
-
-# ──────────────────────────────────────────────
-# --json output: cmd_untested
-# ──────────────────────────────────────────────
-
-
 def _seed_untested_store(project: str, tmp_path: Path) -> None:
-    """Index a minimal src + test tree with one covered and one uncovered function."""
-    from codeindex.indexer import Indexer
-
+    """Index a minimal project with one covered (add) and one uncovered (subtract) function."""
     src = tmp_path / "src"
-    src.mkdir(parents=True, exist_ok=True)
+    src.mkdir(exist_ok=True)
     (src / "math_utils.py").write_text(
-        "def add(a, b):\n    return a + b\n\ndef subtract(a, b):\n    return a - b\n",
-        encoding="utf-8",
+        "def add(a, b):\n    return a + b\n\ndef subtract(a, b):\n    return a - b\n"
     )
     tests_dir = tmp_path / "tests"
-    tests_dir.mkdir(parents=True, exist_ok=True)
+    tests_dir.mkdir(exist_ok=True)
     (tests_dir / "test_math.py").write_text(
-        "from src.math_utils import add\n\ndef test_add():\n    assert add(1, 2) == 3\n",
-        encoding="utf-8",
+        "from src.math_utils import add\n\ndef test_add():\n    add(1, 2)\n"
     )
+    from debtector.indexer import Indexer
+
     store = _get_store(project)
     Indexer(store).index(str(tmp_path))
-    store.update_covers_edges()
     store.close()
 
 

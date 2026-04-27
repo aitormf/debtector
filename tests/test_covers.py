@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.graph_store import GraphStore
-from codeindex.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
-from codeindex.parser.python_parser import PythonParser
-from codeindex.utils import is_test_file
+from debtector.graph_store import GraphStore
+from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
+from debtector.parser.python_parser import PythonParser
+from debtector.utils import is_test_file
 
 FIXTURES = Path(__file__).parent / "fixtures"
 COVERS_PROD = str(FIXTURES / "covers_prod.py")

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from codeindex.graph_store import GraphStore
-from codeindex.metrics import find_cycles
-from codeindex.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
+from debtector.graph_store import GraphStore
+from debtector.metrics import find_cycles
+from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
 # ──────────────────────────────────────────────
 # Helpers

@@ -1,4 +1,4 @@
-"""Tests for `codeindex baseline save` and `codeindex baseline status`."""
+"""Tests for `debtector baseline save` and `debtector baseline status`."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.cli import _get_store, cmd_baseline
-from codeindex.logging import configure_logging
-from codeindex.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
+from debtector.cli import _get_store, cmd_baseline
+from debtector.logging import configure_logging
+from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
 # ──────────────────────────────────────────────
 # Helpers
@@ -61,17 +61,17 @@ def _seed(project: str, files: dict[str, list[EdgeInfo]]) -> None:
 
 
 class TestBaselineSave:
-    """codeindex baseline save writes .codeindex/baseline.json."""
+    """debtector baseline save writes .debtector/baseline.json."""
 
     def test_creates_baseline_file(self, tmp_path: Path) -> None:
         _seed(str(tmp_path), {"src/a.py": [], "src/b.py": []})
         cmd_baseline(_args(str(tmp_path), "save"))
-        assert (tmp_path / ".codeindex" / "baseline.json").exists()
+        assert (tmp_path / ".debtector" / "baseline.json").exists()
 
     def test_baseline_contains_required_keys(self, tmp_path: Path) -> None:
         _seed(str(tmp_path), {"src/a.py": [_import("src/a.py", "src/b.py")]})
         cmd_baseline(_args(str(tmp_path), "save"))
-        data = json.loads((tmp_path / ".codeindex" / "baseline.json").read_text())
+        data = json.loads((tmp_path / ".debtector" / "baseline.json").read_text())
         assert "modules" in data
         assert "cycles" in data
         assert "god_modules" in data
@@ -86,7 +86,7 @@ class TestBaselineSave:
             },
         )
         cmd_baseline(_args(str(tmp_path), "save"))
-        data = json.loads((tmp_path / ".codeindex" / "baseline.json").read_text())
+        data = json.loads((tmp_path / ".debtector" / "baseline.json").read_text())
         mod = next(m for m in data["modules"] if m["file_path"] == "src/a.py")
         assert mod["fan_out"] > 0
         assert "instability" in mod
@@ -108,12 +108,12 @@ class TestBaselineSave:
         """Running save twice updates the baseline."""
         _seed(str(tmp_path), {"src/a.py": []})
         cmd_baseline(_args(str(tmp_path), "save"))
-        first = json.loads((tmp_path / ".codeindex" / "baseline.json").read_text())
+        first = json.loads((tmp_path / ".debtector" / "baseline.json").read_text())
 
         # Add a new file
         _seed(str(tmp_path), {"src/a.py": [], "src/b.py": []})
         cmd_baseline(_args(str(tmp_path), "save"))
-        second = json.loads((tmp_path / ".codeindex" / "baseline.json").read_text())
+        second = json.loads((tmp_path / ".debtector" / "baseline.json").read_text())
 
         assert len(second["modules"]) >= len(first["modules"])
 
@@ -124,7 +124,7 @@ class TestBaselineSave:
 
 
 class TestBaselineStatus:
-    """codeindex baseline status compares current metrics to baseline."""
+    """debtector baseline status compares current metrics to baseline."""
 
     def test_no_baseline_prints_message(self, tmp_path: Path, capsys) -> None:
         _seed(str(tmp_path), {"src/a.py": []})

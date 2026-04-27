@@ -12,7 +12,7 @@ class ParserRegistry:
     """Registry that maps source files to the appropriate language parser.
 
     Parsers are registered at construction time.  The registry is the single
-    point of contact between the :class:`~codeindex.indexer.Indexer` and the
+    point of contact between the :class:`~debtector.indexer.Indexer` and the
     concrete language parsers.
     """
 

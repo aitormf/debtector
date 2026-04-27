@@ -1,5 +1,5 @@
 """
-Módulo de métricas de acoplamiento para CodeIndex.
+Módulo de métricas de acoplamiento para Debtector.
 
 Calcula métricas estructurales a nivel de módulo (archivo):
 
@@ -68,14 +68,14 @@ class ModuleMetrics:
 def _build_module_map(file_paths: set[str]) -> dict[str, str]:
     """Construye un mapa de nombre-de-módulo → file_path para resolución de imports.
 
-    Permite traducir targets de aristas IMPORTS_FROM (e.g. ``"codeindex.models"``,
+    Permite traducir targets de aristas IMPORTS_FROM (e.g. ``"debtector.models"``,
     ``".graph_store"``) a los file paths reales indexados (e.g.
-    ``"codeindex/models.py"``), de modo que Ca refleje las dependencias internas.
+    ``"debtector/models.py"``), de modo que Ca refleje las dependencias internas.
 
     Genera las siguientes claves por cada file path:
 
-    - Nombre con puntos: ``"codeindex/models.py"`` → ``"codeindex.models"``
-    - ``__init__.py``: ``"codeindex/parser/__init__.py"`` → ``"codeindex.parser"``
+    - Nombre con puntos: ``"debtector/models.py"`` → ``"debtector.models"``
+    - ``__init__.py``: ``"debtector/parser/__init__.py"`` → ``"debtector.parser"``
 
     Args:
         file_paths: Conjunto de file paths de los nodos File indexados.
@@ -85,7 +85,7 @@ def _build_module_map(file_paths: set[str]) -> dict[str, str]:
     """
     module_map: dict[str, str] = {}
     for fp in file_paths:
-        # "codeindex/models.py" → "codeindex.models"
+        # "debtector/models.py" → "debtector.models"
         dot_name = fp.replace("/", ".").replace("\\", ".")
         for ext in (".py", ".js", ".ts", ".jsx", ".tsx"):
             if dot_name.endswith(ext):
@@ -107,8 +107,8 @@ def _resolve_import_target(
 
     Maneja tres formas:
 
-    1. Nombre absoluto con puntos: ``"codeindex.models"``
-    2. Import relativo con punto inicial: ``".models"`` (desde ``"codeindex/cli.py"``)
+    1. Nombre absoluto con puntos: ``"debtector.models"``
+    2. Import relativo con punto inicial: ``".models"`` (desde ``"debtector/cli.py"``)
     3. Ya es un file path indexado: devuelve tal cual.
 
     Args:
@@ -123,7 +123,7 @@ def _resolve_import_target(
     if target in module_map.values():
         return target
 
-    # Nombre absoluto con puntos: "codeindex.models"
+    # Nombre absoluto con puntos: "debtector.models"
     if target in module_map:
         return module_map[target]
 
@@ -141,11 +141,11 @@ def _resolve_import_target(
             return module_map[abs_module]
 
     # Import relativo almacenado sin punto (el parser extrae solo el nombre):
-    # "from .config import X" → target="config", source="codeindex/cli.py"
+    # "from .config import X" → target="config", source="debtector/cli.py"
     # Intentamos resolverlo como módulo del mismo paquete.
     if "." not in target:
         parts = source_file.replace("\\", "/").split("/")
-        package = ".".join(parts[:-1])  # "codeindex" desde "codeindex/cli.py"
+        package = ".".join(parts[:-1])  # "debtector" desde "debtector/cli.py"
         if package:
             candidate = f"{package}.{target}"
             if candidate in module_map:

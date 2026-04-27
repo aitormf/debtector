@@ -35,9 +35,9 @@ coverage.xml
 *.swp
 *.swo
 
-# CodeIndex database files (generated)
-.codeindex.db
-*.codeindex.db
+# Debtector database files (generated)
+.debtector.db
+*.debtector.db
 
 # OS
 .DS_Store

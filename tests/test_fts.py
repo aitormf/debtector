@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.graph_store import GraphStore
-from codeindex.models import NodeInfo, NodeKind
+from debtector.graph_store import GraphStore
+from debtector.models import NodeInfo, NodeKind
 
 
 @pytest.fixture()
 def store(tmp_path: Path) -> GraphStore:
     """GraphStore backed by a temp file."""
-    db = tmp_path / ".codeindex" / "index.db"
+    db = tmp_path / ".debtector" / "index.db"
     db.parent.mkdir()
     s = GraphStore(db)
     yield s

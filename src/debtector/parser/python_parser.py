@@ -111,7 +111,7 @@ class PythonParser(LanguageParser):
             source: Raw source bytes of the file.
             file_path: Absolute path to the source file.
             file_qn: Qualified name of the file node (used as edge source).
-            edges: Mutable list to which new :class:`~codeindex.models.EdgeInfo` objects
+            edges: Mutable list to which new :class:`~debtector.models.EdgeInfo` objects
                 are appended in-place.
         """
         for node in self._walk(root):
@@ -211,9 +211,9 @@ class PythonParser(LanguageParser):
             source: Raw source bytes of the file.
             file_path: Absolute path to the source file.
             file_qn: Qualified name of the file node (used as CONTAINS edge source).
-            nodes: Mutable list to which new :class:`~codeindex.models.NodeInfo`
+            nodes: Mutable list to which new :class:`~debtector.models.NodeInfo`
                 objects are appended in-place.
-            edges: Mutable list to which new :class:`~codeindex.models.EdgeInfo`
+            edges: Mutable list to which new :class:`~debtector.models.EdgeInfo`
                 objects are appended in-place.
             parent: Name of the enclosing class when recursing into a class body,
                 or ``None`` at module level.
@@ -377,7 +377,7 @@ class PythonParser(LanguageParser):
             file_path: Absolute path to the source file.
             file_qn: Qualified name of the file node (used as edge source).
             line: Line number of the function definition.
-            edges: Mutable list to which new :class:`~codeindex.models.EdgeInfo`
+            edges: Mutable list to which new :class:`~debtector.models.EdgeInfo`
                 objects are appended in-place.
             uses_type_seen: Set de tipos ya emitidos para este archivo.
                 Se muta en-place para acumular los tipos emitidos. Permite
@@ -627,7 +627,7 @@ class PythonParser(LanguageParser):
         """Extract the bare name of a callee without resolving to a qualified name.
 
         Used to capture cross-file call targets in test files so that
-        :meth:`~codeindex.graph_store.GraphStore.update_covers_edges` can later
+        :meth:`~debtector.graph_store.GraphStore.update_covers_edges` can later
         resolve them against the full node index.
 
         Args:

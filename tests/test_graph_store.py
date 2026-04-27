@@ -1,4 +1,4 @@
-"""Tests for codeindex.graph_store.GraphStore."""
+"""Tests for debtector.graph_store.GraphStore."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.graph_store import CURRENT_SCHEMA_VERSION, GraphStore, SchemaTooNewError
-from codeindex.models import EdgeKind, NodeInfo, NodeKind
+from debtector.graph_store import CURRENT_SCHEMA_VERSION, GraphStore, SchemaTooNewError
+from debtector.models import EdgeKind, NodeInfo, NodeKind
 
 
 class TestStoreFile:

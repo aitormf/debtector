@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.models import EdgeKind
-from codeindex.parser.python_parser import PythonParser
+from debtector.models import EdgeKind
+from debtector.parser.python_parser import PythonParser
 
 
 @pytest.fixture()

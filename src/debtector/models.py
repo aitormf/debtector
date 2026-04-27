@@ -1,5 +1,5 @@
 """
-Modelos de datos para CodeIndex.
+Modelos de datos para Debtector.
 
 Diseño inspirado en graph stores reales: cada símbolo es un NODO con un
 qualified_name único, y las relaciones (imports, herencia, llamadas) son

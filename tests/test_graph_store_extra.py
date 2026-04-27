@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from codeindex.graph_store import GraphStore
-from codeindex.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
+from debtector.graph_store import GraphStore
+from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
 # ──────────────────────────────────────────────
 # Helpers / extra fixtures
@@ -206,7 +206,7 @@ class TestGetDependencyChain:
 
     def test_chains_found(self, tmp_db: GraphStore) -> None:
         """Returns at least one chain when outbound edges exist."""
-        from codeindex.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
+        from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
         nodes_a = [
             NodeInfo(

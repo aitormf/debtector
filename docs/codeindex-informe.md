@@ -148,7 +148,7 @@ todo sale del AST que ya se parsea.
 
 #### Impact radius en PR
 
-- Ya funciona en el CLI (`codeindex impact`)
+- Ya funciona en el CLI (`debtector impact`)
 - Pendiente: formatearlo como CI reporter para GitHub/GitLab
 
 ---
@@ -192,7 +192,7 @@ cautela.
 
 #### Architectural layer violations
 
-- El usuario define capas en `codeindex.toml`:
+- El usuario define capas en `debtector.toml`:
   `web -> service -> repository -> model`
 - El analizador detecta imports que violan el sentido:
   hay IMPORTS_FROM desde `repository` hacia `web`?
@@ -273,8 +273,8 @@ Todos los problemas existentes quedan registrados y no generan error en CI.
 Solo fallan los problemas *nuevos* introducidos a partir de ese momento.
 
 ```bash
-codeindex baseline save   # guarda estado actual como referencia
-codeindex baseline status # muestra delta respecto al baseline
+debtector baseline save   # guarda estado actual como referencia
+debtector baseline status # muestra delta respecto al baseline
 ```
 
 **Ratcheting**
@@ -283,7 +283,7 @@ El CI solo falla si las métricas empeoran respecto al baseline.
 Si el proyecto tiene hoy 5 ciclos, los 5 ciclos no bloquean. El ciclo
 número 6, introducido en un PR, sí bloquea.
 
-**Severidad configurable** en `codeindex.toml`:
+**Severidad configurable** en `debtector.toml`:
 
 ```toml
 [thresholds]
@@ -313,10 +313,10 @@ Fase 3 como feature premium que requiere más contexto para entender.*
 - [ ] God module detection (outliers estadísticos en Ca)
 - [ ] Profundidad de herencia y número de hijos
 - [ ] Arista `USES_TYPE` para anotaciones de tipo en funciones y métodos
-- [ ] Comando CLI `codeindex metrics` con output tabular
+- [ ] Comando CLI `debtector metrics` con output tabular
 - [ ] **Baseline + ratcheting**: snapshot del estado actual, solo fallan
       problemas nuevos respecto a la referencia
-- [ ] **Severidad configurable** en `codeindex.toml`
+- [ ] **Severidad configurable** en `debtector.toml`
 - [ ] CI reporter: salida compatible con GitHub Annotations / GitLab
 
 ### Fase 2 — Análisis behavioral (git history)
@@ -334,10 +334,10 @@ Fase 3 como feature premium que requiere más contexto para entender.*
 *El más diferencial técnicamente, pero necesita más contexto para venderse.
 Construir cuando Fase 1+2 tengan tracción y haya ICP validado.*
 
-- [ ] Comando `codeindex diff <db_base> <db_pr>`
+- [ ] Comando `debtector diff <db_base> <db_pr>`
 - [ ] Delta de métricas por PR: qué empeoró, qué mejoró
 - [ ] Detección de ciclos nuevos en el PR
-- [ ] GitHub Action `codeindex-action` que indexa ambas ramas y comenta
+- [ ] GitHub Action `debtector-action` que indexa ambas ramas y comenta
 
 ### Fase 4 — Features avanzadas
 *Solo si las fases anteriores demuestran tracción.*
@@ -364,7 +364,7 @@ búsqueda semántica es dead weight para el objetivo CI/PR.
 |---|---|---|
 | `embedder.py` + `fastembed` | Genera vectores semánticos por nodo | No |
 | `node_embeddings` (sqlite-vec) | Almacena vectores, búsqueda por coseno | No |
-| `codeindex semantic "..."` | Busca código por concepto | No |
+| `debtector semantic "..."` | Busca código por concepto | No |
 | FTS5 (`nodes_fts`) | Búsqueda textual nombre/firma/docstring | Marginal |
 | Grafo estructural (nodes + edges) | Ca, Ce, ciclos, impacto | Es la base |
 

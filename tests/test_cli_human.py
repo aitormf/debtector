@@ -8,14 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.cli import (
+from debtector.cli import (
     _get_store,
     cmd_callers,
     cmd_impact,
     cmd_imports,
     cmd_index,
-    cmd_install_hook,
-    cmd_install_skill,
     cmd_search,
     cmd_status,
     cmd_summary,
@@ -48,25 +46,11 @@ def _seed_store(project: str, src: Path) -> None:
         project: Project root path string.
         src: Directory to index.
     """
-    from codeindex.indexer import Indexer
+    from debtector.indexer import Indexer
 
     store = _get_store(project)
     Indexer(store).index(str(src))
     store.close()
-
-
-def _fake_git_repo(tmp_path: Path) -> Path:
-    """Create a minimal .git/hooks/ directory structure.
-
-    Args:
-        tmp_path: Temporary directory to use as repo root.
-
-    Returns:
-        Path to the ``.git/hooks/`` directory.
-    """
-    hooks = tmp_path / ".git" / "hooks"
-    hooks.mkdir(parents=True)
-    return hooks
 
 
 @pytest.fixture()
@@ -358,146 +342,6 @@ class TestCmdCallersHuman:
         assert isinstance(out, list)
 
 
-# ──────────────────────────────────────────────
-# cmd_install_skill — human-readable output
-# ──────────────────────────────────────────────
-
-
-class TestCmdInstallSkillHuman:
-    """cmd_install_skill with json=False prints installed file paths."""
-
-    def test_human_prints_instalado(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        """Prints 'Instalado:' for each skill file."""
-        cmd_install_skill(_args(project=str(tmp_path), json=False, global_install=False))
-        out = capsys.readouterr().out
-        assert "Instalado" in out or "instalados" in out.lower()
-
-    def test_human_shows_dest_path(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        """Prints the destination directory."""
-        cmd_install_skill(_args(project=str(tmp_path), json=False, global_install=False))
-        out = capsys.readouterr().out
-        assert ".claude" in out
-
-    def test_global_install_uses_home(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """global_install=True installs under the home directory."""
-        fake_home = tmp_path / "home"
-        fake_home.mkdir()
-        monkeypatch.setattr("codeindex.cli.Path.home", lambda: fake_home)
-        cmd_install_skill(_args(project=str(tmp_path), json=False, global_install=True))
-        assert (fake_home / ".claude" / "skills").exists()
-
-    def test_global_install_json(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """global_install=True with json=True returns correct dest."""
-        import json
-
-        fake_home = tmp_path / "home"
-        fake_home.mkdir()
-        monkeypatch.setattr("codeindex.cli.Path.home", lambda: fake_home)
-        cmd_install_skill(_args(project=str(tmp_path), json=True, global_install=True))
-        out = json.loads(capsys.readouterr().out)
-        assert ".claude" in out["dest"]
-
-    def test_skills_not_found_human_exits_1(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Exits with code 1 when skills directory does not exist (human mode)."""
-        # Patch skills_src to a non-existent path
-        from pathlib import Path as RealPath
-        from unittest.mock import patch
-
-        fake_skills = tmp_path / "no_skills_here"
-        with patch(
-            "codeindex.cli.Path.__truediv__",
-            side_effect=lambda self, other: (
-                fake_skills
-                if other == "skills" and str(self).endswith("codeindex")
-                else RealPath.__truediv__(self, other)
-            ),
-        ):
-            pass  # too complex; use simpler monkeypatch on the module attribute
-
-        # Simpler: patch __file__ attribute of the cli module
-        import codeindex.cli as cli_mod
-
-        # Point cli.__file__ at a dir where 'skills' subdir does not exist
-        monkeypatch.setattr(cli_mod, "__file__", str(tmp_path / "fake_cli.py"))
-        with pytest.raises(SystemExit) as exc:
-            cmd_install_skill(_args(project=str(tmp_path), json=False, global_install=False))
-        assert exc.value.code == 1
-        _, err = capsys.readouterr()
-        assert "Error" in err
-
-    def test_skills_not_found_json_exits_1(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Exits with code 1 when skills directory does not exist (json mode)."""
-        import json
-
-        import codeindex.cli as cli_mod
-
-        monkeypatch.setattr(cli_mod, "__file__", str(tmp_path / "fake_cli.py"))
-        with pytest.raises(SystemExit) as exc:
-            cmd_install_skill(_args(project=str(tmp_path), json=True, global_install=False))
-        assert exc.value.code == 1
-        out = json.loads(capsys.readouterr().out)
-        assert "error" in out
-
-
-# ──────────────────────────────────────────────
-# cmd_install_hook — human-readable error path
-# ──────────────────────────────────────────────
-
-
-class TestCmdInstallHookHuman:
-    """cmd_install_hook human-readable messages."""
-
-    def test_no_git_human_prints_to_stderr(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture
-    ) -> None:
-        """Prints 'Error:' to stderr when no .git dir is found."""
-        with pytest.raises(SystemExit) as exc:
-            cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
-        assert exc.value.code == 1
-        _, err = capsys.readouterr()
-        assert "Error" in err
-
-    def test_human_created_message(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        """Prints 'Hook created' style message on success."""
-        _fake_git_repo(tmp_path)
-        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
-        out = capsys.readouterr().out
-        assert "Hook" in out or "hook" in out
-
-    def test_human_already_installed_message(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture
-    ) -> None:
-        """Prints 'Ya instalado' when hook is already present."""
-        _fake_git_repo(tmp_path)
-        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
-        capsys.readouterr()
-        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=False))
-        out = capsys.readouterr().out
-        assert "instalado" in out.lower()
-
-    def test_add_to_stage_prints_extra_message(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture
-    ) -> None:
-        """Prints the extra stage message when add_to_stage=True."""
-        _fake_git_repo(tmp_path)
-        cmd_install_hook(_args(project=str(tmp_path), json=False, add_to_stage=True))
-        out = capsys.readouterr().out
-        assert "index.db" in out
-
-
-# ──────────────────────────────────────────────
-# main() — argument dispatch
-# ──────────────────────────────────────────────
-
-
 class TestMainEntry:
     """main() parses sys.argv and dispatches to sub-commands."""
 
@@ -505,14 +349,14 @@ class TestMainEntry:
         """Exits with code 0 and prints help when no sub-command is given."""
         with pytest.raises(SystemExit) as exc:
             with pytest.MonkeyPatch.context() as mp:
-                mp.setattr(sys, "argv", ["codeindex", "--project", str(tmp_path)])
+                mp.setattr(sys, "argv", ["debtector", "--project", str(tmp_path)])
                 main()
         assert exc.value.code == 0
 
     def test_status_command_via_main(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
         """main() dispatches 'status' and produces output."""
         with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(sys, "argv", ["codeindex", "--project", str(tmp_path), "--json", "status"])
+            mp.setattr(sys, "argv", ["debtector", "--project", str(tmp_path), "--json", "status"])
             main()
         out = capsys.readouterr().out
         assert out.strip()  # some JSON output produced
@@ -526,7 +370,7 @@ class TestMainEntry:
             mp.setattr(
                 sys,
                 "argv",
-                ["codeindex", "--project", str(tmp_path), "--json", "index", str(src)],
+                ["debtector", "--project", str(tmp_path), "--json", "index", str(src)],
             )
             main()
         import json
@@ -546,7 +390,7 @@ class TestMainEntry:
             mp.setattr(
                 sys,
                 "argv",
-                ["codeindex", "--project", str(tmp_path), "--json", "search", "Foo"],
+                ["debtector", "--project", str(tmp_path), "--json", "search", "Foo"],
             )
             main()
         out = json.loads(capsys.readouterr().out)
@@ -568,7 +412,7 @@ class TestMainEntry:
             mp.setattr(
                 sys,
                 "argv",
-                ["codeindex", "--project", str(tmp_path), "--json", "summary", "app.py"],
+                ["debtector", "--project", str(tmp_path), "--json", "summary", "app.py"],
             )
             main()
         out = json.loads(capsys.readouterr().out)
@@ -587,7 +431,7 @@ class TestMainEntry:
                 sys,
                 "argv",
                 [
-                    "codeindex",
+                    "debtector",
                     "--project",
                     str(tmp_path),
                     "--json",
@@ -611,7 +455,7 @@ class TestMainEntry:
             mp.setattr(
                 sys,
                 "argv",
-                ["codeindex", "--project", str(tmp_path), "--json", "imports", "os"],
+                ["debtector", "--project", str(tmp_path), "--json", "imports", "os"],
             )
             main()
         out = json.loads(capsys.readouterr().out)
@@ -630,7 +474,7 @@ class TestMainEntry:
                 sys,
                 "argv",
                 [
-                    "codeindex",
+                    "debtector",
                     "--project",
                     str(tmp_path),
                     "--json",
@@ -641,36 +485,3 @@ class TestMainEntry:
             main()
         out = json.loads(capsys.readouterr().out)
         assert isinstance(out, list)
-
-    def test_install_skill_command_via_main(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture
-    ) -> None:
-        """main() dispatches 'install-skill' and returns JSON with installed key."""
-        import json
-
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(
-                sys,
-                "argv",
-                ["codeindex", "--project", str(tmp_path), "--json", "install-skill"],
-            )
-            main()
-        out = json.loads(capsys.readouterr().out)
-        assert "installed" in out
-
-    def test_install_hook_command_via_main(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture
-    ) -> None:
-        """main() dispatches 'install-hook' and emits a JSON result."""
-        import json
-
-        _fake_git_repo(tmp_path)
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(
-                sys,
-                "argv",
-                ["codeindex", "--project", str(tmp_path), "--json", "install-hook"],
-            )
-            main()
-        out = json.loads(capsys.readouterr().out)
-        assert "status" in out

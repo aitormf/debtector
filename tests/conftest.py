@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for CodeIndex tests."""
+"""Shared pytest fixtures for Debtector tests."""
 
 from __future__ import annotations
 
@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.graph_store import GraphStore
-from codeindex.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
-from codeindex.parser.python_parser import PythonParser
+from debtector.graph_store import GraphStore
+from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
+from debtector.parser.python_parser import PythonParser
 
 
 @pytest.fixture()
 def tmp_db(tmp_path: Path) -> GraphStore:
     """Provide a temporary in-memory-like GraphStore backed by a temp file."""
-    db_path = tmp_path / ".codeindex.db"
+    db_path = tmp_path / ".debtector.db"
     store = GraphStore(db_path)
     yield store
     store.close()

@@ -1,4 +1,4 @@
-"""Tests for .codeindexignore support in Indexer."""
+"""Tests for .debtectorignore support in Indexer."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.graph_store import GraphStore
-from codeindex.indexer import IgnoreRules, Indexer
+from debtector.graph_store import GraphStore
+from debtector.indexer import IgnoreRules, Indexer
 
 # ──────────────────────────────────────────────
 # IgnoreRules unit tests
@@ -19,26 +19,26 @@ class TestIgnoreRulesFromFile:
     """Tests for IgnoreRules.from_file() factory."""
 
     def test_returns_empty_rules_when_file_absent(self, tmp_path: Path) -> None:
-        """No .codeindexignore → no patterns, nothing is ignored."""
+        """No .debtectorignore → no patterns, nothing is ignored."""
         rules = IgnoreRules.from_file(tmp_path)
         assert not rules.is_ignored("src/app.py")
 
     def test_parses_simple_pattern(self, tmp_path: Path) -> None:
         """A plain filename pattern is loaded and matched."""
-        (tmp_path / ".codeindexignore").write_text("generated.py\n", encoding="utf-8")
+        (tmp_path / ".debtectorignore").write_text("generated.py\n", encoding="utf-8")
         rules = IgnoreRules.from_file(tmp_path)
         assert rules.is_ignored("generated.py")
 
     def test_ignores_blank_lines(self, tmp_path: Path) -> None:
-        """Blank lines in .codeindexignore do not create patterns."""
-        (tmp_path / ".codeindexignore").write_text("\n\ngenerated.py\n\n", encoding="utf-8")
+        """Blank lines in .debtectorignore do not create patterns."""
+        (tmp_path / ".debtectorignore").write_text("\n\ngenerated.py\n\n", encoding="utf-8")
         rules = IgnoreRules.from_file(tmp_path)
         assert rules.is_ignored("generated.py")
         assert not rules.is_ignored("app.py")
 
     def test_ignores_comment_lines(self, tmp_path: Path) -> None:
         """Lines starting with # are comments and are not matched."""
-        (tmp_path / ".codeindexignore").write_text(
+        (tmp_path / ".debtectorignore").write_text(
             "# this is a comment\ngenerated.py\n", encoding="utf-8"
         )
         rules = IgnoreRules.from_file(tmp_path)
@@ -47,7 +47,7 @@ class TestIgnoreRulesFromFile:
 
     def test_strips_inline_whitespace(self, tmp_path: Path) -> None:
         """Leading/trailing whitespace around patterns is stripped."""
-        (tmp_path / ".codeindexignore").write_text("  generated.py  \n", encoding="utf-8")
+        (tmp_path / ".debtectorignore").write_text("  generated.py  \n", encoding="utf-8")
         rules = IgnoreRules.from_file(tmp_path)
         assert rules.is_ignored("generated.py")
 
@@ -127,19 +127,19 @@ def project_dir(tmp_path: Path, sample_fixture_path: Path) -> Path:
 @pytest.fixture()
 def store(tmp_path: Path, project_dir: Path) -> GraphStore:
     """GraphStore pointing at a temp DB."""
-    db_path = tmp_path / ".codeindex.db"
+    db_path = tmp_path / ".debtector.db"
     s = GraphStore(db_path)
     yield s
     s.close()
 
 
 class TestIndexerReadsIgnoreFile:
-    """Integration: Indexer skips files/dirs matching .codeindexignore."""
+    """Integration: Indexer skips files/dirs matching .debtectorignore."""
 
     def test_ignores_file_matching_pattern(self, store: GraphStore, project_dir: Path) -> None:
-        """A file whose name matches a .codeindexignore pattern is not indexed."""
+        """A file whose name matches a .debtectorignore pattern is not indexed."""
         (project_dir / "src" / "secret.py").write_text("PASSWORD = 'hunter2'\n", encoding="utf-8")
-        (project_dir / ".codeindexignore").write_text("secret.py\n", encoding="utf-8")
+        (project_dir / ".debtectorignore").write_text("secret.py\n", encoding="utf-8")
 
         indexer = Indexer(store)
         indexer.index(str(project_dir))
@@ -149,7 +149,7 @@ class TestIndexerReadsIgnoreFile:
 
     def test_non_ignored_files_still_indexed(self, store: GraphStore, project_dir: Path) -> None:
         """Files not matching any pattern are still indexed normally."""
-        (project_dir / ".codeindexignore").write_text("secret.py\n", encoding="utf-8")
+        (project_dir / ".debtectorignore").write_text("secret.py\n", encoding="utf-8")
 
         indexer = Indexer(store)
         indexer.index(str(project_dir))
@@ -162,7 +162,7 @@ class TestIndexerReadsIgnoreFile:
         generated = project_dir / "generated"
         generated.mkdir()
         (generated / "schema.py").write_text("class Schema: pass\n", encoding="utf-8")
-        (project_dir / ".codeindexignore").write_text("generated/\n", encoding="utf-8")
+        (project_dir / ".debtectorignore").write_text("generated/\n", encoding="utf-8")
 
         indexer = Indexer(store)
         indexer.index(str(project_dir))
@@ -171,7 +171,7 @@ class TestIndexerReadsIgnoreFile:
         assert not any("generated" in f for f in files)
 
     def test_no_ignore_file_indexes_everything(self, store: GraphStore, project_dir: Path) -> None:
-        """Without a .codeindexignore, all supported files are indexed."""
+        """Without a .debtectorignore, all supported files are indexed."""
         extra = project_dir / "extra.py"
         extra.write_text("x = 1\n", encoding="utf-8")
 
@@ -189,7 +189,7 @@ class TestIndexerReadsIgnoreFile:
         (project_dir / "src" / "models.generated.py").write_text(
             "class M: pass\n", encoding="utf-8"
         )
-        (project_dir / ".codeindexignore").write_text("*.generated.py\n", encoding="utf-8")
+        (project_dir / ".debtectorignore").write_text("*.generated.py\n", encoding="utf-8")
 
         indexer = Indexer(store)
         indexer.index(str(project_dir))

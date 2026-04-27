@@ -8,9 +8,9 @@ from unittest.mock import patch
 
 import pytest
 
-from codeindex.graph_store import GraphStore
-from codeindex.indexer import Indexer
-from codeindex.parser.base import LanguageParser
+from debtector.graph_store import GraphStore
+from debtector.indexer import Indexer
+from debtector.parser.base import LanguageParser
 
 
 @pytest.fixture()
@@ -41,7 +41,7 @@ def store_and_indexer(tmp_path: Path, project_dir: Path):
     Yields:
         Tuple of (GraphStore, Indexer).
     """
-    db_path = tmp_path / ".codeindex.db"
+    db_path = tmp_path / ".debtector.db"
     store = GraphStore(db_path)
     indexer = Indexer(store)
     yield store, indexer
@@ -163,7 +163,7 @@ class TestIndexerIgnoreFiles:
         # A Python file whose exact name is in ignore_files — should be skipped
         (src / "excluded.py").write_text("EXCLUDED = True\n", encoding="utf-8")
 
-        db_path = tmp_path / ".codeindex.db"
+        db_path = tmp_path / ".debtector.db"
         store = GraphStore(db_path)
         indexer = Indexer(store, ignore_files={"excluded.py"})
         stats = indexer.index(str(src))
@@ -181,7 +181,7 @@ class TestIndexerIgnoreFiles:
         (src / "app.py").write_text("x = 1\n", encoding="utf-8")
         # .DS_Store has no supported extension so it won't be picked up anyway,
         # but we validate the ignore_files set contains it
-        db_path = tmp_path / ".codeindex.db"
+        db_path = tmp_path / ".debtector.db"
         store = GraphStore(db_path)
         indexer = Indexer(store)
         assert ".DS_Store" in indexer.ignore_files
@@ -194,7 +194,7 @@ class TestIndexerIgnoreFiles:
         (src / "keep.py").write_text("def keep(): pass\n", encoding="utf-8")
         (src / "skip.py").write_text("def skip(): pass\n", encoding="utf-8")
 
-        db_path = tmp_path / ".codeindex.db"
+        db_path = tmp_path / ".debtector.db"
         store = GraphStore(db_path)
         indexer = Indexer(store, ignore_files={"skip.py"})
         indexer.index(str(src))

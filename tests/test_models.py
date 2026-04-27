@@ -1,8 +1,8 @@
-"""Tests for codeindex.models."""
+"""Tests for debtector.models."""
 
 from __future__ import annotations
 
-from codeindex.models import (
+from debtector.models import (
     EdgeInfo,
     EdgeKind,
     GraphEdge,

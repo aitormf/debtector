@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from codeindex.graph_store import GraphStore
-from codeindex.metrics import compute_metrics, god_modules
-from codeindex.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
+from debtector.graph_store import GraphStore
+from debtector.metrics import compute_metrics, god_modules
+from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
 # ──────────────────────────────────────────────
 # Helpers
@@ -92,7 +92,7 @@ class TestGodModules:
 
     def test_returns_module_metrics_instances(self, tmp_db: GraphStore) -> None:
         """god_modules returns ModuleMetrics objects (subset of compute_metrics)."""
-        from codeindex.metrics import ModuleMetrics
+        from debtector.metrics import ModuleMetrics
 
         _store_with_fan_ins(tmp_db, [1, 1, 1, 1, 1, 1, 1, 1, 1, 20])
 

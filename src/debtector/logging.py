@@ -1,7 +1,7 @@
-"""Structured logging configuration for CodeIndex using structlog.
+"""Structured logging configuration for Debtector using structlog.
 
 Usage:
-    from codeindex.logging import configure_logging, get_logger
+    from debtector.logging import configure_logging, get_logger
 
     configure_logging(project=".")  # call once after arg parse
     log = get_logger()
@@ -9,8 +9,8 @@ Usage:
     log.info("indexing_started")
 
 Environment:
-    CODEINDEX_LOG_JSON=false  → human-readable log lines (default)
-    CODEINDEX_LOG_JSON=true   → JSON lines
+    DEBTECTOR_LOG_JSON=false  → human-readable log lines (default)
+    DEBTECTOR_LOG_JSON=true   → JSON lines
 """
 
 from __future__ import annotations
@@ -24,9 +24,9 @@ import structlog
 
 
 def configure_logging(project: str = ".", json_output: bool | None = None) -> None:
-    """Configure structlog to write to ``.codeindex/codeindex.log`` inside *project*.
+    """Configure structlog to write to ``.debtector/debtector.log`` inside *project*.
 
-    Creates the ``.codeindex/`` directory if it does not exist.  Falls back to
+    Creates the ``.debtector/`` directory if it does not exist.  Falls back to
     ``stderr`` if the log file cannot be opened (e.g. read-only filesystem).
 
     Should be called once at application startup, after argument parsing so
@@ -34,14 +34,14 @@ def configure_logging(project: str = ".", json_output: bool | None = None) -> No
 
     Args:
         project: Path to the project root.  Logs are written to
-            ``{project}/.codeindex/codeindex.log``.  Defaults to the current
+            ``{project}/.debtector/debtector.log``.  Defaults to the current
             working directory.
         json_output: ``True`` for JSON lines, ``False`` for human-readable
-            lines.  When ``None``, reads the ``CODEINDEX_LOG_JSON`` environment
+            lines.  When ``None``, reads the ``DEBTECTOR_LOG_JSON`` environment
             variable (defaults to ``False`` when absent).
     """
     if json_output is None:
-        env_val = os.environ.get("CODEINDEX_LOG_JSON", "false").strip().lower()
+        env_val = os.environ.get("DEBTECTOR_LOG_JSON", "false").strip().lower()
         json_output = env_val == "true"
 
     # Resolve log file path
@@ -82,9 +82,9 @@ def _open_log_file(project: str):
         A writable file-like object.
     """
     try:
-        codeindex_dir = Path(project) / ".codeindex"
-        codeindex_dir.mkdir(parents=True, exist_ok=True)
-        log_path = codeindex_dir / "codeindex.log"
+        debtector_dir = Path(project) / ".debtector"
+        debtector_dir.mkdir(parents=True, exist_ok=True)
+        log_path = debtector_dir / "debtector.log"
         return open(log_path, "a", encoding="utf-8")  # noqa: SIM115
     except OSError:
         return sys.stderr

@@ -45,11 +45,11 @@ DEFAULT_IGNORE_DIRS = {
 
 DEFAULT_IGNORE_FILES = {".DS_Store", "Thumbs.db"}
 
-CODEINDEXIGNORE = ".codeindexignore"
+DEBTECTORIGNORE = ".debtectorignore"
 
 
 class IgnoreRules:
-    """Parses and applies patterns from a ``.codeindexignore`` file.
+    """Parses and applies patterns from a ``.debtectorignore`` file.
 
     Supports:
     - Exact filename patterns (``secret.py``)
@@ -68,17 +68,17 @@ class IgnoreRules:
 
     @classmethod
     def from_file(cls, project_path: Path) -> IgnoreRules:
-        """Load patterns from ``<project_path>/.codeindexignore``.
+        """Load patterns from ``<project_path>/.debtectorignore``.
 
         If the file does not exist, an instance with no patterns is returned.
 
         Args:
-            project_path: Root directory that may contain ``.codeindexignore``.
+            project_path: Root directory that may contain ``.debtectorignore``.
 
         Returns:
             Populated :class:`IgnoreRules` instance.
         """
-        ignore_file = project_path / CODEINDEXIGNORE
+        ignore_file = project_path / DEBTECTORIGNORE
         if not ignore_file.exists():
             return cls([])
         patterns: list[str] = []
@@ -145,7 +145,7 @@ class Indexer:
     Orquestador de indexación.
 
     Uso:
-        store = GraphStore(".codeindex.db")
+        store = GraphStore(".debtector.db")
         indexer = Indexer(store)
         stats = indexer.index("./mi-proyecto")
     """
@@ -159,7 +159,7 @@ class Indexer:
         """Initialize the Indexer.
 
         Args:
-            store: :class:`~codeindex.graph_store.GraphStore` instance where
+            store: :class:`~debtector.graph_store.GraphStore` instance where
                 parsed data will be written.
             ignore_dirs: Set of directory names to skip during traversal.
                 Defaults to :data:`DEFAULT_IGNORE_DIRS`.
@@ -288,7 +288,7 @@ class Indexer:
         Args:
             root_path: Absolute path to the directory to traverse.
             ignore_rules: Optional :class:`IgnoreRules` loaded from
-                ``.codeindexignore``.  When provided, directories and files
+                ``.debtectorignore``.  When provided, directories and files
                 matching its patterns are excluded.
 
         Yields:

@@ -1,4 +1,4 @@
-"""Tests for codeindex.parser.js_parser.JavaScriptParser.
+"""Tests for debtector.parser.js_parser.JavaScriptParser.
 
 Parses tests/fixtures/sample.ts and verifies extracted structure.
 """
@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from codeindex.models import EdgeKind, NodeKind
-from codeindex.parser.js_parser import JavaScriptParser
+from debtector.models import EdgeKind, NodeKind
+from debtector.parser.js_parser import JavaScriptParser
 
 
 @pytest.fixture()

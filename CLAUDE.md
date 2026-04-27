@@ -1,12 +1,12 @@
-# CLAUDE.md — CodeIndex
+# CLAUDE.md — Debtector
 
 ## Qué es este proyecto
 
-CodeIndex indexa repositorios de código fuente y almacena su estructura (clases, funciones, métodos, imports, llamadas) como un grafo en SQLite. El objetivo es **detectar acoplamiento de código en pipelines de CI y PR reviews**, dando al desarrollador contexto arquitectónico antes de mergear.
+Debtector indexa repositorios de código fuente y almacena su estructura (clases, funciones, métodos, imports, llamadas) como un grafo en SQLite. El objetivo es **detectar acoplamiento de código en pipelines de CI y PR reviews**, dando al desarrollador contexto arquitectónico antes de mergear.
 
-ICP: desarrollador o tech lead que usa agentes de código (Claude Code, Copilot, Codex). Los agentes generan acoplamiento oculto a una velocidad que ningún humano alcanza; codeIndex actúa como guardarraíl arquitectónico en el pipeline.
+ICP: desarrollador o tech lead que usa agentes de código (Claude Code, Copilot, Codex). Los agentes generan acoplamiento oculto a una velocidad que ningún humano alcanza; debtector actúa como guardarraíl arquitectónico en el pipeline.
 
-El índice vive en `.codeindex/index.db`. El baseline de métricas vive en `.codeindex/baseline.json` (commiteado al repo). Los logs van a `.codeindex/codeindex.log`, nunca a stdout.
+El índice vive en `.debtector/index.db`. El baseline de métricas vive en `.debtector/baseline.json` (commiteado al repo). Los logs van a `.debtector/debtector.log`, nunca a stdout.
 
 ---
 
@@ -15,7 +15,7 @@ El índice vive en `.codeindex/index.db`. El baseline de métricas vive en `.cod
 ```bash
 uv sync --dev              # instalar dependencias incluyendo dev
 uv run pytest              # ejecutar tests
-uv run codeindex index .   # ejecutar CLI
+uv run debtector index .   # ejecutar CLI
 uv add <paquete>           # añadir dependencia
 ```
 
@@ -36,7 +36,7 @@ uv run pre-commit install && uv run pre-commit install --hook-type commit-msg  #
 ## Arquitectura
 
 ```
-src/codeindex/
+src/debtector/
 ├── models.py         # NodeInfo, EdgeInfo, GraphNode, GraphEdge, enums NodeKind/EdgeKind
 ├── graph_store.py    # GraphStore: SQLite + NetworkX cache en memoria
 ├── indexer.py        # Orquestador: recorre archivos, detecta cambios por SHA-256, parsea
@@ -70,7 +70,7 @@ Tres tablas: `nodes`, `edges`, `metadata`.
 
 ### Persistencia del baseline
 
-`.codeindex/baseline.json` — snapshot de métricas de acoplamiento (Ca, Ce, ciclos, god modules) guardado con `codeindex baseline save`. Se commitea al repo; es la referencia para el ratcheting en CI. El `.codeindex/.gitignore` es gestionado por codeIndex y siempre se sobreescribe: ignora todo excepto `.gitignore` y `baseline.json`.
+`.debtector/baseline.json` — snapshot de métricas de acoplamiento (Ca, Ce, ciclos, god modules) guardado con `debtector baseline save`. Se commitea al repo; es la referencia para el ratcheting en CI. El `.debtector/.gitignore` es gestionado por debtector y siempre se sobreescribe: ignora todo excepto `.gitignore` y `baseline.json`.
 
 ### qualified_name
 
@@ -108,9 +108,9 @@ log.warning("parse_warning", reason="no docstring")
 log.error("index_failed", exc_info=True)
 ```
 
-- `CODEINDEX_LOG_JSON=false` → consola coloreada (dev, por defecto)
-- `CODEINDEX_LOG_JSON=true` → JSON lines (prod/observabilidad)
-- Los logs van **siempre** a `.codeindex/codeindex.log`, nunca a stdout
+- `DEBTECTOR_LOG_JSON=false` → consola coloreada (dev, por defecto)
+- `DEBTECTOR_LOG_JSON=true` → JSON lines (prod/observabilidad)
+- Los logs van **siempre** a `.debtector/debtector.log`, nunca a stdout
 
 ---
 
@@ -133,7 +133,7 @@ test(indexer): add fixture for JS files
 
 - Escribir el test **antes** que la implementación (Red → Green → Refactor)
 - Los tests son la especificación ejecutable del comportamiento esperado
-- Coverage configurado: `--cov=codeindex --cov-report=term-missing`
+- Coverage configurado: `--cov=debtector --cov-report=term-missing`
 
 ---
 

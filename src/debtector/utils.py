@@ -1,4 +1,4 @@
-"""Utilidades compartidas de CodeIndex.
+"""Utilidades compartidas de Debtector.
 
 Funciones auxiliares sin dependencias internas que pueden importarse
 desde parsers, GraphStore y CLI sin riesgo de ciclos de importación.
