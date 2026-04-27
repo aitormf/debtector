@@ -16,15 +16,19 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import shutil
 import subprocess  # nosec B404
 import sys
+import time
 from pathlib import Path
 
+from .config import Severity, load_config
 from .graph_store import GraphStore
 from .indexer import Indexer
 from .logging import configure_logging
+from .metrics import compute_metrics, find_cycles, god_modules
 from .models import node_to_dict
 
 # ──────────────────────────────────────────────
@@ -683,6 +687,403 @@ def cmd_init(args) -> None:
 
 
 # ──────────────────────────────────────────────
+# ──────────────────────────────────────────────
+# Baseline
+# ──────────────────────────────────────────────
+
+_BASELINE_FILE = ".codeindex/baseline.json"
+# Tolerancia de inestabilidad: diferencia mínima para considerar una regresión.
+# Un delta < 5% se trata como ruido de redondeo, no como degradación real.
+_INSTABILITY_TOLERANCE = 0.05
+
+
+def _baseline_path(project: str) -> Path:
+    return Path(project) / _BASELINE_FILE
+
+
+def _blocks(issues: list, severity: Severity) -> bool:
+    """Return True if *issues* are non-empty and *severity* is ERROR."""
+    return bool(issues) and severity == Severity.ERROR
+
+
+def _warns(issues: list, severity: Severity) -> bool:
+    """Return True if *issues* are non-empty and *severity* is ERROR or WARNING."""
+    return bool(issues) and severity in (Severity.ERROR, Severity.WARNING)
+
+
+def cmd_baseline(args) -> None:
+    """Save or compare coupling metrics against a stored baseline.
+
+    Sub-commands:
+
+    * ``save``   — snapshot current metrics to ``.codeindex/baseline.json``.
+    * ``status`` — compare current metrics to the baseline and report regressions.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Path to the project root.
+            - ``baseline_cmd`` (str): ``"save"`` or ``"status"``.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
+    """
+    if args.baseline_cmd == "save":
+        _baseline_save(args)
+    elif args.baseline_cmd == "status":
+        _baseline_status(args)
+    else:
+        print("Uso: codeindex baseline <save|status>", file=sys.stderr)
+        sys.exit(1)
+
+
+def _baseline_save(args) -> None:
+    """Snapshot current metrics to ``.codeindex/baseline.json``."""
+    cfg = load_config(args.project)
+    store = _get_store(args.project)
+    modules = compute_metrics(store)
+    cycles = find_cycles(store)
+    gods = god_modules(store, percentile=cfg.metrics.thresholds.god_module_percentile)
+    store.close()
+
+    snapshot = {
+        "saved_at": datetime.datetime.now(datetime.UTC).isoformat(),
+        "modules": [
+            {
+                "file_path": m.file_path,
+                "fan_in": round(m.fan_in, 3),
+                "fan_out": round(m.fan_out, 3),
+                "instability": round(m.instability, 4),
+            }
+            for m in modules
+        ],
+        "cycles": cycles,
+        "god_modules": [m.file_path for m in gods],
+    }
+
+    path = _baseline_path(args.project)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+
+    if args.json:
+        _json_out({"status": "saved", "path": str(path), "modules": len(modules)})
+    else:
+        print(f"Baseline guardado: {path}  ({len(modules)} módulos)")
+
+
+def _baseline_status(args) -> None:
+    """Compare current metrics to the stored baseline and report regressions.
+
+    Each issue type (cycles, god_modules, instability) is filtered through the
+    severity configured in ``codeindex.toml``:
+
+    - ``error``   — contributes to exit code 1 (blocks CI).
+    - ``warning`` — printed but does not block CI (exit 0).
+    - ``info``    — silent; neither printed nor blocking.
+    """
+    path = _baseline_path(args.project)
+
+    if not path.exists():
+        if args.json:
+            _json_out({"error": "no baseline — ejecuta: codeindex baseline save"})
+        else:
+            print("Sin baseline. Ejecuta primero: codeindex baseline save")
+        return
+
+    baseline = json.loads(path.read_text(encoding="utf-8"))
+    baseline_cycles = [frozenset(c) for c in baseline.get("cycles", [])]
+    baseline_gods = set(baseline.get("god_modules", []))
+
+    cfg = load_config(args.project)
+    sev = cfg.metrics.severity
+    store = _get_store(args.project)
+    current_modules = compute_metrics(store)
+    current_cycles = find_cycles(store)
+    current_gods = god_modules(store, percentile=cfg.metrics.thresholds.god_module_percentile)
+    store.close()
+
+    # Detectar regresiones por tipo
+    new_cycles = [c for c in current_cycles if frozenset(c) not in baseline_cycles]
+    new_gods = [m.file_path for m in current_gods if m.file_path not in baseline_gods]
+
+    regressions: list[dict] = []
+    baseline_map = {m["file_path"]: m for m in baseline.get("modules", [])}
+    for m in current_modules:
+        prev = baseline_map.get(m.file_path)
+        if prev is None:
+            continue
+        if m.instability > prev["instability"] + _INSTABILITY_TOLERANCE:
+            regressions.append(
+                {
+                    "file_path": m.file_path,
+                    "metric": "instability",
+                    "before": prev["instability"],
+                    "after": round(m.instability, 4),
+                }
+            )
+
+    # Determinar si cada tipo de regresión bloquea el CI según su severidad
+    has_blocking = (
+        _blocks(new_cycles, sev.cycles)
+        or _blocks(new_gods, sev.god_modules)
+        or _blocks(regressions, sev.instability)
+    )
+
+    if args.json:
+        _json_out(
+            {
+                "regressions": regressions,
+                "new_cycles": new_cycles,
+                "new_god_modules": new_gods,
+            }
+        )
+        if has_blocking:
+            sys.exit(1)
+        return
+
+    has_any_warning = (
+        _warns(new_cycles, sev.cycles)
+        or _warns(new_gods, sev.god_modules)
+        or _warns(regressions, sev.instability)
+    )
+
+    reporter = getattr(args, "reporter", None)
+
+    if not has_any_warning:
+        print("✓  Sin cambios respecto al baseline")
+        return
+
+    if reporter == "github":
+        _emit_github_annotations(new_cycles, new_gods, regressions, sev)
+    elif reporter == "gitlab":
+        _emit_gitlab_report(new_cycles, new_gods, regressions, sev)
+    else:
+        if _warns(new_cycles, sev.cycles):
+            label = "⛔" if sev.cycles == Severity.ERROR else "⚠"
+            print(f"\n{label}  Nuevos ciclos ({len(new_cycles)}):")
+            for cycle in new_cycles:
+                print("   " + " → ".join(cycle) + " → ...")
+
+        if _warns(new_gods, sev.god_modules):
+            label = "⛔" if sev.god_modules == Severity.ERROR else "⚠"
+            print(f"\n{label}  Nuevos god modules ({len(new_gods)}):")
+            for path_str in new_gods:
+                print(f"   {path_str}")
+
+        if _warns(regressions, sev.instability):
+            label = "⛔" if sev.instability == Severity.ERROR else "⚠"
+            print(f"\n{label}  Regresiones de inestabilidad ({len(regressions)}):")
+            for r in regressions:
+                print(f"   {r['file_path']}  I: {r['before']:.3f} → {r['after']:.3f}")
+
+    if has_blocking:
+        sys.exit(1)
+
+
+def _annotation_level(severity: Severity) -> str:
+    """Map a :class:`Severity` to its GitHub Annotation level string."""
+    return "error" if severity == Severity.ERROR else "warning"
+
+
+def _safe_annotation_path(path: str) -> str:
+    """Sanitize a file path for use in a GitHub Actions annotation.
+
+    GitHub's ``::level file=<path>,...::`` format uses ``::`` as a delimiter.
+    If a path contains ``::`` (e.g. a CodeIndex qualified_name), the annotation
+    would be malformed.  Replace any occurrence with ``/`` to keep it readable.
+
+    Args:
+        path: Raw file path or qualified_name string.
+
+    Returns:
+        Path safe to embed inside a GitHub annotation parameter value.
+    """
+    return path.replace("::", "/")
+
+
+def _emit_github_annotations(
+    new_cycles: list,
+    new_gods: list,
+    regressions: list,
+    sev,
+) -> None:
+    """Print GitHub Actions workflow commands for each regression.
+
+    Format: ``::level file=<path>,line=1::<message>``
+
+    Args:
+        new_cycles: List of cycle node lists.
+        new_gods: List of god module file paths.
+        regressions: List of instability regression dicts.
+        sev: :class:`~codeindex.config.MetricsSeverity` instance.
+    """
+    if _warns(new_cycles, sev.cycles):
+        level = _annotation_level(sev.cycles)
+        for cycle in new_cycles:
+            safe_path = _safe_annotation_path(cycle[0])
+            msg = f"Ciclo de importación: {' → '.join(cycle)}"
+            print(f"::{level} file={safe_path},line=1::{msg}")
+
+    if _warns(new_gods, sev.god_modules):
+        level = _annotation_level(sev.god_modules)
+        for path_str in new_gods:
+            safe_path = _safe_annotation_path(path_str)
+            print(
+                f"::{level} file={safe_path},line=1::God module: Ca excede el percentil configurado"
+            )
+
+    if _warns(regressions, sev.instability):
+        level = _annotation_level(sev.instability)
+        for r in regressions:
+            safe_path = _safe_annotation_path(r["file_path"])
+            msg = f"Inestabilidad: {r['before']:.3f} → {r['after']:.3f}"
+            print(f"::{level} file={safe_path},line=1::{msg}")
+
+
+def _emit_gitlab_report(
+    new_cycles: list,
+    new_gods: list,
+    regressions: list,
+    sev,
+) -> None:
+    """Print a GitLab CI–friendly report for each regression.
+
+    Uses GitLab's ``section_start``/``section_end`` markers for collapsible
+    log sections when issues are found.
+
+    Args:
+        new_cycles: List of cycle node lists.
+        new_gods: List of god module file paths.
+        regressions: List of instability regression dicts.
+        sev: :class:`~codeindex.config.MetricsSeverity` instance.
+    """
+    ts = int(time.time())
+
+    if _warns(new_cycles, sev.cycles):
+        label = "ERROR" if sev.cycles == Severity.ERROR else "WARNING"
+        print(
+            f"\x1b[0Ksection_start:{ts}:cycles\r\x1b[0K[{label}] Nuevos ciclos ({len(new_cycles)})"
+        )
+        for cycle in new_cycles:
+            print("  " + " → ".join(cycle) + " → ...")
+        print(f"\x1b[0Ksection_end:{ts}:cycles\r\x1b[0K")
+
+    if _warns(new_gods, sev.god_modules):
+        label = "ERROR" if sev.god_modules == Severity.ERROR else "WARNING"
+        print(
+            f"\x1b[0Ksection_start:{ts}:god_modules\r\x1b[0K"
+            f"[{label}] Nuevos god modules ({len(new_gods)})"
+        )
+        for path_str in new_gods:
+            print(f"  {path_str}")
+        print(f"\x1b[0Ksection_end:{ts}:god_modules\r\x1b[0K")
+
+    if _warns(regressions, sev.instability):
+        label = "ERROR" if sev.instability == Severity.ERROR else "WARNING"
+        print(
+            f"\x1b[0Ksection_start:{ts}:instability\r\x1b[0K"
+            f"[{label}] Regresiones de inestabilidad ({len(regressions)})"
+        )
+        for r in regressions:
+            print(f"  {r['file_path']}  I: {r['before']:.3f} → {r['after']:.3f}")
+        print(f"\x1b[0Ksection_end:{ts}:instability\r\x1b[0K")
+
+
+# ──────────────────────────────────────────────
+# Métricas de acoplamiento
+# ──────────────────────────────────────────────
+
+
+def cmd_metrics(args) -> None:
+    """Print coupling metrics (Ca, Ce, I, cycles, god modules) for every module.
+
+    Reads ``codeindex.toml`` from the project root to apply configured
+    thresholds.  With ``--json`` emits a single JSON object with keys
+    ``modules``, ``cycles``, and ``god_modules``.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Path to the project root.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
+            - ``sort`` (str): Column to sort by (``fan_in``, ``fan_out``,
+              ``instability``). Default: ``fan_in``.
+            - ``limit`` (int | None): Max rows to show. ``None`` = all.
+    """
+    cfg = load_config(args.project)
+    store = _get_store(args.project)
+    modules = compute_metrics(store)
+    cycles = find_cycles(store)
+    gods = god_modules(store, percentile=cfg.metrics.thresholds.god_module_percentile)
+    store.close()
+
+    god_paths = {m.file_path for m in gods}
+
+    if args.json:
+        _json_out(
+            {
+                "modules": [
+                    {
+                        "file_path": m.file_path,
+                        "fan_in": round(m.fan_in, 2),
+                        "fan_out": round(m.fan_out, 2),
+                        "instability": round(m.instability, 3),
+                        "god_module": m.file_path in god_paths,
+                    }
+                    for m in modules
+                ],
+                "cycles": cycles,
+                "god_modules": [m.file_path for m in gods],
+            }
+        )
+        return
+
+    if not modules:
+        print("Sin datos — ejecuta primero: codeindex index <directorio>")
+        return
+
+    # Ordenar
+    sort_key = getattr(args, "sort", "fan_in")
+    modules_sorted = sorted(modules, key=lambda m: getattr(m, sort_key, 0), reverse=True)
+    if args.limit:
+        modules_sorted = modules_sorted[: args.limit]
+
+    # Cabecera
+    col_w = max((len(m.file_path) for m in modules_sorted), default=30)
+    col_w = max(col_w, 30)
+    header = f"{'Módulo':<{col_w}}  {'Ca':>6}  {'Ce':>6}  {'I':>6}  {'Flags'}"
+    print()
+    print(header)
+    print("─" * len(header))
+
+    instability_warn = cfg.metrics.thresholds.instability_threshold
+    for m in modules_sorted:
+        flags = ""
+        if m.file_path in god_paths:
+            flags += " ● god"
+        if m.fan_in > 0 and m.instability >= instability_warn:
+            flags += " ⚠ inestable"
+        print(
+            f"{m.file_path:<{col_w}}  {m.fan_in:>6.1f}  {m.fan_out:>6.1f}"
+            f"  {m.instability:>6.3f}  {flags}"
+        )
+
+    print("─" * len(header))
+    print(f"Total: {len(modules)} módulos")
+
+    # Ciclos
+    if cycles:
+        print(f"\n⚠  Ciclos detectados ({len(cycles)}):")
+        for cycle in cycles:
+            print("   " + " → ".join(cycle) + " → ...")
+    else:
+        print("\n✓  Sin ciclos")
+
+    # God modules
+    if gods:
+        print(f"\n● God modules (Ca > p{int(cfg.metrics.thresholds.god_module_percentile)}):")
+        for m in gods:
+            print(f"   {m.file_path}  Ca={m.fan_in:.1f}")
+
+
 # Entry point
 # ──────────────────────────────────────────────
 
@@ -734,6 +1135,19 @@ def main() -> None:
     # status
     sub.add_parser("status", help="Estadísticas del índice")
 
+    # baseline
+    p_baseline = sub.add_parser("baseline", help="Gestión del baseline de métricas")
+    p_baseline_sub = p_baseline.add_subparsers(dest="baseline_cmd")
+    p_baseline_sub.add_parser("save", help="Guardar snapshot de métricas como baseline")
+    p_status = p_baseline_sub.add_parser(
+        "status", help="Comparar métricas actuales con el baseline"
+    )
+    p_status.add_argument(
+        "--reporter",
+        choices=["github", "gitlab"],
+        default=None,
+        help="Formato CI: github (Annotations) o gitlab (section markers)",
+    )
     # semantic (congelado — no forma parte del objetivo CI/PR)
     p_sem = sub.add_parser(
         "semantic",
@@ -746,6 +1160,24 @@ def main() -> None:
         type=int,
         default=10,
         help="Número máximo de resultados (default: 10)",
+    )
+
+    # metrics
+    p_metrics = sub.add_parser(
+        "metrics", help="Métricas de acoplamiento (Ca, Ce, I, ciclos, god modules)"
+    )
+    p_metrics.add_argument(
+        "--sort",
+        choices=["fan_in", "fan_out", "instability"],
+        default="fan_in",
+        help="Columna de ordenación (default: fan_in)",
+    )
+    p_metrics.add_argument(
+        "--limit",
+        "-l",
+        type=int,
+        default=None,
+        help="Número máximo de filas a mostrar",
     )
 
     # callers
@@ -807,6 +1239,8 @@ def main() -> None:
         "impact": cmd_impact,
         "imports": cmd_imports,
         "status": cmd_status,
+        "metrics": cmd_metrics,
+        "baseline": cmd_baseline,
         "callers": cmd_callers,
         "untested": cmd_untested,
         "install-skill": cmd_install_skill,

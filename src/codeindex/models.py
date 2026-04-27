@@ -15,14 +15,14 @@ El qualified_name es la "dirección completa" de cada símbolo:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 # ──────────────────────────────────────────────
 # Tipos de nodos y aristas
 # ──────────────────────────────────────────────
 
 
-class NodeKind(str, Enum):
+class NodeKind(StrEnum):
     """Tipos de nodos en el grafo de código."""
 
     FILE = "File"
@@ -31,7 +31,7 @@ class NodeKind(str, Enum):
     METHOD = "Method"
 
 
-class EdgeKind(str, Enum):
+class EdgeKind(StrEnum):
     """Tipos de relaciones entre nodos."""
 
     CONTAINS = "CONTAINS"  # archivo contiene clase/función
@@ -41,6 +41,7 @@ class EdgeKind(str, Enum):
     INHERITS = "INHERITS"  # clase hereda de otra
     DEPENDS_ON = "DEPENDS_ON"  # dependencia genérica
     COVERS = "COVERS"  # función/método de test ejerce a símbolo de producción
+    USES_TYPE = "USES_TYPE"  # función/método referencia un tipo en su firma
 
 
 # ──────────────────────────────────────────────

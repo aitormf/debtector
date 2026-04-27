@@ -1,40 +1,54 @@
 # CodeIndex
 
-Grafo de código sobre SQLite que extrae la estructura de un repositorio (clases, funciones, métodos, imports, llamadas) y la almacena como un grafo consulable. Diseñado para reducir el consumo de tokens de IA: en lugar de leer ficheros fuente completos, el modelo consulta el grafo.
+**Guardarraíl de acoplamiento para CI/PR.** CodeIndex indexa un repositorio de código como un grafo en SQLite, calcula métricas de acoplamiento estructural (Ca, Ce, inestabilidad, ciclos, god modules) y bloquea el merge cuando las métricas empeoran.
 
+ICP: dev/tech lead que usa agentes de código. Los agentes generan acoplamiento oculto a una velocidad que ningún humano alcanza; CodeIndex actúa como guardarraíl arquitectónico en el pipeline.
+
+```bash
+# Indexar, guardar baseline y comprobar regresiones (típico en CI)
+codeindex index ./src
+codeindex baseline save
+codeindex baseline status   # exit 1 si hay nuevos ciclos o el acoplamiento empeora
 ```
-codeindex --json search "AuthService"
-codeindex --json impact src/auth.py --depth 3
-codeindex --json callers "src/auth.py::AuthService.validate"
-```
-
-## ¿Cuándo usar CodeIndex?
-
-### Es especialmente útil cuando…
-
-- **El repositorio es grande.** Leer decenas de archivos enteros para responder una pregunta estructural es caro en tokens. El grafo responde lo mismo con una fracción.
-- **Las preguntas son de navegación.** "¿Quién llama a esta función?", "¿qué hereda de esta clase?", "¿qué importa este módulo?" son queries baratas sobre el grafo pero costosas leyendo código.
-- **Necesitas visión global.** Entender la arquitectura de un servicio o el árbol de dependencias de un módulo es inmediato con el grafo; imposible sin él sin leer muchos archivos.
-- **El código cambia con frecuencia.** La detección incremental por SHA-256 hace que re-indexar sea rápido: solo reprocesa los archivos modificados.
-
-### No aporta tanto cuando…
-
-- **El repo es muy pequeño.** Si caben tres archivos en un contexto, el overhead de mantener el índice no se justifica.
-- **La pregunta es semántica o lógica.** "¿Esta función hace X correctamente?" o "¿hay un bug aquí?" requiere leer el cuerpo del código, no el grafo.
-- **El lenguaje no está soportado.** Fuera de Python, JS y TS, el índice solo genera nodos `File` sin estructura interna.
-- **El código es muy dinámico.** Metaprogramación, `getattr`, decoradores que reescriben funciones, etc. crean relaciones en runtime que el parser estático no puede capturar.
 
 ---
 
 ## Instalación
 
+CodeIndex es una **herramienta de línea de comandos**, no una librería. Instálala globalmente para usarla en cualquier proyecto.
+
+### Con uv (recomendado)
+
 ```bash
-pip install codeindex
-# o con uv
-uv add codeindex
+uv tool install /ruta/a/codeIndex
 ```
 
-**Requisitos:** Python ≥ 3.10
+`uv tool install` no soporta modo editable. Para reflejar cambios en el código, reinstala con `--force` (es rápido):
+
+```bash
+uv tool install /ruta/a/codeIndex --force
+```
+
+### Con pip
+
+```bash
+# Instalación normal
+pip install /ruta/a/codeIndex
+
+# Editable — los cambios en el código se reflejan inmediatamente sin reinstalar
+pip install -e /ruta/a/codeIndex
+```
+
+Verificar que está disponible globalmente:
+
+```bash
+codeindex --help
+which codeindex
+```
+
+**Requisitos:** Python ≥ 3.12
+
+---
 
 ## Inicio rápido
 
@@ -42,55 +56,142 @@ uv add codeindex
 # 1. Indexar el proyecto (incremental: solo reparsea ficheros cambiados)
 codeindex index ./src
 
-# 2. Consultar el estado del grafo
-codeindex status
+# 2. Ver métricas de acoplamiento
+codeindex metrics
 
-# 3. Buscar un símbolo
-codeindex search "UserService"
+# 3. Guardar baseline (commitear .codeindex/baseline.json al repo)
+codeindex baseline save
+git add .codeindex/baseline.json && git commit -m "chore: save metrics baseline"
 
-# 4. Ver todos los símbolos de un fichero
-codeindex summary src/auth/service.py
-
-# 5. Saber qué ficheros se ven afectados si cambias uno
-codeindex impact src/auth/service.py --depth 3
+# 4. En CI: comprobar que las métricas no empeoran
+codeindex baseline status
 ```
 
-El índice se guarda en `.codeindex/index.db` (SQLite). Los logs van a `.codeindex/codeindex.log`.
+El índice vive en `.codeindex/index.db`. El baseline en `.codeindex/baseline.json`. Los logs en `.codeindex/codeindex.log`.
+
+---
 
 ## Comandos
+
+### Indexación
 
 | Comando | Descripción |
 |---------|-------------|
 | `index <dir>` | Indexa el directorio (incremental por hash SHA-256) |
-| `status` | Estadísticas del grafo (ficheros, nodos, aristas, embeddings por tipo) |
+| `status` | Estadísticas del grafo (ficheros, nodos, aristas por tipo) |
+
+### Análisis de código
+
+| Comando | Descripción |
+|---------|-------------|
 | `search <query>` | Busca símbolos por nombre (FTS5 + BM25). `--kind Class\|Function\|Method` para filtrar |
-| `semantic <query>` | Búsqueda semántica por significado (sqlite-vec KNN). `--limit N` |
 | `summary <file>` | Todos los símbolos e imports de un fichero |
 | `impact <files...>` | Qué ficheros y nodos se ven afectados por un cambio. `--depth N` |
 | `imports <module>` | Qué ficheros importan un módulo o librería |
 | `callers <qname>` | Qué funciones/métodos llaman a un símbolo concreto |
-| `untested [path]` | Lista símbolos de producción sin ningún test que los cubra (arista `COVERS`) |
-| `install-skill` | Instala los skills de Claude Code (ver más abajo) |
-| `install-hook` | Instala un hook git pre-commit para auto-indexado |
+| `untested [path]` | Símbolos de producción sin ningún test que los cubra |
+
+### Métricas de acoplamiento
+
+| Comando | Descripción |
+|---------|-------------|
+| `metrics` | Tabla de Ca, Ce, I por módulo + ciclos + god modules. `--sort fan_in\|fan_out\|instability`, `--limit N`, `--json` |
+| `baseline save` | Guarda snapshot de métricas en `.codeindex/baseline.json` |
+| `baseline status` | Compara métricas actuales con el baseline. Exit 1 si hay regresiones (configurable) |
+| `baseline status --reporter github` | Igual pero emite GitHub Actions Annotations (`::error/::warning`) |
+| `baseline status --reporter gitlab` | Igual pero emite GitLab CI section markers |
+
+### Configuración y hooks
+
+| Comando | Descripción |
+|---------|-------------|
+| `install-hook` | Hook git pre-commit para auto-indexado |
+| `install-skill` | Skills de Claude Code para uso del grafo en contexto IA |
 
 ### Flag global `--json`
 
-Todos los comandos admiten `--json` para emitir JSON compacto en stdout, pensado para consumo por IA:
+Todos los comandos admiten `--json` para emitir JSON compacto en stdout:
 
 ```bash
-codeindex --json search "GraphStore"
-codeindex --json impact src/models.py --depth 2
-codeindex --json status
+codeindex --json metrics
+codeindex --json baseline status
+codeindex --json search "AuthService"
 ```
 
-### `--project`
+---
 
-Por defecto el índice vive en `./.codeindex/`. Usa `--project /ruta/repo` para apuntar a otro directorio:
+## Métricas disponibles
 
-```bash
-codeindex --project /otro/repo index /otro/repo/src
-codeindex --project /otro/repo --json search "Service"
+### Por módulo (`codeindex metrics`)
+
+| Métrica | Descripción |
+|---------|-------------|
+| **Ca (fan-in)** | Cuántos módulos dependen de éste. Peso 1.0 por `IMPORTS_FROM` y `USES_TYPE` |
+| **Ce (fan-out)** | Cuántos módulos importa éste. Mismo esquema de pesos |
+| **I (inestabilidad)** | `Ce / (Ca + Ce)`. 0 = muy estable, 1 = muy inestable |
+
+Ejemplo de salida:
+
 ```
+Módulo                      Ca      Ce       I    Flags
+──────────────────────────────────────────────────────
+src/graph_store.py        12.0     3.0   0.200
+src/cli.py                 0.0    14.5   1.000  ⚠ inestable
+src/models.py              9.5     0.0   0.000  ● god
+──────────────────────────────────────────────────────
+Total: 8 módulos
+
+✓  Sin ciclos
+● God modules (Ca > p90): src/models.py
+```
+
+### Ciclos
+
+Detección de ciclos de importación con el algoritmo de Tarjan (SCCs). Considera aristas `IMPORTS_FROM` y `CALLS`.
+
+### God modules
+
+Módulos cuyo fan-in supera el percentil 90 del proyecto. Umbral relativo, no absoluto.
+
+### Herencia (`codeindex metrics --json`)
+
+Profundidad de jerarquía de herencia y número de hijos directos por clase.
+
+---
+
+## Ratcheting en CI
+
+El flujo típico en CI es:
+
+```yaml
+# .github/workflows/ci.yml
+- name: Check coupling ratchet
+  run: |
+    codeindex index ./src
+    codeindex baseline status --reporter github
+```
+
+- Si no existe `baseline.json` → exit 0 (modo silencioso, no bloquea)
+- Si existe y las métricas mejoran o son iguales → exit 0
+- Si hay nuevos ciclos, nuevos god modules o la inestabilidad empeora → exit 1
+
+### Configuración de severidad (`codeindex.toml`)
+
+```toml
+[metrics.thresholds]
+god_module_percentile = 90    # percentil para considerar god module
+instability_threshold = 0.8   # I >= umbral → aviso en tabla
+
+[metrics.severity]
+cycles      = "error"    # bloquea CI
+god_modules = "warning"  # avisa pero no bloquea
+instability = "warning"  # avisa pero no bloquea
+inheritance = "info"     # solo informa
+```
+
+Severidades: `error` (exit 1) · `warning` (imprime, exit 0) · `info` (silencioso, exit 0).
+
+---
 
 ## Lenguajes soportados
 
@@ -100,135 +201,108 @@ codeindex --project /otro/repo --json search "Service"
 | JavaScript | `.js`, `.jsx` |
 | TypeScript | `.ts`, `.tsx` |
 
-## Grafo generado
+---
 
-### Tipos de nodos
-
-| Tipo | Descripción |
-|------|-------------|
-| `File` | Fichero fuente |
-| `Class` | Clase |
-| `Function` | Función top-level o arrow function |
-| `Method` | Método de clase |
-
-### Tipos de aristas
+## Tipos de aristas del grafo
 
 | Tipo | Descripción |
 |------|-------------|
 | `CONTAINS` | Fichero → clase/función |
 | `HAS_METHOD` | Clase → método |
-| `IMPORTS_FROM` | Fichero → módulo importado |
+| `IMPORTS_FROM` | Fichero → módulo importado (peso 1.0 en Ca/Ce) |
 | `INHERITS` | Clase → clase base |
-| `CALLS` | Función/método → función/método llamado (resolución intra-fichero) |
-| `COVERS` | Función/método de test → símbolo de producción que ejercita |
+| `CALLS` | Función/método → función/método llamado |
+| `COVERS` | Función de test → símbolo de producción que ejercita |
+| `USES_TYPE` | Función → tipo referenciado en type hints (peso 1.0 en Ca/Ce) |
 
-### Qualified names
-
-Cada símbolo tiene un `qualified_name` único:
-
-```
-src/auth/service.py                        # fichero
-src/auth/service.py::AuthService           # clase
-src/auth/service.py::AuthService.validate  # método
-src/auth/service.py::create_app            # función
-```
-
-## Auto-indexado con git hook
-
-Instala un hook pre-commit que re-indexa automáticamente antes de cada commit:
-
-```bash
-codeindex install-hook
-```
-
-El hook es incremental (solo reparsea ficheros con hash distinto), silencioso, y nunca bloquea un commit. Si quieres incluir el índice en cada commit:
-
-```bash
-codeindex install-hook --add-to-stage
-```
-
-## Integración con Claude Code (skills)
-
-Instala los skills para que Claude Code sepa cómo usar CodeIndex:
-
-```bash
-# Global (todos los proyectos)
-codeindex install-skill --global
-
-# Solo este proyecto
-codeindex install-skill
-```
-
-Esto copia dos skills a `.claude/skills/` (o `~/.claude/skills/` con `--global`):
-
-- **`codeindex`** — referencia completa de comandos y flujos típicos
-- **`codeindex-bootstrap`** — guía de primera configuración en un repo nuevo
-
-Con los skills instalados, Claude Code reconoce frases como *"analiza el impacto de cambiar AuthService"* o *"¿quién importa flask?"* y llama automáticamente al CLI con `--json`.
+---
 
 ## Directorio `.codeindex/`
 
 ```
 .codeindex/
-  index.db        # grafo SQLite (commiteable si quieres compartirlo)
+  index.db        # grafo SQLite (commiteable si se quiere compartir)
+  baseline.json   # snapshot de métricas (committear al repo)
   codeindex.log   # logs estructurados (ignorado por git)
-  .gitignore      # generado automáticamente: ignora todo excepto *.db y .gitignore
+  .gitignore      # generado automáticamente
 ```
+
+El `.gitignore` de `.codeindex/` está gestionado por CodeIndex: ignora todo excepto `baseline.json` y el propio `.gitignore`.
+
+---
+
+## Auto-indexado con git hook
+
+```bash
+codeindex install-hook              # re-indexa en cada pre-commit
+codeindex install-hook --add-to-stage  # también hace git add del index.db
+```
+
+El hook es incremental (solo reparsea ficheros con hash distinto) y nunca bloquea un commit.
+
+---
+
+## Integración con Claude Code
+
+```bash
+codeindex install-skill --global   # instala en ~/.claude/skills/
+codeindex install-skill            # instala en .claude/skills/ del proyecto
+```
+
+Con los skills instalados, Claude Code reconoce frases como *"analiza el impacto de cambiar AuthService"* o *"¿quién importa flask?"* y llama automáticamente al CLI con `--json`.
+
+---
 
 ## Desarrollo
 
 ```bash
-# Clonar e instalar dependencias
 git clone https://github.com/aitormf/codeIndex
 cd codeIndex
-uv sync --extra dev
+uv sync --dev
 
-# Tests
-uv run pytest
+uv run pytest                     # tests
+uv run ruff check .               # linter
+uv run ruff format .              # formatter
+uv run bandit -r src/             # seguridad
 
-# Linter + formatter
-uv run ruff check .
-uv run ruff format .
-
-# Seguridad
-uv run bandit -r src/
-
-# Instalar pre-commit hooks
-uv run pre-commit install                          # stage pre-commit
-uv run pre-commit install --hook-type commit-msg   # stage commit-msg
-uv run pre-commit install --hook-type pre-push     # stage pre-push
+# Instalar hooks pre-commit (tres stages necesarios)
+uv run pre-commit install
+uv run pre-commit install --hook-type commit-msg
+uv run pre-commit install --hook-type pre-push
 ```
 
-Los tres comandos son necesarios porque el proyecto tiene hooks en tres stages distintos:
-
-| Stage | Hooks |
-|---|---|
-| `pre-commit` | ruff, ruff-format, bandit, trailing-whitespace… |
-| `commit-msg` | commitizen (formato Conventional Commits), bloqueo de atribuciones a IA |
-| `pre-push` | pytest, ruff-check |
-
-> **Nota:** `pre-commit install` solo instala el stage `pre-commit`. Sin los otros dos comandos los hooks de `commit-msg` y `pre-push` no se ejecutan aunque estén definidos en `.pre-commit-config.yaml`.
+---
 
 ## Logging
 
 ```bash
-# Logs en formato legible (por defecto)
-CODEINDEX_LOG_JSON=false codeindex index ./src
-
-# Logs en JSON (para sistemas de observabilidad)
-CODEINDEX_LOG_JSON=true codeindex index ./src
+CODEINDEX_LOG_JSON=false codeindex index ./src   # coloreado (default)
+CODEINDEX_LOG_JSON=true  codeindex index ./src   # JSON lines (prod/observabilidad)
 ```
 
 Los logs siempre van a `.codeindex/codeindex.log`, nunca a stdout.
 
+---
+
 ## Roadmap
 
-- [x] FTS5 — búsqueda léxica/ranked sin deps adicionales
-- [x] Búsqueda semántica — `sqlite-vec` + `fastembed` (ver [ADR-001](docs/decisions/001-semantic-search.md))
-- [x] Ignorar rutas — soporte para `.codeindexignore`
-- [ ] Exportación del grafo — DOT/JSON para visualización
+- [x] FTS5 — búsqueda léxica/ranked
+- [x] CALLS — aristas de llamadas intra-fichero
+- [x] COVERS + `codeindex untested` — cobertura de tests
+- [x] `.codeindexignore` — rutas adicionales ignoradas
+- [x] **Ca, Ce, inestabilidad** — métricas de acoplamiento por módulo
+- [x] **Ciclos** — detección con algoritmo de Tarjan
+- [x] **God modules** — outliers de fan-in (percentil 90)
+- [x] **Herencia** — profundidad y número de hijos
+- [x] **USES_TYPE** — acoplamiento por type hints (peso 1.0)
+- [x] **`codeindex metrics`** — output tabular con flags
+- [x] **Baseline + ratcheting** — CI solo falla si empeoran las métricas
+- [x] **Severidad configurable** — `codeindex.toml` error/warning/info por tipo
+- [x] **CI reporter** — GitHub Annotations + GitLab CI section markers
+- [ ] Git history — churn por módulo, hotspot score, temporal coupling
+- [ ] Graph diff — delta de métricas entre rama base y PR
+- [ ] GitHub Action — comentario automático en PRs
 - [ ] Más lenguajes — Go, Rust, Java
-- [ ] Schema migrations — versionado del esquema SQLite
 
 ## Licencia
 

@@ -17,9 +17,10 @@ src/codeindex/
 ├── models.py         # Tipos de datos: NodeInfo, EdgeInfo, GraphNode, GraphEdge, enums
 ├── graph_store.py    # Persistencia: SQLite + NetworkX cache en memoria
 ├── indexer.py        # Orquestación: recorre archivos, detecta cambios, llama a parsers
-├── metrics.py        # [Fase 1 — TODO] Ca, Ce, inestabilidad, ciclos, god modules
-├── cli.py            # CLI: index, search, summary, impact, imports, callers, untested,
-│                     #       status, metrics (TODO), baseline (TODO)
+├── metrics.py        # Ca, Ce, inestabilidad, ciclos, god modules, herencia
+├── config.py         # Carga y valida codeindex.toml (umbrales y severidad)
+├── cli.py            # CLI: index, search, summary, impact, imports, callers,
+│                     #       untested, status, metrics, baseline
 ├── utils.py          # Utilidades compartidas: is_test_file()
 ├── logging.py        # Configuración structlog (dev coloreado / prod JSON)
 ├── embedder.py       # [CONGELADO] Embeddings semánticos — no desarrollar más
@@ -37,7 +38,8 @@ src/codeindex/
 | `models.py` | Define los tipos de entrada (`NodeInfo`, `EdgeInfo`) y salida (`GraphNode`, `GraphEdge`) sin dependencias internas |
 | `graph_store.py` | Única fuente de verdad. Escribe en SQLite, mantiene un DiGraph de NetworkX como cache para traversals |
 | `indexer.py` | Recorre el sistema de archivos, detecta cambios por SHA-256, delega el parseo y llama a `GraphStore.store_file()`. Genera aristas COVERS tras cada indexación (no-fatal) |
-| `metrics.py` | **[Fase 1 — pendiente]** Computa métricas de acoplamiento sobre el grafo: Ca, Ce, inestabilidad, ciclos, god modules |
+| `metrics.py` | Computa métricas de acoplamiento sobre el grafo: Ca, Ce, inestabilidad, ciclos (Tarjan), god modules (p90), profundidad de herencia |
+| `config.py` | Lee `codeindex.toml` con `tomllib` (stdlib). Expone `CodeIndexConfig` con umbrales y severidades configurables |
 | `embedder.py` | **[Congelado]** Convierte nodos a texto y genera vectores float32 con fastembed. No desarrollar más |
 | `utils.py` | Utilidades compartidas sin dependencias internas: `is_test_file()` |
 | `parser/*` | Transforman un archivo fuente en `(list[NodeInfo], list[EdgeInfo])` usando Tree-sitter. Sin acceso a la DB |
@@ -57,7 +59,7 @@ Indexer — detecta cambio por SHA-256
     │
     ▼
 Parser (Tree-sitter) ──→ (list[NodeInfo], list[EdgeInfo])
-    │
+    │                         incl. USES_TYPE desde type hints
     ▼
 GraphStore.store_file()
     ├── SQLite  (persistencia)
@@ -69,11 +71,11 @@ GraphStore.store_file()
 ```
 CLI / CI pipeline
     │
-    ├── Búsqueda léxica      → SQLite FTS5              (codeindex search)
-    ├── Lookup directo       → SQLite SQL                (summary, callers, imports)
-    ├── Traversal de impacto → NetworkX                  (codeindex impact)
-    ├── Métricas acoplamiento→ metrics.py sobre el grafo (codeindex metrics) [Fase 1]
-    └── Baseline / ratcheting→ baseline.json + delta     (codeindex baseline) [Fase 1]
+    ├── Búsqueda léxica       → SQLite FTS5              (codeindex search)
+    ├── Lookup directo        → SQLite SQL                (summary, callers, imports)
+    ├── Traversal de impacto  → NetworkX                  (codeindex impact)
+    ├── Métricas acoplamiento → metrics.py sobre el grafo (codeindex metrics)
+    └── Baseline / ratcheting → baseline.json + delta     (codeindex baseline)
 ```
 
 > La búsqueda semántica (`sqlite-vec` KNN) está congelada. Ver sección [Semántica congelada](#semántica-congelada).
@@ -148,25 +150,20 @@ Ranking BM25 con camelCase splitting: `"UserService"` → tokens `user`, `servic
 
 ## Persistencia del baseline
 
-`.codeindex/baseline.json` — snapshot de métricas de acoplamiento en el momento de ejecutar `codeindex baseline save`. Se commitea al repo; es la referencia compartida para el ratcheting en CI.
+`.codeindex/baseline.json` — snapshot de métricas de acoplamiento generado con `codeindex baseline save`. Se commitea al repo; es la referencia compartida para el ratcheting en CI.
 
 ```json
 {
-  "version": 1,
-  "created_at": "2026-04-24T10:00:00Z",
-  "git_commit": "abc123def",
-  "metrics": {
-    "cycles": [["src/auth.py", "src/user.py", "src/auth.py"]],
-    "modules": {
-      "src/auth.py": { "fan_in": 8, "fan_out": 3, "instability": 0.27 }
-    },
-    "god_modules": ["src/models.py"],
-    "summary": { "total_cycles": 1, "mean_instability": 0.42 }
-  }
+  "saved_at": "2026-04-24T10:00:00+00:00",
+  "modules": [
+    { "file_path": "src/auth.py", "fan_in": 8.0, "fan_out": 3.0, "instability": 0.2727 }
+  ],
+  "cycles": [["src/auth.py", "src/user.py"]],
+  "god_modules": ["src/models.py"]
 }
 ```
 
-El `.codeindex/.gitignore` es gestionado por codeIndex (siempre sobreescrito): ignora `*.db` y `*.log`, trackea `baseline.json` y el propio `.gitignore`.
+El `.codeindex/.gitignore` es gestionado por codeIndex (siempre sobreescrito): ignora todo excepto `baseline.json` y el propio `.gitignore`.
 
 ---
 
@@ -190,8 +187,8 @@ El `.codeindex/.gitignore` es gestionado por codeIndex (siempre sobreescrito): i
 | `IMPORTS_FROM` | Archivo importa módulo o símbolo | `app.py` → `flask` |
 | `INHERITS` | Clase hereda de otra | `app.py::AdminService` → `UserService` |
 | `CALLS` | Función/método llama a otro símbolo | `app.py::create_app` → `app.py::UserService.__init__` |
-| `COVERS` | Test ejerce a símbolo de producción. Derivado automáticamente de CALLS no resueltos en archivos test | `tests/test_auth.py::test_login` → `src/auth.py::login` |
-| `USES_TYPE` | **[Fase 1 — pendiente]** Función referencia un tipo en sus type hints | `app.py::get_user` → `User` |
+| `COVERS` | Test ejerce a símbolo de producción | `tests/test_auth.py::test_login` → `src/auth.py::login` |
+| `USES_TYPE` | Función referencia un tipo en sus type hints (peso 1.0 en Ca/Ce) | `app.py::get_user` → `User` |
 | `DEPENDS_ON` | Dependencia genérica (uso futuro) | — |
 
 ---
@@ -206,6 +203,77 @@ src/auth/service.py::AuthService           → Class
 src/auth/service.py::AuthService.validate  → Method
 src/auth/service.py::create_app            → Function
 ```
+
+---
+
+## Métricas de acoplamiento (Fase 1)
+
+### Fan-in / Fan-out / Inestabilidad
+
+| Métrica | Definición | Rango |
+|---|---|---|
+| Fan-in (Ca) | Suma ponderada de aristas IMPORTS_FROM + USES_TYPE entrantes | ≥ 0 |
+| Fan-out (Ce) | Suma ponderada de aristas IMPORTS_FROM + USES_TYPE salientes | ≥ 0 |
+| Inestabilidad (I) | Ce / (Ca + Ce) | [0, 1] |
+
+Pesos: `IMPORTS_FROM` = 1.0, `USES_TYPE` = 1.0. Ambos pesos son constantes públicas en `metrics.py` (`IMPORTS_FROM_WEIGHT`, `USES_TYPE_WEIGHT`) para facilitar ajustes en experimentos.
+
+### Ciclos
+
+Detección mediante el **algoritmo de Tarjan iterativo** (evita RecursionError en cadenas largas) sobre aristas `IMPORTS_FROM` y `CALLS`. Devuelve SCCs de tamaño > 1.
+
+### God modules
+
+Outlier estadístico en Ca: módulos cuyo fan-in supera el **percentil 90** del proyecto (umbral relativo, no absoluto). Configurable en `codeindex.toml`.
+
+### Herencia
+
+Profundidad (camino más largo desde la raíz) y número de hijos directos, traversando aristas `INHERITS`. Soporta herencia cross-file; corta ciclos.
+
+---
+
+## Configuración (`codeindex.toml`)
+
+Archivo opcional en la raíz del proyecto. Usa `tomllib` de la stdlib (Python 3.12+):
+
+```toml
+[metrics.thresholds]
+god_module_percentile = 90    # percentil Ca para god module (default: 90)
+instability_threshold = 0.8   # I >= umbral → aviso (default: 0.8)
+max_inheritance_depth = 5     # profundidad máxima de herencia (default: 5)
+max_children          = 10    # hijos directos máximos (default: 10)
+
+[metrics.severity]
+cycles      = "error"    # error | warning | info (default: error)
+god_modules = "warning"  # (default: warning)
+instability = "warning"  # (default: warning)
+inheritance = "info"     # (default: info)
+```
+
+**Severidades:**
+- `error` → exit code 1, bloquea CI
+- `warning` → reporta pero exit code 0
+- `info` → silencioso, exit code 0
+
+---
+
+## Ratcheting CI
+
+`codeindex baseline status` compara el estado actual contra el baseline guardado:
+
+- **Nuevos ciclos** no presentes en baseline → según `severity.cycles`
+- **Nuevos god modules** → según `severity.god_modules`
+- **Regresión de inestabilidad** > `_INSTABILITY_TOLERANCE` (0.05) → según `severity.instability`
+- **Sin baseline** → siempre exit code 0 (modo silencioso)
+
+### CI reporter
+
+`--reporter github` emite GitHub Actions Annotations:
+```
+::error file=src/auth.py,line=1::Ciclo de importación: src/auth.py → src/user.py
+```
+
+`--reporter gitlab` emite GitLab CI section markers con ANSI.
 
 ---
 
@@ -238,6 +306,10 @@ SQLite tiene un límite de 999 variables por consulta. Las queries con `IN (...)
 
 El Indexer compara el hash SHA-256 del archivo en disco con el almacenado en `nodes.file_hash`. Solo re-parsea los archivos que han cambiado.
 
+### Dedup USES_TYPE en O(1)
+
+El extractor de type hints mantiene un `set[str]` compartido por archivo (`uses_type_seen`) que se pasa a través de toda la recursión de `_extract_symbols`. Evita un scan O(F×E) de la lista de aristas por cada función.
+
 ---
 
 ## Semántica congelada
@@ -261,6 +333,7 @@ Cada parser implementa `LanguageParser` (abstracta en `parser/base.py`) y recibe
 - Nodo `File` para el archivo en sí
 - Nodos `Class`, `Function`, `Method` para cada símbolo
 - Aristas `CONTAINS`, `HAS_METHOD`, `IMPORTS_FROM`, `INHERITS`, `CALLS`
+- Aristas `USES_TYPE` desde type hints en firmas (solo nombres con inicial mayúscula)
 - `signature` y `docstring` cuando están disponibles
 
 ### Lenguajes soportados
@@ -284,5 +357,5 @@ Soporte adicional para `.codeindexignore` (gitignore-style).
 
 | ADR | Decisión |
 |---|---|
-| [001](decisions/001-semantic-search.md) | FTS5 + sqlite-vec + fastembed para búsqueda semántica (implementado, luego congelado) |
+| [001](decisions/001-semantic-search.md) | FTS5 + sqlite-vec + fastembert para búsqueda semántica (implementado, luego congelado) |
 | [002](decisions/002-pivot-ci-coupling.md) | Pivote: de navegación para IA a análisis de acoplamiento para CI/PR |

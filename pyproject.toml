@@ -5,10 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "codeindex"
 version = "0.2.0"
-description = "Grafo de código sobre SQLite para reducir consumo de tokens en IA"
-requires-python = ">=3.10"
+description = "Guardarraíl de acoplamiento para CI/PR: detecta ciclos, god modules y regresiones de acoplamiento antes del merge"
+requires-python = ">=3.12"
 dependencies = [
-    "tree-sitter-language-pack>=1.0",
+    "tree-sitter-language-pack>=1.0,!=1.6.3",
     "networkx>=3.0",
     "structlog>=24.0",
 ]
@@ -45,7 +45,7 @@ where = ["src"]
 # ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "C4", "UP"]

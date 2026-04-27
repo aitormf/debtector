@@ -78,7 +78,18 @@ class PythonParser(LanguageParser):
         self._extract_imports(root, source, file_path, file_qn, edges)
 
         # Extraer clases, funciones, métodos
-        self._extract_symbols(root, source, file_path, file_qn, nodes, edges, parent=None)
+        # uses_type_seen: set compartido por todo el archivo para dedup O(1) de USES_TYPE
+        uses_type_seen: set[str] = set()
+        self._extract_symbols(
+            root,
+            source,
+            file_path,
+            file_qn,
+            nodes,
+            edges,
+            parent=None,
+            uses_type_seen=uses_type_seen,
+        )
 
         # Segunda pasada: aristas CALLS (requiere índice completo de símbolos)
         symbol_index = self._build_symbol_index(nodes)
@@ -188,6 +199,7 @@ class PythonParser(LanguageParser):
         nodes: list[NodeInfo],
         edges: list[EdgeInfo],
         parent: str | None,
+        uses_type_seen: set[str] | None = None,
     ):
         """Recursively extract class, function, and method nodes from an AST subtree.
 
@@ -205,7 +217,11 @@ class PythonParser(LanguageParser):
                 objects are appended in-place.
             parent: Name of the enclosing class when recursing into a class body,
                 or ``None`` at module level.
+            uses_type_seen: Set compartido a nivel de archivo para dedup de USES_TYPE
+                en O(1). Se crea en ``parse()`` y se reutiliza en toda la recursión.
         """
+        if uses_type_seen is None:
+            uses_type_seen = set()
         for child in node.children:
             decorators = []
 
@@ -266,7 +282,14 @@ class PythonParser(LanguageParser):
                 body = self._get_body(child)
                 if body:
                     self._extract_symbols(
-                        body, source, file_path, file_qn, nodes, edges, parent=name
+                        body,
+                        source,
+                        file_path,
+                        file_qn,
+                        nodes,
+                        edges,
+                        parent=name,
+                        uses_type_seen=uses_type_seen,
                     )
 
             elif child.type == "function_definition":
@@ -314,6 +337,99 @@ class PythonParser(LanguageParser):
                             line=child.start_point[0] + 1,
                         )
                     )
+
+                # Aristas USES_TYPE desde las anotaciones de tipo de la firma
+                self._extract_uses_type(
+                    child,
+                    source,
+                    file_path,
+                    file_qn,
+                    child.start_point[0] + 1,
+                    edges,
+                    uses_type_seen,
+                )
+
+    # ──────────────────────────────────────────────
+    # USES_TYPE edge extraction
+    # ──────────────────────────────────────────────
+
+    def _extract_uses_type(
+        self,
+        func_node,
+        source: bytes,
+        file_path: str,
+        file_qn: str,
+        line: int,
+        edges: list[EdgeInfo],
+        uses_type_seen: set[str],
+    ) -> None:
+        """Emit USES_TYPE edges for each uppercase type referenced in a function signature.
+
+        Inspects parameter type annotations and the return type annotation of
+        *func_node*.  Only type names starting with an uppercase letter are
+        emitted (heuristic to skip primitive types like ``int``, ``str``).
+        Duplicate edges for the same type within the same file are suppressed
+        via *uses_type_seen*, un set compartido a nivel de archivo (O(1) lookup).
+
+        Args:
+            func_node: A tree-sitter ``function_definition`` node.
+            source: Raw source bytes of the file.
+            file_path: Absolute path to the source file.
+            file_qn: Qualified name of the file node (used as edge source).
+            line: Line number of the function definition.
+            edges: Mutable list to which new :class:`~codeindex.models.EdgeInfo`
+                objects are appended in-place.
+            uses_type_seen: Set de tipos ya emitidos para este archivo.
+                Se muta en-place para acumular los tipos emitidos. Permite
+                dedup en O(1) sin escanear la lista ``edges``.
+        """
+        type_names: set[str] = set()
+
+        return_type = func_node.child_by_field_name("return_type")
+        if return_type is not None:
+            type_names.update(self._collect_type_identifiers(return_type, source))
+
+        params = func_node.child_by_field_name("parameters")
+        if params is not None:
+            for param in self._walk(params):
+                if param.type in ("typed_parameter", "typed_default_parameter"):
+                    ann = param.child_by_field_name("type")
+                    if ann is not None:
+                        type_names.update(self._collect_type_identifiers(ann, source))
+
+        for type_name in type_names:
+            if type_name not in uses_type_seen:
+                edges.append(
+                    EdgeInfo(
+                        kind=EdgeKind.USES_TYPE,
+                        source=file_qn,
+                        target=type_name,
+                        file_path=file_path,
+                        line=line,
+                    )
+                )
+                uses_type_seen.add(type_name)
+
+    def _collect_type_identifiers(self, type_node, source: bytes) -> set[str]:
+        """Recursively extract uppercase type name identifiers from a type annotation node.
+
+        Traverses the subtree of *type_node* and collects all ``identifier``
+        values that start with an uppercase letter (user-defined class heuristic).
+
+        Args:
+            type_node: Any tree-sitter node representing a type annotation.
+            source: Raw source bytes.
+
+        Returns:
+            Set of type name strings starting with an uppercase letter.
+        """
+        names: set[str] = set()
+        for node in self._walk(type_node):
+            if node.type == "identifier":
+                text = self._text(node, source)
+                if text and text[0].isupper():
+                    names.add(text)
+        return names
 
     # ──────────────────────────────────────────────
     # CALLS edge extraction (second pass)

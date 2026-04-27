@@ -1,4 +1,4 @@
 # Managed by codeindex — do not edit manually
 *
 !.gitignore
-!*.db
+!baseline.json
