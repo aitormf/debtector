@@ -51,4 +51,6 @@ jobs:
 
       - name: Push bump commit and tag
         if: steps.cz.outputs.bumped == 'true'
-        run: git push --follow-tags
+        run: |
+          git push
+          git push origin "refs/tags/v${{ steps.cz.outputs.version }}"

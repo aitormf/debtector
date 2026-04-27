@@ -68,6 +68,7 @@ name = "cz_conventional_commits"
 version = "0.3.0"
 version_files = ["pyproject.toml:version", "src/codeindex/__init__.py"]
 tag_format = "v$version"
+annotated_tag = true  # git push --follow-tags solo sube tags anotados
 
 # ---------------------------------------------------------------------------
 # Pytest
