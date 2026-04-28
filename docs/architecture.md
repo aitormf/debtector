@@ -18,9 +18,11 @@ src/debtector/
 ├── graph_store.py    # Persistencia: SQLite + NetworkX cache en memoria
 ├── indexer.py        # Orquestación: recorre archivos, detecta cambios, llama a parsers
 ├── metrics.py        # Ca, Ce, inestabilidad, ciclos, god modules, herencia
+├── git_history.py    # Análisis behavioral: churn, hotspots, temporal coupling, bus factor
 ├── config.py         # Carga y valida debtector.toml (umbrales y severidad)
 ├── cli.py            # CLI: index, search, summary, impact, imports, callers,
-│                     #       untested, status, metrics, baseline
+│                     #       untested, status, coupling, baseline,
+│                     #       hotspots, temporal-coupling, bus-factor, git-coupling, report
 ├── utils.py          # Utilidades compartidas: is_test_file()
 ├── logging.py        # Configuración structlog (dev coloreado / prod JSON)
 ├── embedder.py       # [CONGELADO] Embeddings semánticos — no desarrollar más
@@ -38,12 +40,13 @@ src/debtector/
 | `models.py` | Define los tipos de entrada (`NodeInfo`, `EdgeInfo`) y salida (`GraphNode`, `GraphEdge`) sin dependencias internas |
 | `graph_store.py` | Única fuente de verdad. Escribe en SQLite, mantiene un DiGraph de NetworkX como cache para traversals |
 | `indexer.py` | Recorre el sistema de archivos, detecta cambios por SHA-256, delega el parseo y llama a `GraphStore.store_file()`. Genera aristas COVERS tras cada indexación (no-fatal) |
-| `metrics.py` | Computa métricas de acoplamiento sobre el grafo: Ca, Ce, inestabilidad, ciclos (Tarjan), god modules (p90), profundidad de herencia |
+| `metrics.py` | Computa métricas de acoplamiento **estructural** sobre el grafo: Ca, Ce, inestabilidad, ciclos (Tarjan), god modules (p90), profundidad de herencia |
+| `git_history.py` | Computa métricas de acoplamiento **behavioral** sobre el historial git: churn (`git log --numstat`), hotspot score, temporal coupling, bus factor (`git blame`). Solo lectura; no escribe en DB |
 | `config.py` | Lee `debtector.toml` con `tomllib` (stdlib). Expone `DebtectorConfig` con umbrales y severidades configurables |
 | `embedder.py` | **[Congelado]** Convierte nodos a texto y genera vectores float32 con fastembed. No desarrollar más |
 | `utils.py` | Utilidades compartidas sin dependencias internas: `is_test_file()` |
 | `parser/*` | Transforman un archivo fuente en `(list[NodeInfo], list[EdgeInfo])` usando Tree-sitter. Sin acceso a la DB |
-| `cli.py` | Traduce argumentos de línea de comandos a llamadas al GraphStore y metrics. Sin lógica de negocio propia |
+| `cli.py` | Traduce argumentos de línea de comandos a llamadas al GraphStore, metrics y git_history. Sin lógica de negocio propia. Auto-indexa silenciosamente antes de cada comando de análisis |
 
 ---
 
@@ -71,10 +74,18 @@ GraphStore.store_file()
 ```
 CLI / CI pipeline
     │
+    ├── Auto-index silencioso → Indexer (SHA-256, no-op si sin cambios)
+    │
     ├── Búsqueda léxica       → SQLite FTS5              (debtector search)
     ├── Lookup directo        → SQLite SQL                (summary, callers, imports)
     ├── Traversal de impacto  → NetworkX                  (debtector impact)
-    ├── Métricas acoplamiento → metrics.py sobre el grafo (debtector metrics)
+    ├── Acoplamiento struct.  → metrics.py + grafo        (debtector coupling)
+    ├── Acoplamiento behav.   → git_history.py + git      (debtector git-coupling)
+    │     ├── churn           → git log --numstat
+    │     ├── hotspots        → churn × (fan_in + fan_out)
+    │     ├── temporal coupl. → git log --name-only, pares co-cambiantes
+    │     └── bus factor      → git blame --line-porcelain
+    ├── Informe completo      → coupling + git-coupling   (debtector report)
     └── Baseline / ratcheting → baseline.json + delta     (debtector baseline)
 ```
 
@@ -229,6 +240,28 @@ Outlier estadístico en Ca: módulos cuyo fan-in supera el **percentil 90** del 
 ### Herencia
 
 Profundidad (camino más largo desde la raíz) y número de hijos directos, traversando aristas `INHERITS`. Soporta herencia cross-file; corta ciclos.
+
+---
+
+## Métricas behavioral (Fase 2)
+
+### Churn
+
+Número de commits distintos que tocan cada archivo, calculado con `git log --numstat`. Los archivos binarios se cuentan pero sus líneas se registran como 0. Acepta filtro `--since` (e.g. `"6 months ago"`).
+
+### Hotspot score
+
+`churn × (fan_in + fan_out)` — combina la actividad histórica con el acoplamiento estructural. Un archivo muy cambiado y muy acoplado es el punto de mayor riesgo de deuda técnica. Ordenado descendente.
+
+### Temporal coupling
+
+Pares de archivos que aparecen juntos en commits con frecuencia superior a un umbral. Detecta dependencias implícitas no visibles en el grafo de imports. Parámetros:
+- `min_shared` (default: 5): mínimo de commits compartidos
+- `min_ratio` (default: 0.3): `shared / min(commits_a, commits_b)` mínimo
+
+### Bus factor
+
+Mínimo de autores necesarios para cubrir el 80% de las líneas vigentes de un archivo, calculado con `git blame --line-porcelain`. Un bus factor de 1 indica punto único de fallo de conocimiento. Solo procesa archivos presentes en el índice.
 
 ---
 

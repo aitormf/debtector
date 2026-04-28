@@ -1,11 +1,14 @@
 # Debtector
 
-**Guardarraíl de acoplamiento para CI/PR.** Debtector indexa un repositorio de código como un grafo en SQLite, calcula métricas de acoplamiento estructural (Ca, Ce, inestabilidad, ciclos, god modules) y bloquea el merge cuando las métricas empeoran.
+**Guardarraíl de acoplamiento para CI/PR.** Debtector indexa un repositorio de código como un grafo en SQLite, calcula métricas de acoplamiento estructural (Ca, Ce, inestabilidad, ciclos, god modules) y behavioral (churn, hotspots, temporal coupling, bus factor), y bloquea el merge cuando las métricas empeoran.
 
 ICP: dev/tech lead que usa agentes de código. Los agentes generan acoplamiento oculto a una velocidad que ningún humano alcanza; Debtector actúa como guardarraíl arquitectónico en el pipeline.
 
 ```bash
-# Indexar, guardar baseline y comprobar regresiones (típico en CI)
+# Informe completo: acoplamiento estructural + histórico git
+debtector report
+
+# Flujo típico en CI: indexar, guardar baseline, comprobar regresiones
 debtector index ./src
 debtector baseline save
 debtector baseline status   # exit 1 si hay nuevos ciclos o el acoplamiento empeora
@@ -56,16 +59,24 @@ which debtector
 # 1. Indexar el proyecto (incremental: solo reparsea ficheros cambiados)
 debtector index ./src
 
-# 2. Ver métricas de acoplamiento
-debtector metrics
+# 2. Ver acoplamiento estructural
+debtector coupling
 
-# 3. Guardar baseline (commitear .debtector/baseline.json al repo)
+# 3. Ver métricas de historial git (hotspots, temporal coupling, bus factor)
+debtector git-coupling
+
+# 4. Informe completo (estructural + behavioral)
+debtector report
+
+# 5. Guardar baseline (commitear .debtector/baseline.json al repo)
 debtector baseline save
 git add .debtector/baseline.json && git commit -m "chore: save metrics baseline"
 
-# 4. En CI: comprobar que las métricas no empeoran
+# 6. En CI: comprobar que las métricas no empeoran
 debtector baseline status
 ```
+
+> **Nota:** los comandos de análisis (`coupling`, `git-coupling`, `report`, `impact`, etc.) auto-indexan silenciosamente si hay ficheros modificados. No hace falta ejecutar `index` manualmente en el flujo habitual.
 
 El índice vive en `.debtector/index.db`. El baseline en `.debtector/baseline.json`. Los logs en `.debtector/debtector.log`.
 
@@ -91,15 +102,25 @@ El índice vive en `.debtector/index.db`. El baseline en `.debtector/baseline.js
 | `callers <qname>` | Qué funciones/métodos llaman a un símbolo concreto |
 | `untested [path]` | Símbolos de producción sin ningún test que los cubra |
 
-### Métricas de acoplamiento
+### Acoplamiento estructural
 
 | Comando | Descripción |
 |---------|-------------|
-| `metrics` | Tabla de Ca, Ce, I por módulo + ciclos + god modules. `--sort fan_in\|fan_out\|instability`, `--limit N`, `--json` |
+| `coupling` | Tabla de Ca, Ce, I por módulo + ciclos + god modules. `--sort fan_in\|fan_out\|instability`, `--limit N`, `--json` |
 | `baseline save` | Guarda snapshot de métricas en `.debtector/baseline.json` |
 | `baseline status` | Compara métricas actuales con el baseline. Exit 1 si hay regresiones (configurable) |
 | `baseline status --reporter github` | Igual pero emite GitHub Actions Annotations (`::error/::warning`) |
 | `baseline status --reporter gitlab` | Igual pero emite GitLab CI section markers |
+
+### Acoplamiento behavioral (git history)
+
+| Comando | Descripción |
+|---------|-------------|
+| `hotspots` | Ranking de deuda técnica: churn × (fan_in + fan_out). `--limit N`, `--since DATE` |
+| `temporal-coupling` | Pares de archivos que cambian juntos sin import directo. `--min-shared N`, `--min-ratio F`, `--since DATE` |
+| `bus-factor` | Riesgo de concentración de conocimiento: % de líneas por autor dominante. `--limit N` |
+| `git-coupling` | Vista agregada de los tres anteriores. `--json` combina las tres secciones |
+| `report` | Informe completo: acoplamiento estructural + behavioral. `--json` para consumo por IA/CI |
 
 ### Configuración y hooks
 
@@ -110,10 +131,12 @@ El índice vive en `.debtector/index.db`. El baseline en `.debtector/baseline.js
 
 ### Flag global `--json`
 
-Todos los comandos admiten `--json` para emitir JSON compacto en stdout:
+Todos los comandos admiten `--json` para emitir JSON compacto en stdout, apto para consumo directo por agentes de IA o pipelines:
 
 ```bash
-debtector --json metrics
+debtector --json coupling
+debtector --json report
+debtector --json hotspots --limit 10
 debtector --json baseline status
 debtector --json search "AuthService"
 ```
@@ -122,7 +145,7 @@ debtector --json search "AuthService"
 
 ## Métricas disponibles
 
-### Por módulo (`debtector metrics`)
+### Acoplamiento estructural (`debtector coupling`)
 
 | Métrica | Descripción |
 |---------|-------------|
@@ -153,9 +176,29 @@ Detección de ciclos de importación con el algoritmo de Tarjan (SCCs). Consider
 
 Módulos cuyo fan-in supera el percentil 90 del proyecto. Umbral relativo, no absoluto.
 
-### Herencia (`debtector metrics --json`)
+### Herencia (`debtector coupling --json`)
 
 Profundidad de jerarquía de herencia y número de hijos directos por clase.
+
+### Acoplamiento behavioral (`debtector git-coupling`)
+
+| Métrica | Descripción |
+|---------|-------------|
+| **Hotspot score** | `churn × (fan_in + fan_out)`. Los módulos más cambiados y más acoplados son el mayor riesgo de deuda técnica |
+| **Temporal coupling** | Pares de archivos que aparecen juntos en commits con frecuencia > umbral configurable, aunque no tengan `import` directo entre ellos |
+| **Bus factor** | Mínimo de autores necesarios para cubrir el 80% de las líneas de un archivo. 1 = punto único de fallo |
+
+Ejemplo de salida de `debtector hotspots`:
+
+```
+Módulo                            Churn  Coupling     Score
+────────────────────────────────────────────────────────────
+src/graph_store.py                   47      15.00    705.00
+src/cli.py                           31      14.50    449.50
+src/parser/python_parser.py          28       3.00     84.00
+────────────────────────────────────────────────────────────
+Total: 8 hotspots
+```
 
 ---
 
@@ -295,11 +338,15 @@ Los logs siempre van a `.debtector/debtector.log`, nunca a stdout.
 - [x] **God modules** — outliers de fan-in (percentil 90)
 - [x] **Herencia** — profundidad y número de hijos
 - [x] **USES_TYPE** — acoplamiento por type hints (peso 1.0)
-- [x] **`debtector metrics`** — output tabular con flags
+- [x] **`debtector coupling`** — output tabular con flags (antes `metrics`)
 - [x] **Baseline + ratcheting** — CI solo falla si empeoran las métricas
 - [x] **Severidad configurable** — `debtector.toml` error/warning/info por tipo
 - [x] **CI reporter** — GitHub Annotations + GitLab CI section markers
-- [ ] Git history — churn por módulo, hotspot score, temporal coupling
+- [x] **Auto-index silencioso** — los comandos de análisis indexan antes de ejecutarse
+- [x] **Hotspots** — churn × acoplamiento estructural; ranking de deuda técnica real
+- [x] **Temporal coupling** — archivos que co-cambian sin import directo
+- [x] **Bus factor** — riesgo de concentración de conocimiento por archivo
+- [x] **`debtector git-coupling` / `report`** — vistas agregadas behavioral y completa
 - [ ] Graph diff — delta de métricas entre rama base y PR
 - [ ] GitHub Action — comentario automático en PRs
 - [ ] Más lenguajes — Go, Rust, Java
