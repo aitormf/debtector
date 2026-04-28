@@ -19,12 +19,16 @@ import sys
 import time
 from pathlib import Path
 
+import structlog
+
 from .config import Severity, load_config
 from .graph_store import GraphStore
 from .indexer import Indexer
 from .logging import configure_logging
 from .metrics import compute_metrics, find_cycles, god_modules
 from .models import node_to_dict
+
+log = structlog.get_logger()
 
 # ──────────────────────────────────────────────
 # Helpers
@@ -48,6 +52,24 @@ def _debtector_dir(project: str) -> Path:
         encoding="utf-8",
     )
     return d
+
+
+def _auto_index(project: str) -> None:
+    """Index the project silently before running analysis commands.
+
+    Uses SHA-256 change detection: if no files have changed since the last
+    index run, this is effectively a no-op.  All output goes to the log file;
+    nothing is printed to stdout.
+
+    Args:
+        project: Path to the project root directory.
+    """
+    try:
+        indexer = Indexer(project)
+        indexer.index(project)
+    except Exception:  # noqa: BLE001
+        # Never let a failed auto-index abort the analysis command that called it.
+        log.warning("auto_index_failed", project=project, exc_info=True)
 
 
 def _get_store(project: str) -> GraphStore:
@@ -148,6 +170,7 @@ def cmd_summary(args) -> None:
             - ``file`` (str): Relative path of the file to summarise.
             - ``json`` (bool): Emit JSON instead of human-readable text.
     """
+    _auto_index(args.project)
     store = _get_store(args.project)
     summary = store.get_file_summary(args.file)
     store.close()
@@ -186,6 +209,7 @@ def cmd_impact(args) -> None:
             - ``depth`` (int): Maximum traversal depth.
             - ``json`` (bool): Emit JSON instead of human-readable text.
     """
+    _auto_index(args.project)
     store = _get_store(args.project)
     result = store.get_impact_radius(args.files, max_depth=args.depth)
     store.close()
@@ -226,6 +250,7 @@ def cmd_imports(args) -> None:
             - ``module`` (str): Module name substring to search for.
             - ``json`` (bool): Emit JSON instead of human-readable text.
     """
+    _auto_index(args.project)
     store = _get_store(args.project)
     results = store.search_imports(args.module)
     store.close()
@@ -322,6 +347,7 @@ def cmd_callers(args) -> None:
             - ``qualified_name`` (str): The qualified name of the target symbol.
             - ``json`` (bool): Emit JSON instead of human-readable text.
     """
+    _auto_index(args.project)
     store = _get_store(args.project)
     callers = store.callers_of(args.qualified_name)
     store.close()
@@ -347,6 +373,7 @@ def cmd_untested(args) -> None:
             - ``path`` (str | None): Optional file or directory prefix to filter results.
             - ``json`` (bool): Emit JSON instead of human-readable text.
     """
+    _auto_index(args.project)
     store = _get_store(args.project)
     symbols = store.get_uncovered_symbols(path_filter=args.path or None)
     store.close()
@@ -666,12 +693,12 @@ def _emit_gitlab_report(
 
 
 # ──────────────────────────────────────────────
-# Métricas de acoplamiento
+# Acoplamiento estructural (ex-metrics)
 # ──────────────────────────────────────────────
 
 
-def cmd_metrics(args) -> None:
-    """Print coupling metrics (Ca, Ce, I, cycles, god modules) for every module.
+def cmd_coupling(args) -> None:
+    """Print structural coupling metrics (Ca, Ce, I, cycles, god modules).
 
     Reads ``debtector.toml`` from the project root to apply configured
     thresholds.  With ``--json`` emits a single JSON object with keys
@@ -686,6 +713,7 @@ def cmd_metrics(args) -> None:
               ``instability``). Default: ``fan_in``.
             - ``limit`` (int | None): Max rows to show. ``None`` = all.
     """
+    _auto_index(args.project)
     cfg = load_config(args.project)
     store = _get_store(args.project)
     modules = compute_metrics(store)
@@ -760,6 +788,10 @@ def cmd_metrics(args) -> None:
         print(f"\n● God modules (Ca > p{int(cfg.metrics.thresholds.god_module_percentile)}):")
         for m in gods:
             print(f"   {m.file_path}  Ca={m.fan_in:.1f}")
+
+
+# Backward-compat alias — keeps existing imports and tests working
+cmd_metrics = cmd_coupling
 
 
 # Entry point
@@ -840,23 +872,35 @@ def main() -> None:
         help="Número máximo de resultados (default: 10)",
     )
 
-    # metrics
-    p_metrics = sub.add_parser(
-        "metrics", help="Métricas de acoplamiento (Ca, Ce, I, ciclos, god modules)"
+    # coupling (ex-metrics)
+    p_coupling = sub.add_parser(
+        "coupling", help="Acoplamiento estructural (Ca, Ce, I, ciclos, god modules)"
     )
-    p_metrics.add_argument(
+    p_coupling.add_argument(
         "--sort",
         choices=["fan_in", "fan_out", "instability"],
         default="fan_in",
         help="Columna de ordenación (default: fan_in)",
     )
-    p_metrics.add_argument(
+    p_coupling.add_argument(
         "--limit",
         "-l",
         type=int,
         default=None,
         help="Número máximo de filas a mostrar",
     )
+
+    # metrics — deprecated alias for coupling
+    p_metrics_alias = sub.add_parser(
+        "metrics",
+        help="[DEPRECADO] Usa 'coupling'. Métricas de acoplamiento estructural.",
+    )
+    p_metrics_alias.add_argument(
+        "--sort",
+        choices=["fan_in", "fan_out", "instability"],
+        default="fan_in",
+    )
+    p_metrics_alias.add_argument("--limit", "-l", type=int, default=None)
 
     # callers
     p_callers = sub.add_parser("callers", help="¿Quién llama a un símbolo?")
@@ -888,7 +932,8 @@ def main() -> None:
         "impact": cmd_impact,
         "imports": cmd_imports,
         "status": cmd_status,
-        "metrics": cmd_metrics,
+        "coupling": cmd_coupling,
+        "metrics": cmd_coupling,  # deprecated alias
         "baseline": cmd_baseline,
         "callers": cmd_callers,
         "untested": cmd_untested,
