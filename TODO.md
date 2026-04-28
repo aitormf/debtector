@@ -8,31 +8,31 @@ ICP: dev/tech lead que usa agentes de código.
 ## Fase 1 — Fundación estructural + gestión de ruido
 *Construible sobre el grafo existente. Sin esto no hay producto.*
 
-- [ ] **`metrics.py`** — módulo de métricas de acoplamiento:
+- [x] **`metrics.py`** — módulo de métricas de acoplamiento:
   - Fan-in (Ca): aristas IMPORTS_FROM entrantes al módulo
   - Fan-out (Ce): aristas IMPORTS_FROM salientes del módulo
   - Inestabilidad (I): Ce / (Ca + Ce) — 0 estable, 1 inestable
-- [ ] **Detección de ciclos** — DFS sobre aristas IMPORTS_FROM + CALLS
-- [ ] **God module detection** — outliers estadísticos en Ca (percentil 90 del proyecto, no umbral absoluto)
-- [ ] **Profundidad de herencia y número de hijos** — traverse INHERITS edges
-- [ ] **Arista `USES_TYPE`** — `def f(x: User) -> Response` genera aristas hacia `User` y `Response`; enriquece Ca/Ce sin nueva fuente de datos
-- [ ] **Comando `debtector metrics`** — output tabular con Ca, Ce, I, ciclos, god modules por módulo
-- [ ] **Baseline** — `debtector baseline save` guarda snapshot de métricas en `.debtector/baseline.json`; `debtector baseline status` muestra delta respecto al baseline
-- [ ] **Ratcheting** — CI solo falla si las métricas empeoran respecto al baseline; deuda existente no bloquea
-- [ ] **Severidad configurable** en `debtector.toml` — `error` (bloquea CI) / `warning` (comenta PR) / `info` (solo reporta)
-- [ ] **Modo silencioso por defecto** — sin baseline configurado, primera ejecución solo reporta, no falla
-- [ ] **CI reporter** — salida compatible con GitHub Annotations (`::warning file=auth.py,line=14::...`) y GitLab CI
+- [x] **Detección de ciclos** — DFS sobre aristas IMPORTS_FROM + CALLS
+- [x] **God module detection** — outliers estadísticos en Ca (percentil 90 del proyecto, no umbral absoluto)
+- [x] **Profundidad de herencia y número de hijos** — traverse INHERITS edges
+- [x] **Arista `USES_TYPE`** — `def f(x: User) -> Response` genera aristas hacia `User` y `Response`; enriquece Ca/Ce sin nueva fuente de datos
+- [x] **Comando `debtector coupling`** — output tabular con Ca, Ce, I, ciclos, god modules por módulo (antes `metrics`, alias conservado)
+- [x] **Baseline** — `debtector baseline save` guarda snapshot de métricas en `.debtector/baseline.json`; `debtector baseline status` muestra delta respecto al baseline
+- [x] **Ratcheting** — CI solo falla si las métricas empeoran respecto al baseline; deuda existente no bloquea
+- [x] **Severidad configurable** en `debtector.toml` — `error` (bloquea CI) / `warning` (comenta PR) / `info` (solo reporta)
+- [x] **Modo silencioso por defecto** — sin baseline configurado, primera ejecución solo reporta, no falla
+- [x] **CI reporter** — salida compatible con GitHub Annotations (`::warning file=auth.py,line=14::...`) y GitLab CI
 
 ---
 
 ## Fase 2 — Análisis behavioral (git history)
 *Parsear `git log` es barato. Hotspots los entiende cualquier senior en 10 segundos. Aquí está la ventaja real sobre herramientas estructurales puras.*
 
-- [ ] **Parser `git log --numstat`** — churn por módulo (commits que tocan cada archivo)
-- [ ] **Hotspot score** — churn × acoplamiento estructural; ranking de deuda técnica real
-- [ ] **Temporal coupling** — archivos que cambian juntos en commits con frecuencia > umbral, aunque no tengan import entre ellos
-- [ ] **Bus factor por módulo** — porcentaje de código escrito por un único autor vía `git blame`
-- [ ] **Integración Karajan** — gate en pipeline de agente que bloquea si el PR introduce hotspots nuevos
+- [x] **Parser `git log --numstat`** — churn por módulo (commits que tocan cada archivo)
+- [x] **Hotspot score** — churn × acoplamiento estructural; ranking de deuda técnica real
+- [x] **Temporal coupling** — archivos que cambian juntos en commits con frecuencia > umbral, aunque no tengan import entre ellos
+- [x] **Bus factor por módulo** — porcentaje de código escrito por un único autor vía `git blame`
+- [x] **Integración Karajan** — interfaz JSON disponible en todos los comandos (`--json`); Karajan puede invocar `debtector report --json` directamente
 
 ---
 
