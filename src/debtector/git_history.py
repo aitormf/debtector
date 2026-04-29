@@ -241,21 +241,22 @@ def compute_hotspots(
     """
     from .metrics import compute_metrics
 
-    churn_list = parse_churn(project_root, since=since)
-    if not churn_list:
-        return []
-
-    churn_map = {c.file_path: c for c in churn_list}
-
     module_metrics = compute_metrics(store)
     if not module_metrics:
         return []
 
+    churn_list = parse_churn(project_root, since=since)
+    churn_map = {c.file_path: c for c in churn_list}
+
+    # Iterate over currently-indexed files so renamed/deleted files from git
+    # history don't pollute results with coupling=0.
     coupling_map = {m.file_path: m.fan_in + m.fan_out for m in module_metrics}
 
     hotspots: list[HotspotMetrics] = []
-    for file_path, churn_data in churn_map.items():
-        coupling = coupling_map.get(file_path, 0.0)
+    for file_path, coupling in coupling_map.items():
+        churn_data = churn_map.get(file_path)
+        if churn_data is None:
+            continue
         score = churn_data.commits * coupling
         hotspots.append(
             HotspotMetrics(

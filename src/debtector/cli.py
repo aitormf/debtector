@@ -1162,40 +1162,71 @@ def cmd_report(args) -> None:
         )
         return
 
-    # Human output
+    # Human output — only show items that signal a problem in each section
+    instability_warn = cfg.metrics.thresholds.instability_threshold
+
+    # ── Structural coupling: only flagged modules ──
     _print_section("Acoplamiento estructural")
-    if modules:
-        sort_key = getattr(args, "sort", "fan_in")
-        mods_sorted = sorted(modules, key=lambda m: getattr(m, sort_key, 0), reverse=True)
-        col_w = max((len(m.file_path) for m in mods_sorted), default=30)
+    flagged: list[tuple] = []
+    for m in sorted(modules, key=lambda x: x.fan_in, reverse=True):
+        flags = []
+        if m.file_path in god_paths:
+            flags.append("● god")
+        if m.fan_in > 0 and m.instability >= instability_warn:
+            flags.append("⚠ inestable")
+        if flags:
+            flagged.append((m, "  ".join(flags)))
+
+    if cycles:
+        print(f"  ✗ Ciclos ({len(cycles)}):")
+        for cycle in cycles:
+            print("    " + " → ".join(cycle))
+    if flagged:
+        col_w = max((len(m.file_path) for m, _ in flagged), default=30)
         col_w = max(col_w, 30)
-        print(f"  {'Módulo':<{col_w}}  {'Ca':>6}  {'Ce':>6}  {'I':>6}")
-        for m in mods_sorted:
-            flags = " ● god" if m.file_path in god_paths else ""
+        for m, flags_str in flagged:
             print(
-                f"  {m.file_path:<{col_w}}  {m.fan_in:>6.1f}"
-                f"  {m.fan_out:>6.1f}  {m.instability:>6.3f}{flags}"
+                f"  {m.file_path:<{col_w}}  Ca={m.fan_in:>5.1f}  Ce={m.fan_out:>5.1f}"
+                f"  I={m.instability:.3f}  {flags_str}"
+            )
+    if not cycles and not flagged:
+        print("  ✓ Sin problemas")
+
+    # ── Hotspots: files with score > 0 ──
+    _print_section("Hotspots")
+    active = [h for h in hotspots if h.hotspot_score > 0]
+    if active:
+        col_w = max((len(h.file_path) for h in active), default=30)
+        col_w = max(col_w, 30)
+        for h in active[:10]:
+            print(
+                f"  {h.file_path:<{col_w}}  churn={h.churn:>4}"
+                f"  coupling={h.coupling:>6.1f}  score={h.hotspot_score:>8.1f}"
             )
     else:
-        print("  (sin datos)")
+        print("  ✓ Sin hotspots relevantes")
 
-    _print_section("Git-coupling")
-    # Delegate to git-coupling human output via shared logic
-    if hotspots:
-        print("  Hotspots:")
-        for h in hotspots[:5]:
-            print(f"    {h.file_path}  score={h.hotspot_score:.2f}")
+    # ── Temporal coupling: all results already filtered by min_shared/min_ratio ──
+    _print_section("Acoplamiento temporal")
     if temporal:
-        print("  Acoplamiento temporal:")
-        for t in temporal[:5]:
-            print(f"    {t.file_a}  ↔  {t.file_b}  ({t.shared_commits} commits)")
-    if bus:
-        print("  Bus factor:")
-        for b in bus[:5]:
-            risk = " ⚠" if b.bus_factor == 1 else ""
-            print(f"    {b.file_path}  bf={b.bus_factor}{risk}")
-    if not hotspots and not temporal and not bus:
-        print("  (sin datos de git)")
+        for t in temporal[:10]:
+            print(
+                f"  {t.file_a}  ↔  {t.file_b}"
+                f"  ({t.shared_commits} commits, ratio={t.coupling_ratio:.2f})"
+            )
+    else:
+        print("  ✓ Sin acoplamiento temporal implícito")
+
+    # ── Bus factor: only single-author files (bf == 1) ──
+    _print_section("Bus factor")
+    silos = [b for b in bus if b.bus_factor == 1]
+    if silos:
+        col_w = max((len(b.file_path) for b in silos), default=30)
+        col_w = max(col_w, 30)
+        for b in silos:
+            print(f"  {b.file_path:<{col_w}}  {b.top_author} ({b.top_author_pct:.1f}%)  ⚠ bf=1")
+    else:
+        print("  ✓ Sin archivos con autor único")
 
 
 # Entry point
