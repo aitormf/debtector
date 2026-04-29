@@ -1116,7 +1116,15 @@ def cmd_report(args) -> None:
     bus = compute_bus_factor(store, args.project)
     store.close()
 
+    # Shared filter threshold used by both JSON and human output
+    instability_warn = cfg.metrics.thresholds.instability_threshold
+
     if args.json:
+        flagged_modules = [
+            m
+            for m in modules
+            if m.file_path in god_paths or (m.fan_in > 0 and m.instability >= instability_warn)
+        ]
         _json_out(
             {
                 "modules": [
@@ -1126,8 +1134,9 @@ def cmd_report(args) -> None:
                         "fan_out": round(m.fan_out, 2),
                         "instability": round(m.instability, 3),
                         "god_module": m.file_path in god_paths,
+                        "instability_flag": m.fan_in > 0 and m.instability >= instability_warn,
                     }
-                    for m in modules
+                    for m in flagged_modules
                 ],
                 "cycles": cycles,
                 "god_modules": [m.file_path for m in gods],
@@ -1139,6 +1148,7 @@ def cmd_report(args) -> None:
                         "hotspot_score": round(h.hotspot_score, 2),
                     }
                     for h in hotspots
+                    if h.hotspot_score > 0
                 ],
                 "temporal_coupling": [
                     {
@@ -1157,13 +1167,13 @@ def cmd_report(args) -> None:
                         "bus_factor": b.bus_factor,
                     }
                     for b in bus
+                    if b.bus_factor == 1
                 ],
             }
         )
         return
 
     # Human output — only show items that signal a problem in each section
-    instability_warn = cfg.metrics.thresholds.instability_threshold
 
     # ── Structural coupling: only flagged modules ──
     _print_section("Acoplamiento estructural")
