@@ -20,6 +20,7 @@ from debtector.cli import (
 )
 from debtector.git_history import BusFactorMetrics, HotspotMetrics, TemporalCoupling
 from debtector.logging import configure_logging
+from debtector.metrics import ModuleMetrics
 from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
 # ──────────────────────────────────────────────
@@ -331,3 +332,58 @@ class TestCmdReport:
         # Must not raise
         data = json.loads(capsys.readouterr().out)
         assert isinstance(data, dict)
+
+    def test_json_modules_only_flagged(self, tmp_path: Path, capsys) -> None:
+        """Clean modules (no god, instability < threshold) must not appear in JSON."""
+        _seed(str(tmp_path), {"src/a.py": []})
+        flagged = ModuleMetrics(file_path="src/a.py", fan_in=1.0, fan_out=4.0, instability=0.8)
+        clean = ModuleMetrics(file_path="src/b.py", fan_in=5.0, fan_out=1.0, instability=0.167)
+        with (
+            patch("debtector.cli.compute_metrics", return_value=[flagged, clean]),
+            patch("debtector.cli.god_modules", return_value=[]),
+            patch("debtector.cli.find_cycles", return_value=[]),
+            patch("debtector.cli.compute_hotspots", return_value=[]),
+            patch("debtector.cli.compute_temporal_coupling", return_value=[]),
+            patch("debtector.cli.compute_bus_factor", return_value=[]),
+        ):
+            cmd_report(_args(str(tmp_path), json=True))
+        data = json.loads(capsys.readouterr().out)
+        paths = [m["file_path"] for m in data["modules"]]
+        assert "src/a.py" in paths
+        assert "src/b.py" not in paths
+
+    def test_json_hotspots_only_nonzero_score(self, tmp_path: Path, capsys) -> None:
+        """Hotspots with score=0 (no coupling) must not appear in JSON."""
+        _seed(str(tmp_path), {"src/a.py": []})
+        zero_score = HotspotMetrics(file_path="src/a.py", churn=5, coupling=0.0, hotspot_score=0.0)
+        nonzero = HotspotMetrics(file_path="src/b.py", churn=3, coupling=2.0, hotspot_score=6.0)
+        with (
+            patch("debtector.cli.compute_hotspots", return_value=[zero_score, nonzero]),
+            patch("debtector.cli.compute_temporal_coupling", return_value=[]),
+            patch("debtector.cli.compute_bus_factor", return_value=[]),
+        ):
+            cmd_report(_args(str(tmp_path), json=True))
+        data = json.loads(capsys.readouterr().out)
+        paths = [h["file_path"] for h in data["hotspots"]]
+        assert "src/b.py" in paths
+        assert "src/a.py" not in paths
+
+    def test_json_bus_factor_only_bf1(self, tmp_path: Path, capsys) -> None:
+        """Files with bus_factor > 1 must not appear in JSON bus_factor list."""
+        _seed(str(tmp_path), {"src/a.py": []})
+        risky = BusFactorMetrics(
+            file_path="src/a.py", top_author="Alice", top_author_pct=90.0, bus_factor=1
+        )
+        safe = BusFactorMetrics(
+            file_path="src/b.py", top_author="Bob", top_author_pct=55.0, bus_factor=2
+        )
+        with (
+            patch("debtector.cli.compute_hotspots", return_value=[]),
+            patch("debtector.cli.compute_temporal_coupling", return_value=[]),
+            patch("debtector.cli.compute_bus_factor", return_value=[risky, safe]),
+        ):
+            cmd_report(_args(str(tmp_path), json=True))
+        data = json.loads(capsys.readouterr().out)
+        paths = [b["file_path"] for b in data["bus_factor"]]
+        assert "src/a.py" in paths
+        assert "src/b.py" not in paths
