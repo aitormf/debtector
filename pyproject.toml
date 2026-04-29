@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "debtector"
-version = "0.4.0"
+version = "0.4.1"
 description = "Guardarraíl de acoplamiento para CI/PR: detecta ciclos, god modules y regresiones de acoplamiento antes del merge"
 requires-python = ">=3.12"
 dependencies = [
@@ -61,7 +61,7 @@ skips = []
 # ---------------------------------------------------------------------------
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.4.0"
+version = "0.4.1"
 version_files = ["pyproject.toml:version", "src/debtector/__init__.py"]
 tag_format = "v$version"
 annotated_tag = true  # git push --follow-tags solo sube tags anotados
