@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "debtector"
 version = "0.4.1"
 description = "Guardarraíl de acoplamiento para CI/PR: detecta ciclos, god modules y regresiones de acoplamiento antes del merge"
+license = {text = "AGPL-3.0-or-later"}
 requires-python = ">=3.12"
 dependencies = [
     "tree-sitter-language-pack>=1.0,!=1.6.3",

@@ -1,137 +1,142 @@
 # Debtector
 
-**Guardarraíl de acoplamiento para CI/PR.** Debtector indexa un repositorio de código como un grafo en SQLite, calcula métricas de acoplamiento estructural (Ca, Ce, inestabilidad, ciclos, god modules) y behavioral (churn, hotspots, temporal coupling, bus factor), y bloquea el merge cuando las métricas empeoran.
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Python](https://img.shields.io/badge/Python-%E2%89%A53.12-blue)](https://www.python.org/)
 
-ICP: dev/tech lead que usa agentes de código. Los agentes generan acoplamiento oculto a una velocidad que ningún humano alcanza; Debtector actúa como guardarraíl arquitectónico en el pipeline.
+[Leer en Español](README.es.md)
+
+**Coupling guardrail for CI/PR.** Debtector indexes a code repository as a graph in SQLite, computes structural coupling metrics (Ca, Ce, instability, cycles, god modules) and behavioral ones (churn, hotspots, temporal coupling, bus factor), and blocks merges when metrics regress.
+
+ICP: dev/tech lead using code agents. Agents generate hidden coupling faster than any human can track; Debtector acts as an architectural guardrail in the pipeline.
 
 ```bash
-# Informe completo: acoplamiento estructural + histórico git
+# Full report: structural coupling + git history
 debtector report
 
-# Flujo típico en CI: indexar, guardar baseline, comprobar regresiones
+# Typical CI flow: index, save baseline, check for regressions
 debtector index ./src
 debtector baseline save
-debtector baseline status   # exit 1 si hay nuevos ciclos o el acoplamiento empeora
+debtector baseline status   # exit 1 if new cycles or coupling worsens
 ```
 
 ---
 
-## Instalación
+## Installation
 
-Debtector es una **herramienta de línea de comandos**, no una librería. Instálala globalmente para usarla en cualquier proyecto.
+Debtector is a **command-line tool**, not a library. Install it globally to use it across projects.
 
-### Con uv (recomendado)
-
-```bash
-uv tool install /ruta/a/codeIndex
-```
-
-`uv tool install` no soporta modo editable. Para reflejar cambios en el código, reinstala con `--force` (es rápido):
+### With uv (recommended)
 
 ```bash
-uv tool install /ruta/a/codeIndex --force
+uv tool install /path/to/codeIndex
 ```
 
-### Con pip
+`uv tool install` does not support editable mode. To reflect code changes, reinstall with `--force` (it's fast):
 
 ```bash
-# Instalación normal
-pip install /ruta/a/codeIndex
-
-# Editable — los cambios en el código se reflejan inmediatamente sin reinstalar
-pip install -e /ruta/a/codeIndex
+uv tool install /path/to/codeIndex --force
 ```
 
-Verificar que está disponible globalmente:
+### With pip
+
+```bash
+# Standard installation
+pip install /path/to/codeIndex
+
+# Editable — code changes are reflected immediately without reinstalling
+pip install -e /path/to/codeIndex
+```
+
+Verify it is available globally:
 
 ```bash
 debtector --help
 which debtector
 ```
 
-**Requisitos:** Python ≥ 3.12
+**Requirements:** Python ≥ 3.12
 
 ---
 
-## Inicio rápido
+## Quick start
 
 ```bash
-# 1. Indexar el proyecto (incremental: solo reparsea ficheros cambiados)
+# 1. Index the project (incremental: only re-parses changed files)
 debtector index ./src
 
-# 2. Ver acoplamiento estructural
+# 2. View structural coupling
 debtector coupling
 
-# 3. Ver métricas de historial git (hotspots, temporal coupling, bus factor)
+# 3. View git history metrics (hotspots, temporal coupling, bus factor)
 debtector git-coupling
 
-# 4. Informe completo (estructural + behavioral)
+# 4. Full report (structural + behavioral)
 debtector report
 
-# 5. Guardar baseline (commitear .debtector/baseline.json al repo)
+# 5. Save baseline (commit .debtector/baseline.json to the repo)
 debtector baseline save
 git add .debtector/baseline.json && git commit -m "chore: save metrics baseline"
 
-# 6. En CI: comprobar que las métricas no empeoran
+# 6. In CI: verify metrics have not regressed
 debtector baseline status
 ```
 
-> **Nota:** los comandos de análisis (`coupling`, `git-coupling`, `report`, `impact`, etc.) auto-indexan silenciosamente si hay ficheros modificados. No hace falta ejecutar `index` manualmente en el flujo habitual.
+> **Note:** analysis commands (`coupling`, `git-coupling`, `report`, `impact`, etc.) silently auto-index if there are modified files. There is no need to run `index` manually in the normal workflow.
 
-El índice vive en `.debtector/index.db`. El baseline en `.debtector/baseline.json`. Los logs en `.debtector/debtector.log`.
+The index lives in `.debtector/index.db`. The baseline in `.debtector/baseline.json`. Logs in `.debtector/debtector.log`.
 
 ---
 
-## Comandos
+## Commands
 
-### Indexación
+### Indexing
 
-| Comando | Descripción |
+| Command | Description |
 |---------|-------------|
-| `index <dir>` | Indexa el directorio (incremental por hash SHA-256) |
-| `status` | Estadísticas del grafo (ficheros, nodos, aristas por tipo) |
+| `index <dir>` | Index the directory (incremental by SHA-256 hash) |
+| `status` | Graph statistics (files, nodes, edges by type) |
 
-### Análisis de código
+### Code analysis
 
-| Comando | Descripción |
+| Command | Description |
 |---------|-------------|
-| `search <query>` | Busca símbolos por nombre (FTS5 + BM25). `--kind Class\|Function\|Method` para filtrar |
-| `summary <file>` | Todos los símbolos e imports de un fichero |
-| `impact <files...>` | Qué ficheros y nodos se ven afectados por un cambio. `--depth N` |
-| `imports <module>` | Qué ficheros importan un módulo o librería |
-| `callers <qname>` | Qué funciones/métodos llaman a un símbolo concreto |
-| `untested [path]` | Símbolos de producción sin ningún test que los cubra |
+| `search <query>` | Search symbols by name (FTS5 + BM25). `--kind Class\|Function\|Method` to filter |
+| `summary <file>` | All symbols and imports in a file |
+| `impact <files...>` | Which files and nodes are affected by a change. `--depth N` |
+| `imports <module>` | Which files import a module or library |
+| `callers <qname>` | Which functions/methods call a specific symbol |
+| `untested [path]` | Production symbols with no test coverage |
 
-### Acoplamiento estructural
+### Structural coupling
 
-| Comando | Descripción |
+| Command | Description |
 |---------|-------------|
-| `coupling` | Tabla de Ca, Ce, I por módulo + ciclos + god modules. `--sort fan_in\|fan_out\|instability`, `--limit N`, `--json` |
-| `baseline save` | Guarda snapshot de métricas en `.debtector/baseline.json` |
-| `baseline status` | Compara métricas actuales con el baseline. Exit 1 si hay regresiones (configurable) |
-| `baseline status --reporter github` | Igual pero emite GitHub Actions Annotations (`::error/::warning`) |
-| `baseline status --reporter gitlab` | Igual pero emite GitLab CI section markers |
+| `coupling` | Ca, Ce, I table per module + cycles + god modules. `--sort fan_in\|fan_out\|instability`, `--limit N`, `--json` |
+| `baseline save` | Save metrics snapshot to `.debtector/baseline.json` |
+| `baseline status` | Compare current metrics against the baseline. Exit 1 on regressions (configurable) |
+| `baseline status --reporter github` | Same but emits GitHub Actions Annotations (`::error/::warning`) |
+| `baseline status --reporter gitlab` | Same but emits GitLab CI section markers |
 
-### Acoplamiento behavioral (git history)
+### Behavioral coupling (git history)
 
-| Comando | Descripción |
+| Command | Description |
 |---------|-------------|
-| `hotspots` | Ranking de deuda técnica: churn × (fan_in + fan_out). `--limit N`, `--since DATE` |
-| `temporal-coupling` | Pares de archivos que cambian juntos sin import directo. `--min-shared N`, `--min-ratio F`, `--since DATE` |
-| `bus-factor` | Riesgo de concentración de conocimiento: % de líneas por autor dominante. `--limit N` |
-| `git-coupling` | Vista agregada de los tres anteriores. `--json` combina las tres secciones |
-| `report` | Informe completo: acoplamiento estructural + behavioral. `--json` para consumo por IA/CI |
+| `hotspots` | Technical debt ranking: churn × (fan_in + fan_out). `--limit N`, `--since DATE` |
+| `temporal-coupling` | File pairs that change together without a direct import. `--min-shared N`, `--min-ratio F`, `--since DATE` |
+| `bus-factor` | Knowledge concentration risk: % of lines by dominant author. `--limit N` |
+| `git-coupling` | Aggregated view of the three above. `--json` combines all three sections |
+| `report` | Full report: structural + behavioral coupling. `--json` for AI/CI consumption |
 
-### Configuración y hooks
+### Configuration and hooks
 
-| Comando | Descripción |
+| Command | Description |
 |---------|-------------|
-| `install-hook` | Hook git pre-commit para auto-indexado |
-| `install-skill` | Skills de Claude Code para uso del grafo en contexto IA |
+| `install-hook` | Git pre-commit hook for auto-indexing |
+| `install-skill` | Claude Code skills for using the graph in AI context |
 
-### Flag global `--json`
+### Global flag `--json`
 
-Todos los comandos admiten `--json` para emitir JSON compacto en stdout, apto para consumo directo por agentes de IA o pipelines:
+All commands support `--json` to emit compact JSON to stdout, suitable for direct consumption by AI agents or pipelines:
 
 ```bash
 debtector --json coupling
@@ -143,55 +148,55 @@ debtector --json search "AuthService"
 
 ---
 
-## Métricas disponibles
+## Available metrics
 
-### Acoplamiento estructural (`debtector coupling`)
+### Structural coupling (`debtector coupling`)
 
-| Métrica | Descripción |
-|---------|-------------|
-| **Ca (fan-in)** | Cuántos módulos dependen de éste. Peso 1.0 por `IMPORTS_FROM` y `USES_TYPE` |
-| **Ce (fan-out)** | Cuántos módulos importa éste. Mismo esquema de pesos |
-| **I (inestabilidad)** | `Ce / (Ca + Ce)`. 0 = muy estable, 1 = muy inestable |
+| Metric | Description |
+|--------|-------------|
+| **Ca (fan-in)** | How many modules depend on this one. Weight 1.0 per `IMPORTS_FROM` and `USES_TYPE` |
+| **Ce (fan-out)** | How many modules this one imports. Same weight scheme |
+| **I (instability)** | `Ce / (Ca + Ce)`. 0 = very stable, 1 = very unstable |
 
-Ejemplo de salida:
+Example output:
 
 ```
-Módulo                      Ca      Ce       I    Flags
+Module                      Ca      Ce       I    Flags
 ──────────────────────────────────────────────────────
 src/graph_store.py        12.0     3.0   0.200
-src/cli.py                 0.0    14.5   1.000  ⚠ inestable
+src/cli.py                 0.0    14.5   1.000  ⚠ unstable
 src/models.py              9.5     0.0   0.000  ● god
 ──────────────────────────────────────────────────────
-Total: 8 módulos
+Total: 8 modules
 
-✓  Sin ciclos
+✓  No cycles
 ● God modules (Ca > p90): src/models.py
 ```
 
-### Ciclos
+### Cycles
 
-Detección de ciclos de importación con el algoritmo de Tarjan (SCCs). Considera aristas `IMPORTS_FROM` y `CALLS`.
+Import cycle detection using Tarjan's algorithm (SCCs). Considers `IMPORTS_FROM` and `CALLS` edges.
 
 ### God modules
 
-Módulos cuyo fan-in supera el percentil 90 del proyecto. Umbral relativo, no absoluto.
+Modules whose fan-in exceeds the 90th percentile of the project. Relative threshold, not absolute.
 
-### Herencia (`debtector coupling --json`)
+### Inheritance (`debtector coupling --json`)
 
-Profundidad de jerarquía de herencia y número de hijos directos por clase.
+Inheritance hierarchy depth and number of direct children per class.
 
-### Acoplamiento behavioral (`debtector git-coupling`)
+### Behavioral coupling (`debtector git-coupling`)
 
-| Métrica | Descripción |
-|---------|-------------|
-| **Hotspot score** | `churn × (fan_in + fan_out)`. Los módulos más cambiados y más acoplados son el mayor riesgo de deuda técnica |
-| **Temporal coupling** | Pares de archivos que aparecen juntos en commits con frecuencia > umbral configurable, aunque no tengan `import` directo entre ellos |
-| **Bus factor** | Mínimo de autores necesarios para cubrir el 80% de las líneas de un archivo. 1 = punto único de fallo |
+| Metric | Description |
+|--------|-------------|
+| **Hotspot score** | `churn × (fan_in + fan_out)`. The most changed and most coupled modules carry the highest technical debt risk |
+| **Temporal coupling** | File pairs that appear together in commits more frequently than a configurable threshold, even without a direct `import` between them |
+| **Bus factor** | Minimum number of authors needed to cover 80% of the lines in a file. 1 = single point of failure |
 
-Ejemplo de salida de `debtector hotspots`:
+Example output of `debtector hotspots`:
 
 ```
-Módulo                            Churn  Coupling     Score
+Module                            Churn  Coupling     Score
 ────────────────────────────────────────────────────────────
 src/graph_store.py                   47      15.00    705.00
 src/cli.py                           31      14.50    449.50
@@ -202,9 +207,9 @@ Total: 8 hotspots
 
 ---
 
-## Ratcheting en CI
+## Ratcheting in CI
 
-El flujo típico en CI es:
+The typical CI flow is:
 
 ```yaml
 # .github/workflows/ci.yml
@@ -214,31 +219,31 @@ El flujo típico en CI es:
     debtector baseline status --reporter github
 ```
 
-- Si no existe `baseline.json` → exit 0 (modo silencioso, no bloquea)
-- Si existe y las métricas mejoran o son iguales → exit 0
-- Si hay nuevos ciclos, nuevos god modules o la inestabilidad empeora → exit 1
+- If `baseline.json` does not exist → exit 0 (silent mode, does not block)
+- If it exists and metrics are equal or improve → exit 0
+- If there are new cycles, new god modules, or instability worsens → exit 1
 
-### Configuración de severidad (`debtector.toml`)
+### Severity configuration (`debtector.toml`)
 
 ```toml
 [metrics.thresholds]
-god_module_percentile = 90    # percentil para considerar god module
-instability_threshold = 0.8   # I >= umbral → aviso en tabla
+god_module_percentile = 90    # percentile for god module
+instability_threshold = 0.8   # I >= threshold → warning in table
 
 [metrics.severity]
-cycles      = "error"    # bloquea CI
-god_modules = "warning"  # avisa pero no bloquea
-instability = "warning"  # avisa pero no bloquea
-inheritance = "info"     # solo informa
+cycles      = "error"    # blocks CI
+god_modules = "warning"  # warns but does not block
+instability = "warning"  # warns but does not block
+inheritance = "info"     # info only
 ```
 
-Severidades: `error` (exit 1) · `warning` (imprime, exit 0) · `info` (silencioso, exit 0).
+Severities: `error` (exit 1) · `warning` (prints, exit 0) · `info` (silent, exit 0).
 
 ---
 
-## Lenguajes soportados
+## Supported languages
 
-| Lenguaje | Extensiones |
+| Language | Extensions |
 |----------|------------|
 | Python | `.py` |
 | JavaScript | `.js`, `.jsx` |
@@ -246,57 +251,57 @@ Severidades: `error` (exit 1) · `warning` (imprime, exit 0) · `info` (silencio
 
 ---
 
-## Tipos de aristas del grafo
+## Graph edge types
 
-| Tipo | Descripción |
+| Type | Description |
 |------|-------------|
-| `CONTAINS` | Fichero → clase/función |
-| `HAS_METHOD` | Clase → método |
-| `IMPORTS_FROM` | Fichero → módulo importado (peso 1.0 en Ca/Ce) |
-| `INHERITS` | Clase → clase base |
-| `CALLS` | Función/método → función/método llamado |
-| `COVERS` | Función de test → símbolo de producción que ejercita |
-| `USES_TYPE` | Función → tipo referenciado en type hints (peso 1.0 en Ca/Ce) |
+| `CONTAINS` | File → class/function |
+| `HAS_METHOD` | Class → method |
+| `IMPORTS_FROM` | File → imported module (weight 1.0 in Ca/Ce) |
+| `INHERITS` | Class → base class |
+| `CALLS` | Function/method → called function/method |
+| `COVERS` | Test function → production symbol it exercises |
+| `USES_TYPE` | Function → type referenced in type hints (weight 1.0 in Ca/Ce) |
 
 ---
 
-## Directorio `.debtector/`
+## `.debtector/` directory
 
 ```
 .debtector/
-  index.db        # grafo SQLite (commiteable si se quiere compartir)
-  baseline.json   # snapshot de métricas (committear al repo)
-  debtector.log   # logs estructurados (ignorado por git)
-  .gitignore      # generado automáticamente
+  index.db        # SQLite graph (committable if you want to share it)
+  baseline.json   # metrics snapshot (commit to repo)
+  debtector.log   # structured logs (git-ignored)
+  .gitignore      # auto-generated
 ```
 
-El `.gitignore` de `.debtector/` está gestionado por Debtector: ignora todo excepto `baseline.json` y el propio `.gitignore`.
+The `.debtector/.gitignore` is managed by Debtector: ignores everything except `baseline.json` and the `.gitignore` itself.
 
 ---
 
-## Auto-indexado con git hook
+## Auto-indexing with git hook
 
 ```bash
-debtector install-hook              # re-indexa en cada pre-commit
-debtector install-hook --add-to-stage  # también hace git add del index.db
+debtector install-hook              # re-indexes on each pre-commit
+debtector install-hook --add-to-stage  # also stages index.db
 ```
 
-El hook es incremental (solo reparsea ficheros con hash distinto) y nunca bloquea un commit.
+The hook is incremental (only re-parses files with a different hash) and never blocks a commit.
 
 ---
 
-## Integración con Claude Code
+## Claude Code integration
 
 ```bash
-debtector install-skill --global   # instala en ~/.claude/skills/
-debtector install-skill            # instala en .claude/skills/ del proyecto
+debtector install-skill --global   # installs in ~/.claude/skills/
+debtector install-skill            # installs in .claude/skills/ of the project
 ```
 
-Con los skills instalados, Claude Code reconoce frases como *"analiza el impacto de cambiar AuthService"* o *"¿quién importa flask?"* y llama automáticamente al CLI con `--json`.
+With the skills installed, Claude Code recognizes phrases like *"analyze the impact of changing AuthService"* or *"who imports flask?"* and automatically calls the CLI with `--json`.
 
 ---
 
-## Desarrollo
+## Development
 
 ```bash
 git clone https://github.com/aitormf/codeIndex
@@ -306,9 +311,9 @@ uv sync --dev
 uv run pytest                     # tests
 uv run ruff check .               # linter
 uv run ruff format .              # formatter
-uv run bandit -r src/             # seguridad
+uv run bandit -r src/             # security
 
-# Instalar hooks pre-commit (tres stages necesarios)
+# Install pre-commit hooks (three stages required)
 uv run pre-commit install
 uv run pre-commit install --hook-type commit-msg
 uv run pre-commit install --hook-type pre-push
@@ -319,38 +324,38 @@ uv run pre-commit install --hook-type pre-push
 ## Logging
 
 ```bash
-DEBTECTOR_LOG_JSON=false debtector index ./src   # coloreado (default)
-DEBTECTOR_LOG_JSON=true  debtector index ./src   # JSON lines (prod/observabilidad)
+DEBTECTOR_LOG_JSON=false debtector index ./src   # colored (default)
+DEBTECTOR_LOG_JSON=true  debtector index ./src   # JSON lines (prod/observability)
 ```
 
-Los logs siempre van a `.debtector/debtector.log`, nunca a stdout.
+Logs always go to `.debtector/debtector.log`, never to stdout.
 
 ---
 
 ## Roadmap
 
-- [x] FTS5 — búsqueda léxica/ranked
-- [x] CALLS — aristas de llamadas intra-fichero
-- [x] COVERS + `debtector untested` — cobertura de tests
-- [x] `.debtectorignore` — rutas adicionales ignoradas
-- [x] **Ca, Ce, inestabilidad** — métricas de acoplamiento por módulo
-- [x] **Ciclos** — detección con algoritmo de Tarjan
-- [x] **God modules** — outliers de fan-in (percentil 90)
-- [x] **Herencia** — profundidad y número de hijos
-- [x] **USES_TYPE** — acoplamiento por type hints (peso 1.0)
-- [x] **`debtector coupling`** — output tabular con flags (antes `metrics`)
-- [x] **Baseline + ratcheting** — CI solo falla si empeoran las métricas
-- [x] **Severidad configurable** — `debtector.toml` error/warning/info por tipo
+- [x] FTS5 — lexical/ranked search
+- [x] CALLS — intra-file call edges
+- [x] COVERS + `debtector untested` — test coverage
+- [x] `.debtectorignore` — additional ignored paths
+- [x] **Ca, Ce, instability** — coupling metrics per module
+- [x] **Cycles** — detection with Tarjan's algorithm
+- [x] **God modules** — fan-in outliers (90th percentile)
+- [x] **Inheritance** — depth and number of children
+- [x] **USES_TYPE** — type hint coupling (weight 1.0)
+- [x] **`debtector coupling`** — tabular output with flags (formerly `metrics`)
+- [x] **Baseline + ratcheting** — CI only fails if metrics worsen
+- [x] **Configurable severity** — `debtector.toml` error/warning/info per type
 - [x] **CI reporter** — GitHub Annotations + GitLab CI section markers
-- [x] **Auto-index silencioso** — los comandos de análisis indexan antes de ejecutarse
-- [x] **Hotspots** — churn × acoplamiento estructural; ranking de deuda técnica real
-- [x] **Temporal coupling** — archivos que co-cambian sin import directo
-- [x] **Bus factor** — riesgo de concentración de conocimiento por archivo
-- [x] **`debtector git-coupling` / `report`** — vistas agregadas behavioral y completa
-- [ ] Graph diff — delta de métricas entre rama base y PR
-- [ ] GitHub Action — comentario automático en PRs
-- [ ] Más lenguajes — Go, Rust, Java
+- [x] **Silent auto-index** — analysis commands index before executing
+- [x] **Hotspots** — churn × structural coupling; real technical debt ranking
+- [x] **Temporal coupling** — files that co-change without a direct import
+- [x] **Bus factor** — knowledge concentration risk per file
+- [x] **`debtector git-coupling` / `report`** — aggregated behavioral and full views
+- [ ] Graph diff — metric delta between base branch and PR
+- [ ] GitHub Action — automatic comment on PRs
+- [ ] More languages — Go, Rust, Java
 
-## Licencia
+## License
 
-MIT
+AGPL-3.0 — see [LICENSE](LICENSE).

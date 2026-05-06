@@ -1,101 +1,103 @@
-# Arquitectura de Debtector
+# Debtector Architecture
 
-## Visión general
+[Leer en Español](architecture.es.md)
 
-Debtector analiza repositorios de código fuente, extrae su estructura (clases, funciones, métodos, imports, llamadas) y la almacena como un **grafo en SQLite**. El objetivo es **detectar acoplamiento de código en pipelines de CI y PR reviews**, dando al desarrollador contexto arquitectónico antes de mergear.
+## Overview
 
-ICP: desarrollador o tech lead que usa agentes de código (Claude Code, Copilot, Codex). Los agentes generan acoplamiento oculto a una velocidad que ningún humano alcanza; codeIndex actúa como guardarraíl arquitectónico en el pipeline.
+Debtector analyzes source code repositories, extracts their structure (classes, functions, methods, imports, calls) and stores it as a **graph in SQLite**. The goal is to **detect code coupling in CI pipelines and PR reviews**, giving developers architectural context before merging.
 
-Ver [ADR-002](decisions/002-pivot-ci-coupling.md) para el contexto completo del pivote.
+ICP: developer or tech lead using code agents (Claude Code, Copilot, Codex). Agents generate hidden coupling faster than any human can track; codeIndex acts as an architectural guardrail in the pipeline.
+
+See [ADR-002](decisions/002-pivot-ci-coupling.md) for the full context of the pivot.
 
 ---
 
-## Módulos
+## Modules
 
 ```
 src/debtector/
-├── models.py         # Tipos de datos: NodeInfo, EdgeInfo, GraphNode, GraphEdge, enums
-├── graph_store.py    # Persistencia: SQLite + NetworkX cache en memoria
-├── indexer.py        # Orquestación: recorre archivos, detecta cambios, llama a parsers
-├── metrics.py        # Ca, Ce, inestabilidad, ciclos, god modules, herencia
-├── git_history.py    # Análisis behavioral: churn, hotspots, temporal coupling, bus factor
-├── config.py         # Carga y valida debtector.toml (umbrales y severidad)
+├── models.py         # Data types: NodeInfo, EdgeInfo, GraphNode, GraphEdge, enums
+├── graph_store.py    # Persistence: SQLite + in-memory NetworkX cache
+├── indexer.py        # Orchestration: walks files, detects changes, calls parsers
+├── metrics.py        # Ca, Ce, instability, cycles, god modules, inheritance
+├── git_history.py    # Behavioral analysis: churn, hotspots, temporal coupling, bus factor
+├── config.py         # Loads and validates debtector.toml (thresholds and severity)
 ├── cli.py            # CLI: index, search, summary, impact, imports, callers,
 │                     #       untested, status, coupling, baseline,
 │                     #       hotspots, temporal-coupling, bus-factor, git-coupling, report
-├── utils.py          # Utilidades compartidas: is_test_file()
-├── logging.py        # Configuración structlog (dev coloreado / prod JSON)
-├── embedder.py       # [CONGELADO] Embeddings semánticos — no desarrollar más
-│                     #   Disponible con uv add 'debtector[semantic]'
+├── utils.py          # Shared utilities: is_test_file()
+├── logging.py        # structlog configuration (colored dev / JSON prod)
+├── embedder.py       # [FROZEN] Semantic embeddings — do not develop further
+│                     #   Available with uv add 'debtector[semantic]'
 └── parser/
-    ├── base.py           # LanguageParser — clase abstracta
+    ├── base.py           # LanguageParser — abstract class
     ├── python_parser.py  # PythonParser — Tree-sitter Python
     └── js_parser.py      # JavaScriptParser — Tree-sitter JS/TS
 ```
 
-### Responsabilidades
+### Responsibilities
 
-| Módulo | Responsabilidad |
+| Module | Responsibility |
 |---|---|
-| `models.py` | Define los tipos de entrada (`NodeInfo`, `EdgeInfo`) y salida (`GraphNode`, `GraphEdge`) sin dependencias internas |
-| `graph_store.py` | Única fuente de verdad. Escribe en SQLite, mantiene un DiGraph de NetworkX como cache para traversals |
-| `indexer.py` | Recorre el sistema de archivos, detecta cambios por SHA-256, delega el parseo y llama a `GraphStore.store_file()`. Genera aristas COVERS tras cada indexación (no-fatal) |
-| `metrics.py` | Computa métricas de acoplamiento **estructural** sobre el grafo: Ca, Ce, inestabilidad, ciclos (Tarjan), god modules (p90), profundidad de herencia |
-| `git_history.py` | Computa métricas de acoplamiento **behavioral** sobre el historial git: churn (`git log --numstat`), hotspot score, temporal coupling, bus factor (`git blame`). Solo lectura; no escribe en DB |
-| `config.py` | Lee `debtector.toml` con `tomllib` (stdlib). Expone `DebtectorConfig` con umbrales y severidades configurables |
-| `embedder.py` | **[Congelado]** Convierte nodos a texto y genera vectores float32 con fastembed. No desarrollar más |
-| `utils.py` | Utilidades compartidas sin dependencias internas: `is_test_file()` |
-| `parser/*` | Transforman un archivo fuente en `(list[NodeInfo], list[EdgeInfo])` usando Tree-sitter. Sin acceso a la DB |
-| `cli.py` | Traduce argumentos de línea de comandos a llamadas al GraphStore, metrics y git_history. Sin lógica de negocio propia. Auto-indexa silenciosamente antes de cada comando de análisis |
+| `models.py` | Defines input types (`NodeInfo`, `EdgeInfo`) and output types (`GraphNode`, `GraphEdge`) with no internal dependencies |
+| `graph_store.py` | Single source of truth. Writes to SQLite, maintains a NetworkX DiGraph as cache for traversals |
+| `indexer.py` | Walks the filesystem, detects changes by SHA-256, delegates parsing and calls `GraphStore.store_file()`. Generates COVERS edges after each indexing run (non-fatal) |
+| `metrics.py` | Computes **structural** coupling metrics on the graph: Ca, Ce, instability, cycles (Tarjan), god modules (p90), inheritance depth |
+| `git_history.py` | Computes **behavioral** coupling metrics on git history: churn (`git log --numstat`), hotspot score, temporal coupling, bus factor (`git blame`). Read-only; does not write to DB |
+| `config.py` | Reads `debtector.toml` with `tomllib` (stdlib). Exposes `DebtectorConfig` with configurable thresholds and severities |
+| `embedder.py` | **[Frozen]** Converts nodes to text and generates float32 vectors with fastembed. Do not develop further |
+| `utils.py` | Shared utilities with no internal dependencies: `is_test_file()` |
+| `parser/*` | Transform a source file into `(list[NodeInfo], list[EdgeInfo])` using Tree-sitter. No DB access |
+| `cli.py` | Translates command-line arguments into calls to GraphStore, metrics and git_history. No business logic of its own. Silently auto-indexes before each analysis command |
 
 ---
 
-## Flujo de datos
+## Data flow
 
-### Indexación
+### Indexing
 
 ```
-Archivo fuente
+Source file
     │
     ▼
-Indexer — detecta cambio por SHA-256
+Indexer — detects change by SHA-256
     │
     ▼
 Parser (Tree-sitter) ──→ (list[NodeInfo], list[EdgeInfo])
-    │                         incl. USES_TYPE desde type hints
+    │                         incl. USES_TYPE from type hints
     ▼
 GraphStore.store_file()
-    ├── SQLite  (persistencia)
-    └── NetworkX DiGraph  (cache invalidable para traversals)
+    ├── SQLite  (persistence)
+    └── NetworkX DiGraph  (invalidatable cache for traversals)
 ```
 
-### Consulta y análisis
+### Query and analysis
 
 ```
 CLI / CI pipeline
     │
-    ├── Auto-index silencioso → Indexer (SHA-256, no-op si sin cambios)
+    ├── Silent auto-index → Indexer (SHA-256, no-op if no changes)
     │
-    ├── Búsqueda léxica       → SQLite FTS5              (debtector search)
-    ├── Lookup directo        → SQLite SQL                (summary, callers, imports)
-    ├── Traversal de impacto  → NetworkX                  (debtector impact)
-    ├── Acoplamiento struct.  → metrics.py + grafo        (debtector coupling)
-    ├── Acoplamiento behav.   → git_history.py + git      (debtector git-coupling)
+    ├── Lexical search       → SQLite FTS5              (debtector search)
+    ├── Direct lookup        → SQLite SQL                (summary, callers, imports)
+    ├── Impact traversal     → NetworkX                  (debtector impact)
+    ├── Structural coupling  → metrics.py + graph        (debtector coupling)
+    ├── Behavioral coupling  → git_history.py + git      (debtector git-coupling)
     │     ├── churn           → git log --numstat
     │     ├── hotspots        → churn × (fan_in + fan_out)
-    │     ├── temporal coupl. → git log --name-only, pares co-cambiantes
+    │     ├── temporal coupl. → git log --name-only, co-changing pairs
     │     └── bus factor      → git blame --line-porcelain
-    ├── Informe completo      → coupling + git-coupling   (debtector report)
-    └── Baseline / ratcheting → baseline.json + delta     (debtector baseline)
+    ├── Full report          → coupling + git-coupling   (debtector report)
+    └── Baseline / ratcheting → baseline.json + delta    (debtector baseline)
 ```
 
-> La búsqueda semántica (`sqlite-vec` KNN) está congelada. Ver sección [Semántica congelada](#semántica-congelada).
+> Semantic search (`sqlite-vec` KNN) is frozen. See [Frozen semantics](#frozen-semantics).
 
 ---
 
-## Schema SQLite
+## SQLite schema
 
-El índice vive en `.debtector/index.db`. Tres tablas relacionales:
+The index lives in `.debtector/index.db`. Three relational tables:
 
 ```sql
 CREATE TABLE nodes (
@@ -107,20 +109,20 @@ CREATE TABLE nodes (
     line_start      INTEGER DEFAULT 0,
     line_end        INTEGER DEFAULT 0,
     language        TEXT DEFAULT '',       -- "python" | "javascript" | "typescript"
-    parent_name     TEXT,                  -- "UserService" (solo para Method)
+    parent_name     TEXT,                  -- "UserService" (methods only)
     signature       TEXT,                  -- "def get_user(self, id: int) -> User"
     docstring       TEXT,
     decorators      TEXT DEFAULT '[]',     -- JSON array
-    file_hash       TEXT DEFAULT '',       -- SHA-256 del archivo fuente
-    extra           TEXT DEFAULT '{}',     -- JSON libre para extensiones futuras
+    file_hash       TEXT DEFAULT '',       -- SHA-256 of the source file
+    extra           TEXT DEFAULT '{}',     -- free JSON for future extensions
     updated_at      REAL NOT NULL
 );
 
 CREATE TABLE edges (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind              TEXT NOT NULL,       -- ver EdgeKind más abajo
-    source_qualified  TEXT NOT NULL,       -- qualified_name del origen
-    target_qualified  TEXT NOT NULL,       -- qualified_name del destino
+    kind              TEXT NOT NULL,       -- see EdgeKind below
+    source_qualified  TEXT NOT NULL,       -- qualified_name of the source
+    target_qualified  TEXT NOT NULL,       -- qualified_name of the target
     file_path         TEXT NOT NULL,
     line              INTEGER DEFAULT 0,
     extra             TEXT DEFAULT '{}',
@@ -133,7 +135,7 @@ CREATE TABLE metadata (
 );
 ```
 
-### Índices
+### Indexes
 
 ```sql
 idx_nodes_qualified  ON nodes(qualified_name)
@@ -155,13 +157,13 @@ CREATE VIRTUAL TABLE nodes_fts USING fts5(
 );
 ```
 
-Ranking BM25 con camelCase splitting: `"UserService"` → tokens `user`, `service`, `userservice`. Cada término se expande con `*` para prefix matching.
+BM25 ranking with camelCase splitting: `"UserService"` → tokens `user`, `service`, `userservice`. Each term is expanded with `*` for prefix matching.
 
 ---
 
-## Persistencia del baseline
+## Baseline persistence
 
-`.debtector/baseline.json` — snapshot de métricas de acoplamiento generado con `debtector baseline save`. Se commitea al repo; es la referencia compartida para el ratcheting en CI.
+`.debtector/baseline.json` — coupling metrics snapshot generated with `debtector baseline save`. Committed to the repo; it is the shared reference for ratcheting in CI.
 
 ```json
 {
@@ -174,39 +176,39 @@ Ranking BM25 con camelCase splitting: `"UserService"` → tokens `user`, `servic
 }
 ```
 
-El `.debtector/.gitignore` es gestionado por codeIndex (siempre sobreescrito): ignora todo excepto `baseline.json` y el propio `.gitignore`.
+The `.debtector/.gitignore` is managed by codeIndex (always overwritten): ignores everything except `baseline.json` and the `.gitignore` itself.
 
 ---
 
-## Tipos de nodos y aristas
+## Node and edge types
 
 ### NodeKind
 
-| Valor | Descripción |
+| Value | Description |
 |---|---|
-| `File` | Un archivo fuente indexado |
-| `Class` | Definición de clase |
-| `Function` | Función top-level |
-| `Method` | Método dentro de una clase |
+| `File` | An indexed source file |
+| `Class` | Class definition |
+| `Function` | Top-level function |
+| `Method` | Method within a class |
 
 ### EdgeKind
 
-| Valor | Significado | Ejemplo |
+| Value | Meaning | Example |
 |---|---|---|
-| `CONTAINS` | Archivo contiene símbolo top-level | `app.py` → `app.py::UserService` |
-| `HAS_METHOD` | Clase tiene método | `app.py::UserService` → `app.py::UserService.get_user` |
-| `IMPORTS_FROM` | Archivo importa módulo o símbolo | `app.py` → `flask` |
-| `INHERITS` | Clase hereda de otra | `app.py::AdminService` → `UserService` |
-| `CALLS` | Función/método llama a otro símbolo | `app.py::create_app` → `app.py::UserService.__init__` |
-| `COVERS` | Test ejerce a símbolo de producción | `tests/test_auth.py::test_login` → `src/auth.py::login` |
-| `USES_TYPE` | Función referencia un tipo en sus type hints (peso 1.0 en Ca/Ce) | `app.py::get_user` → `User` |
-| `DEPENDS_ON` | Dependencia genérica (uso futuro) | — |
+| `CONTAINS` | File contains top-level symbol | `app.py` → `app.py::UserService` |
+| `HAS_METHOD` | Class has method | `app.py::UserService` → `app.py::UserService.get_user` |
+| `IMPORTS_FROM` | File imports module or symbol | `app.py` → `flask` |
+| `INHERITS` | Class inherits from another | `app.py::AdminService` → `UserService` |
+| `CALLS` | Function/method calls another symbol | `app.py::create_app` → `app.py::UserService.__init__` |
+| `COVERS` | Test exercises a production symbol | `tests/test_auth.py::test_login` → `src/auth.py::login` |
+| `USES_TYPE` | Function references a type in its type hints (weight 1.0 in Ca/Ce) | `app.py::get_user` → `User` |
+| `DEPENDS_ON` | Generic dependency (future use) | — |
 
 ---
 
 ## qualified_name
 
-Identificador único de cualquier símbolo en todo el codebase:
+Unique identifier for any symbol in the entire codebase:
 
 ```
 src/auth/service.py                        → File
@@ -217,64 +219,64 @@ src/auth/service.py::create_app            → Function
 
 ---
 
-## Métricas de acoplamiento (Fase 1)
+## Coupling metrics (Phase 1)
 
-### Fan-in / Fan-out / Inestabilidad
+### Fan-in / Fan-out / Instability
 
-| Métrica | Definición | Rango |
+| Metric | Definition | Range |
 |---|---|---|
-| Fan-in (Ca) | Suma ponderada de aristas IMPORTS_FROM + USES_TYPE entrantes | ≥ 0 |
-| Fan-out (Ce) | Suma ponderada de aristas IMPORTS_FROM + USES_TYPE salientes | ≥ 0 |
-| Inestabilidad (I) | Ce / (Ca + Ce) | [0, 1] |
+| Fan-in (Ca) | Weighted sum of incoming IMPORTS_FROM + USES_TYPE edges | ≥ 0 |
+| Fan-out (Ce) | Weighted sum of outgoing IMPORTS_FROM + USES_TYPE edges | ≥ 0 |
+| Instability (I) | Ce / (Ca + Ce) | [0, 1] |
 
-Pesos: `IMPORTS_FROM` = 1.0, `USES_TYPE` = 1.0. Ambos pesos son constantes públicas en `metrics.py` (`IMPORTS_FROM_WEIGHT`, `USES_TYPE_WEIGHT`) para facilitar ajustes en experimentos.
+Weights: `IMPORTS_FROM` = 1.0, `USES_TYPE` = 1.0. Both weights are public constants in `metrics.py` (`IMPORTS_FROM_WEIGHT`, `USES_TYPE_WEIGHT`) to facilitate adjustments in experiments.
 
-### Ciclos
+### Cycles
 
-Detección mediante el **algoritmo de Tarjan iterativo** (evita RecursionError en cadenas largas) sobre aristas `IMPORTS_FROM` y `CALLS`. Devuelve SCCs de tamaño > 1.
+Detection via the **iterative Tarjan algorithm** (avoids RecursionError on long chains) over `IMPORTS_FROM` and `CALLS` edges. Returns SCCs with size > 1.
 
 ### God modules
 
-Outlier estadístico en Ca: módulos cuyo fan-in supera el **percentil 90** del proyecto (umbral relativo, no absoluto). Configurable en `debtector.toml`.
+Statistical outlier in Ca: modules whose fan-in exceeds the **90th percentile** of the project (relative threshold, not absolute). Configurable in `debtector.toml`.
 
-### Herencia
+### Inheritance
 
-Profundidad (camino más largo desde la raíz) y número de hijos directos, traversando aristas `INHERITS`. Soporta herencia cross-file; corta ciclos.
+Depth (longest path from root) and number of direct children, traversing `INHERITS` edges. Supports cross-file inheritance; cuts cycles.
 
 ---
 
-## Métricas behavioral (Fase 2)
+## Behavioral metrics (Phase 2)
 
 ### Churn
 
-Número de commits distintos que tocan cada archivo, calculado con `git log --numstat`. Los archivos binarios se cuentan pero sus líneas se registran como 0. Acepta filtro `--since` (e.g. `"6 months ago"`).
+Number of distinct commits touching each file, computed with `git log --numstat`. Binary files are counted but their line counts are recorded as 0. Accepts a `--since` filter (e.g. `"6 months ago"`).
 
 ### Hotspot score
 
-`churn × (fan_in + fan_out)` — combina la actividad histórica con el acoplamiento estructural. Un archivo muy cambiado y muy acoplado es el punto de mayor riesgo de deuda técnica. Ordenado descendente.
+`churn × (fan_in + fan_out)` — combines historical activity with structural coupling. A heavily changed and heavily coupled file is the highest technical debt risk point. Sorted descending.
 
 ### Temporal coupling
 
-Pares de archivos que aparecen juntos en commits con frecuencia superior a un umbral. Detecta dependencias implícitas no visibles en el grafo de imports. Parámetros:
-- `min_shared` (default: 5): mínimo de commits compartidos
-- `min_ratio` (default: 0.3): `shared / min(commits_a, commits_b)` mínimo
+File pairs that appear together in commits more frequently than a threshold. Detects implicit dependencies not visible in the import graph. Parameters:
+- `min_shared` (default: 5): minimum shared commits
+- `min_ratio` (default: 0.3): minimum `shared / min(commits_a, commits_b)`
 
 ### Bus factor
 
-Mínimo de autores necesarios para cubrir el 80% de las líneas vigentes de un archivo, calculado con `git blame --line-porcelain`. Un bus factor de 1 indica punto único de fallo de conocimiento. Solo procesa archivos presentes en el índice.
+Minimum number of authors needed to cover 80% of the active lines in a file, computed with `git blame --line-porcelain`. A bus factor of 1 indicates a single point of knowledge failure. Only processes files present in the index.
 
 ---
 
-## Configuración (`debtector.toml`)
+## Configuration (`debtector.toml`)
 
-Archivo opcional en la raíz del proyecto. Usa `tomllib` de la stdlib (Python 3.12+):
+Optional file at the project root. Uses `tomllib` from the stdlib (Python 3.12+):
 
 ```toml
 [metrics.thresholds]
-god_module_percentile = 90    # percentil Ca para god module (default: 90)
-instability_threshold = 0.8   # I >= umbral → aviso (default: 0.8)
-max_inheritance_depth = 5     # profundidad máxima de herencia (default: 5)
-max_children          = 10    # hijos directos máximos (default: 10)
+god_module_percentile = 90    # Ca percentile for god module (default: 90)
+instability_threshold = 0.8   # I >= threshold → warning (default: 0.8)
+max_inheritance_depth = 5     # maximum inheritance depth (default: 5)
+max_children          = 10    # maximum direct children (default: 10)
 
 [metrics.severity]
 cycles      = "error"    # error | warning | info (default: error)
@@ -283,38 +285,38 @@ instability = "warning"  # (default: warning)
 inheritance = "info"     # (default: info)
 ```
 
-**Severidades:**
-- `error` → exit code 1, bloquea CI
-- `warning` → reporta pero exit code 0
-- `info` → silencioso, exit code 0
+**Severities:**
+- `error` → exit code 1, blocks CI
+- `warning` → reports but exit code 0
+- `info` → silent, exit code 0
 
 ---
 
 ## Ratcheting CI
 
-`debtector baseline status` compara el estado actual contra el baseline guardado:
+`debtector baseline status` compares the current state against the saved baseline:
 
-- **Nuevos ciclos** no presentes en baseline → según `severity.cycles`
-- **Nuevos god modules** → según `severity.god_modules`
-- **Regresión de inestabilidad** > `_INSTABILITY_TOLERANCE` (0.05) → según `severity.instability`
-- **Sin baseline** → siempre exit code 0 (modo silencioso)
+- **New cycles** not present in baseline → according to `severity.cycles`
+- **New god modules** → according to `severity.god_modules`
+- **Instability regression** > `_INSTABILITY_TOLERANCE` (0.05) → according to `severity.instability`
+- **No baseline** → always exit code 0 (silent mode)
 
 ### CI reporter
 
-`--reporter github` emite GitHub Actions Annotations:
+`--reporter github` emits GitHub Actions Annotations:
 ```
-::error file=src/auth.py,line=1::Ciclo de importación: src/auth.py → src/user.py
+::error file=src/auth.py,line=1::Import cycle: src/auth.py → src/user.py
 ```
 
-`--reporter gitlab` emite GitLab CI section markers con ANSI.
+`--reporter gitlab` emits GitLab CI section markers with ANSI.
 
 ---
 
-## Patrones de implementación clave
+## Key implementation patterns
 
-### Escritura atómica por archivo
+### Atomic write per file
 
-Cuando un archivo cambia, se reemplazan todos sus nodos y aristas dentro de una sola transacción:
+When a file changes, all its nodes and edges are replaced within a single transaction:
 
 ```
 BEGIN IMMEDIATE
@@ -325,70 +327,70 @@ BEGIN IMMEDIATE
 COMMIT
 ```
 
-Si algo falla, nada cambia. Simplifica la indexación incremental: no hay merges parciales.
+If anything fails, nothing changes. This simplifies incremental indexing: no partial merges.
 
-### NetworkX como cache de traversal
+### NetworkX as traversal cache
 
-SQLite persiste los datos. Para consultas de grafo complejas (BFS de impacto, cadenas de dependencia transitivas) se carga todo en un `DiGraph` de NetworkX en memoria. El cache se invalida automáticamente tras cada escritura.
+SQLite persists the data. For complex graph queries (impact BFS, transitive dependency chains) everything is loaded into an in-memory NetworkX `DiGraph`. The cache is automatically invalidated after each write.
 
-### Batch queries de 450
+### Batch queries of 450
 
-SQLite tiene un límite de 999 variables por consulta. Las queries con `IN (...)` se dividen en lotes de 450 para no superarlo con margen.
+SQLite has a limit of 999 variables per query. Queries with `IN (...)` are split into batches of 450 to stay well within that limit.
 
-### Detección de cambios por SHA-256
+### Change detection by SHA-256
 
-El Indexer compara el hash SHA-256 del archivo en disco con el almacenado en `nodes.file_hash`. Solo re-parsea los archivos que han cambiado.
+The Indexer compares the SHA-256 hash of the file on disk with the one stored in `nodes.file_hash`. Only re-parses files that have changed.
 
-### Dedup USES_TYPE en O(1)
+### USES_TYPE dedup in O(1)
 
-El extractor de type hints mantiene un `set[str]` compartido por archivo (`uses_type_seen`) que se pasa a través de toda la recursión de `_extract_symbols`. Evita un scan O(F×E) de la lista de aristas por cada función.
+The type hint extractor maintains a `set[str]` shared per file (`uses_type_seen`) that is threaded through the entire `_extract_symbols` recursion. Avoids an O(F×E) scan of the edge list for each function.
 
 ---
 
-## Semántica congelada
+## Frozen semantics
 
-`embedder.py`, `sqlite-vec` y `fastembed` están congelados: el código existe pero no se desarrollará más. No forman parte del objetivo CI/PR.
+`embedder.py`, `sqlite-vec` and `fastembed` are frozen: the code exists but will not be developed further. They are not part of the CI/PR objective.
 
-- Disponibles como dependencia opcional: `uv add 'debtector[semantic]'`
-- El comando `debtector semantic` devuelve un error con mensaje de deprecación
-- Los tests de embeddings siguen existiendo pero no cubren el objetivo actual
+- Available as an optional dependency: `uv add 'debtector[semantic]'`
+- The `debtector semantic` command returns an error with a deprecation message
+- Embedding tests still exist but do not cover the current objective
 
-Ver [ADR-002](decisions/002-pivot-ci-coupling.md) para el razonamiento completo.
+See [ADR-002](decisions/002-pivot-ci-coupling.md) for the full reasoning.
 
 ---
 
 ## Parsers
 
-Cada parser implementa `LanguageParser` (abstracta en `parser/base.py`) y recibe la ruta de un archivo, devolviendo `(list[NodeInfo], list[EdgeInfo])`.
+Each parser implements `LanguageParser` (abstract in `parser/base.py`) and receives a file path, returning `(list[NodeInfo], list[EdgeInfo])`.
 
-### Qué extrae cada parser
+### What each parser extracts
 
-- Nodo `File` para el archivo en sí
-- Nodos `Class`, `Function`, `Method` para cada símbolo
-- Aristas `CONTAINS`, `HAS_METHOD`, `IMPORTS_FROM`, `INHERITS`, `CALLS`
-- Aristas `USES_TYPE` desde type hints en firmas (solo nombres con inicial mayúscula)
-- `signature` y `docstring` cuando están disponibles
+- `File` node for the file itself
+- `Class`, `Function`, `Method` nodes for each symbol
+- `CONTAINS`, `HAS_METHOD`, `IMPORTS_FROM`, `INHERITS`, `CALLS` edges
+- `USES_TYPE` edges from type hints in signatures (uppercase-initial names only)
+- `signature` and `docstring` when available
 
-### Lenguajes soportados
+### Supported languages
 
-| Lenguaje | Extensiones | Parser |
+| Language | Extensions | Parser |
 |---|---|---|
 | Python | `.py` | `PythonParser` (Tree-sitter) |
 | JavaScript/TypeScript | `.js`, `.jsx`, `.ts`, `.tsx` | `JavaScriptParser` (Tree-sitter) |
 
 ---
 
-## Directorios ignorados en indexación
+## Directories ignored during indexing
 
 `.git`, `__pycache__`, `node_modules`, `.next`, `dist`, `build`, `.venv`, `venv`, `.idea`, `.vscode`
 
-Soporte adicional para `.debtectorignore` (gitignore-style).
+Additional support for `.debtectorignore` (gitignore-style).
 
 ---
 
-## Decisiones de arquitectura
+## Architecture decisions
 
-| ADR | Decisión |
+| ADR | Decision |
 |---|---|
-| [001](decisions/001-semantic-search.md) | FTS5 + sqlite-vec + fastembert para búsqueda semántica (implementado, luego congelado) |
-| [002](decisions/002-pivot-ci-coupling.md) | Pivote: de navegación para IA a análisis de acoplamiento para CI/PR |
+| [001](decisions/001-semantic-search.md) | FTS5 + sqlite-vec + fastembed for semantic search (implemented, then frozen) |
+| [002](decisions/002-pivot-ci-coupling.md) | Pivot: from AI navigation to coupling analysis for CI/PR |
