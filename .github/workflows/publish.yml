@@ -1,45 +1,40 @@
 name: Publish to PyPI
 
-# ACTIVACIÓN FUTURA: cambiar el trigger de workflow_dispatch a:
-#
-#   push:
-#     tags: ['v*']
-#
-# y crear en GitHub el environment "pypi" con aprobación requerida.
-#
-# CONFIGURACIÓN EN PYPI (Trusted Publishing — sin API token):
-#   PyPI → Account settings → Publishing → Add a new publisher
-#   - Owner:       aitormf
-#   - Repository:  codeIndex
-#   - Workflow:    publish.yml
-#   - Environment: pypi
-
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag a publicar (ej: v0.3.0)"
-        required: true
+  push:
+    tags:
+      - "v*"
 
 jobs:
-  build-and-publish:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build
+        run: uv build
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
-      id-token: write  # requerido por PyPI Trusted Publishing (OIDC)
-
+      id-token: write  # required for Trusted Publishing (OIDC)
     steps:
-      - uses: actions/checkout@v6
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
         with:
-          ref: ${{ inputs.tag }}
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
-        with:
-          version: "latest"
-
-      - name: Build wheel and sdist
-        run: uv build
+          name: dist
+          path: dist/
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
