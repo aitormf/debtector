@@ -5,8 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "debtector"
 version = "0.4.1"
-description = "Guardarraíl de acoplamiento para CI/PR: detecta ciclos, god modules y regresiones de acoplamiento antes del merge"
+description = "Coupling guardrail for CI/PR: detects cycles, god modules and coupling regressions before merge"
 license = {text = "AGPL-3.0-or-later"}
+authors = [{name = "aitormf"}]
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "tree-sitter-language-pack>=1.0,!=1.6.3",
@@ -29,6 +31,11 @@ dev = [
     "commitizen>=3.0",
     "pre-commit>=3.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/aitormf/codeIndex"
+Repository = "https://github.com/aitormf/codeIndex"
+"Bug Tracker" = "https://github.com/aitormf/codeIndex/issues"
 
 [project.scripts]
 debtector = "debtector.cli:main"
