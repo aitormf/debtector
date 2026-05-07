@@ -4,7 +4,7 @@ from debtector.graph_store import GraphStore
 from debtector.indexer import Indexer
 from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 
 __all__ = [
     "GraphStore",

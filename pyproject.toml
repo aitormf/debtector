@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "debtector"
-version = "0.4.1"
+version = "0.4.2"
 description = "Coupling guardrail for CI/PR: detects cycles, god modules and coupling regressions before merge"
 license = {text = "AGPL-3.0-or-later"}
 authors = [{name = "aitormf"}]
@@ -69,7 +69,7 @@ skips = []
 # ---------------------------------------------------------------------------
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.4.1"
+version = "0.4.2"
 version_files = ["pyproject.toml:version", "src/debtector/__init__.py"]
 tag_format = "v$version"
 annotated_tag = true  # git push --follow-tags solo sube tags anotados
