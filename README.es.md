@@ -127,13 +127,6 @@ El índice vive en `.debtector/index.db`. El baseline en `.debtector/baseline.js
 | `git-coupling` | Vista agregada de los tres anteriores. `--json` combina las tres secciones |
 | `report` | Informe completo: acoplamiento estructural + behavioral. `--json` para consumo por IA/CI |
 
-### Configuración y hooks
-
-| Comando | Descripción |
-|---------|-------------|
-| `install-hook` | Hook git pre-commit para auto-indexado |
-| `install-skill` | Skills de Claude Code para uso del grafo en contexto IA |
-
 ### Flag global `--json`
 
 Todos los comandos admiten `--json` para emitir JSON compacto en stdout, apto para consumo directo por agentes de IA o pipelines:
@@ -276,28 +269,6 @@ Severidades: `error` (exit 1) · `warning` (imprime, exit 0) · `info` (silencio
 ```
 
 El `.gitignore` de `.debtector/` está gestionado por Debtector: ignora todo excepto `baseline.json` y el propio `.gitignore`.
-
----
-
-## Auto-indexado con git hook
-
-```bash
-debtector install-hook              # re-indexa en cada pre-commit
-debtector install-hook --add-to-stage  # también hace git add del index.db
-```
-
-El hook es incremental (solo reparsea ficheros con hash distinto) y nunca bloquea un commit.
-
----
-
-## Integración con Claude Code
-
-```bash
-debtector install-skill --global   # instala en ~/.claude/skills/
-debtector install-skill            # instala en .claude/skills/ del proyecto
-```
-
-Con los skills instalados, Claude Code reconoce frases como *"analiza el impacto de cambiar AuthService"* o *"¿quién importa flask?"* y llama automáticamente al CLI con `--json`.
 
 ---
 
