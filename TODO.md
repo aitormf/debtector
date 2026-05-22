@@ -36,8 +36,24 @@ ICP: dev/tech lead que usa agentes de código.
 
 ---
 
-## Fase 3 — Graph diff para PRs
-*El más diferencial técnicamente. Construir cuando Fase 1+2 tengan tracción.*
+## Fase 3 — Audit (vista de auditoría)
+*Segundo presenter sobre el mismo backend de Fase 1+2. Para revisión profunda por tech lead, no para PR. Mismo grafo, presentación distinta — sin nueva fuente de datos. Ver [ADR-003](docs/decisions/003-audit-as-second-surface.md).*
+
+- [ ] **LCOM4** — cohesión interna de clases vía componentes conexas en aristas CALLS método↔método dentro de la misma clase. Cada clase recibe un valor (1 = cohesiva, >1 = candidata a partir)
+- [ ] **Priorización de ciclos** — ordenar ciclos detectados por fan-in del nodo más expuesto del ciclo ("qué ciclo romper primero")
+- [ ] **Joins de testRisk** — cruces que el grafo permite y los reportes sueltos no:
+  - untested × Ce alto → "untested high-coupling" (riesgo máximo en cambios futuros)
+  - untested × churn alto → "untested hotspots" (deuda más probable de explotar)
+  - bus factor 1 × Ca alto → "critical knowledge concentration"
+- [ ] **Health score agregado** — valor 0-100 + conteos por severidad (critical / high / medium / low)
+- [ ] **`debtector audit`** — comando opinado con 8 secciones: `summary`, `coupling`, `cycles`, `cohesion`, `testRisk`, `hotspots`, `busFactor`, `inheritance`. Top-N por dimensión por defecto. `--full` para listado completo, `--json` para consumo programático
+- [ ] **Schema versionado para `audit --json`** — campo `schema_version: 1` en la raíz para que consumidores externos puedan evolucionar sin romperse
+- [ ] **`docs/audit-schema.md`** — contrato JSON estable: shape, semántica de cada campo, ejemplos
+
+---
+
+## Fase 4 — Graph diff para PRs
+*El más diferencial técnicamente. Construir cuando Fase 1+2+3 tengan tracción.*
 
 - [ ] **`debtector diff <db_base> <db_pr>`** — compara dos índices SQLite y reporta el delta
 - [ ] **Delta de métricas por PR** — qué módulos empeoraron, qué mejoraron, nuevos ciclos, nuevos god modules
@@ -45,7 +61,7 @@ ICP: dev/tech lead que usa agentes de código.
 
 ---
 
-## Fase 4 — Features avanzadas
+## Fase 5 — Features avanzadas
 *Solo si las fases anteriores tienen tracción.*
 
 - [ ] **Architectural layer violations** — usuario define capas en `debtector.toml`; analizador detecta imports que violan el sentido
@@ -69,6 +85,7 @@ ICP: dev/tech lead que usa agentes de código.
 
 ## Hecho
 
+- [x] **Receta NL → archivos en README** — flujo `search` → `impact` → enriquecer con métricas, documentado sin acoplarse a ningún consumidor; decisión de no exponerlo como comando paraguas en [ADR-003](docs/decisions/003-audit-as-second-surface.md)
 - [x] Tests unitarios — parsers Python/JS/TS, GraphStore, indexer
 - [x] Fixture JS/TS equivalente a `tests/fixtures/sample.py`
 - [x] `.debtectorignore` — soporte para ignorar rutas adicionales

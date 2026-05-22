@@ -200,6 +200,36 @@ Total: 8 hotspots
 
 ---
 
+## Identificar archivos afectados por una tarea
+
+Cuando partes de una descripción en lenguaje natural ("añade rate limiting", "refactoriza el módulo de pagos") y necesitas saber qué archivos del repo están implicados, debtector ofrece datos deterministas que acotan la búsqueda. El flujo recomendado es:
+
+1. **Buscar candidatos por keywords.** `debtector search` (FTS5 + BM25) devuelve los símbolos lexicalmente relacionados con la tarea, ordenados por relevancia:
+
+   ```bash
+   debtector --json search "rate limit"
+   debtector --json search "AuthService" --kind Class
+   ```
+
+2. **Expandir el radio de impacto.** Una vez identificadas las semillas, `debtector impact` hace BFS sobre el grafo y devuelve todos los archivos y nodos que dependen de ellas directa o transitivamente:
+
+   ```bash
+   debtector --json impact src/auth/service.py
+   debtector --json impact src/auth/service.py src/auth/middleware.py --depth 3
+   ```
+
+3. **Enriquecer con riesgo y cobertura.** Cruzar el conjunto resultante con métricas y tests aporta contexto arquitectónico para priorizar la lectura:
+
+   ```bash
+   debtector --json coupling             # qué módulos del impact set son god / inestables
+   debtector --json untested src/auth/   # qué partes carecen de tests
+   debtector --json hotspots             # qué módulos del impact set acumulan deuda
+   ```
+
+Cada paso emite JSON estable y se compone fácilmente desde scripts, IDEs, CI o agentes. El paso 1 es lexical: si la tarea usa sinónimos que no aparecen en el código (p. ej. "rate limiting" cuando el módulo se llama `throttle`), el consumidor decide qué candidatos son relevantes — debtector no inventa.
+
+---
+
 ## Ratcheting en CI
 
 El flujo típico en CI es:

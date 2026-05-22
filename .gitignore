@@ -39,6 +39,8 @@ coverage.xml
 .debtector.db
 *.debtector.db
 
+.kj
+
 # OS
 .DS_Store
 Thumbs.db
