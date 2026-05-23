@@ -44,3 +44,6 @@ coverage.xml
 # OS
 .DS_Store
 Thumbs.db
+*.log
+.karajan/
+.reviews/

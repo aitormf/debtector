@@ -26,7 +26,7 @@ uv add <paquete>           # añadir dependencia
 ```bash
 uv run pytest                        # tests
 uv run ruff check .                  # linter
-uv run ruff format .                 # formatter
+uv run ruff format .                 # formatter, si hace cambios devuelve un error, hace falta volver a empezar el proceso de commit
 uv run bandit -r src/                # seguridad
 uv run pre-commit install && uv run pre-commit install --hook-type commit-msg  # instalar hooks locales
 ```
