@@ -21,17 +21,26 @@ from pathlib import Path
 
 import structlog
 
+from .audit import (
+    compute_health_score,
+    compute_lcom4,
+    critical_knowledge_concentration,
+    prioritize_cycles,
+    untested_high_coupling,
+    untested_hotspots,
+)
 from .config import Severity, load_config
 from .git_history import (
     compute_bus_factor,
     compute_hotspots,
     compute_temporal_coupling,
+    parse_churn,
 )
 from .graph_store import GraphStore
 from .indexer import Indexer
 from .logging import configure_logging
-from .metrics import compute_metrics, find_cycles, god_modules
-from .models import node_to_dict
+from .metrics import compute_metrics, find_cycles, god_modules, inheritance_metrics
+from .models import NodeKind, node_to_dict
 
 log = structlog.get_logger()
 
@@ -394,6 +403,157 @@ def cmd_untested(args) -> None:
         for n in symbols:
             print(f"  {n.kind:10s} {n.name}")
             print(f"             {n.file_path}:{n.line_start}")
+
+
+def _get_uncovered_files(store: GraphStore) -> set[str]:
+    """Get set of file paths with no COVERS edge."""
+    symbols = store.get_uncovered_symbols()
+    return {s.file_path for s in symbols}
+
+
+def cmd_audit(args) -> None:
+    """Audit surface: second presenter for tech lead review.
+
+    Eight sections: summary, coupling, cycles, cohesion, testRisk, hotspots,
+    busFactor, inheritance. Respects --top-n (default 10) and --full.
+    Outputs schema v1 JSON with --json.
+
+    Args:
+        args: Parsed argument namespace with project, top_n, full, json flags.
+    """
+    _auto_index(args.project)
+    store = _get_store(args.project)
+
+    # Compute core metrics
+    module_metrics = compute_metrics(store)
+    cycles = find_cycles(store)
+    hotspots = compute_hotspots(store, args.project)
+    bus_factor = compute_bus_factor(args.project)
+    inheritance = inheritance_metrics(store)
+    uncovered_files = _get_uncovered_files(store)
+    churn = parse_churn(args.project)
+
+    # Compute testRisk joins
+    tr_findings = (
+        untested_high_coupling(uncovered_files, module_metrics)
+        + untested_hotspots(uncovered_files, churn)
+        + critical_knowledge_concentration(bus_factor, module_metrics)
+    )
+
+    # Compute LCOM4 for each class
+    classes = store.search_nodes("", kind=NodeKind.CLASS)
+    cohesion = [
+        {
+            "qualified_name": c.qualified_name,
+            "lcom4": compute_lcom4(store, c.qualified_name),
+            "methods_count": len(
+                [e for e in store.get_outgoing(c.qualified_name) if e.kind == "HAS_METHOD"]
+            ),
+        }
+        for c in classes
+    ]
+    cohesion = [{**x, "candidate_to_split": x["lcom4"] > 1} for x in cohesion]
+
+    # Health score and stats before closing store
+    health = compute_health_score(tr_findings + cohesion + hotspots)
+    stats = store.get_stats()
+
+    # Prioritize cycles after computing all metrics
+    prioritized_cycles = prioritize_cycles(store)
+    store.close()
+
+    # Format output
+    top_n = args.top_n if not args.full else None
+
+    def limit(lst):
+        return lst if top_n is None else lst[:top_n]
+
+    god_modules_set = god_modules(module_metrics)
+
+    if args.json:
+        # Format cycles
+        cycles_out = [
+            {
+                "nodes": c.cycle,
+                "pivot": c.cycle[0] if c.cycle else None,
+                "pivot_ca": c.max_fan_in,
+                "rationale": "break first" if i == 0 else "follow-up",
+            }
+            for i, c in enumerate(limit(prioritized_cycles))
+        ]
+        output = {
+            "schema_version": 1,
+            "summary": {
+                "modules": stats.files_count,
+                "cycles": len(cycles),
+                "classes": stats.nodes_by_kind.get(NodeKind.CLASS, 0),
+                "health_score": health.score,
+            },
+            "coupling": limit(
+                [
+                    {
+                        "file_path": m.file_path,
+                        "fan_in": round(m.fan_in, 2),
+                        "fan_out": round(m.fan_out, 2),
+                        "instability": round(m.instability, 3),
+                        "god_module": m in god_modules_set,
+                    }
+                    for m in sorted(module_metrics, key=lambda x: x.fan_in, reverse=True)
+                ]
+            ),
+            "cycles": cycles_out,
+            "cohesion": limit(
+                [
+                    x
+                    for x in sorted(cohesion, key=lambda x: x["lcom4"], reverse=True)
+                    if x["lcom4"] > 0
+                ]
+            ),
+            "testRisk": {
+                "untested_high_coupling": [
+                    f.file_path for f in tr_findings if f.label == "untested high-coupling"
+                ],
+                "untested_hotspots": [
+                    f.file_path for f in tr_findings if f.label == "untested hotspots"
+                ],
+                "critical_knowledge_concentration": [
+                    f.file_path
+                    for f in tr_findings
+                    if f.label == "critical knowledge concentration"
+                ],
+            },
+            "hotspots": limit(
+                [
+                    {"file_path": h.file_path, "churn": h.churn, "score": round(h.hotspot_score, 1)}
+                    for h in sorted(hotspots, key=lambda x: x.hotspot_score, reverse=True)
+                    if h.hotspot_score > 0
+                ]
+            ),
+            "busFactor": limit(
+                [
+                    {
+                        "file_path": b.file_path,
+                        "top_author": b.top_author,
+                        "bus_factor": b.bus_factor,
+                    }
+                    for b in bus_factor
+                    if b.bus_factor == 1
+                ]
+            ),
+            "inheritance": limit(
+                [
+                    {"qualified_name": i.qualified_name, "depth": i.depth, "children": i.children}
+                    for i in sorted(inheritance, key=lambda x: x.depth, reverse=True)
+                    if i.depth > 0 or i.children > 0
+                ]
+            ),
+        }
+        _json_out(output)
+    else:
+        print(f"\n┌─ Audit Summary (health: {health.score}/100)")
+        print(f"│  modules={stats.files_count}  cycles={len(cycles)}")
+        print(f"│  critical={health.counts.critical}  high={health.counts.high}")
+        print("└─\n")
 
 
 # ──────────────────────────────────────────────
@@ -1360,6 +1520,22 @@ def main() -> None:
         help="Ruta o prefijo de directorio para filtrar (opcional)",
     )
 
+    # audit
+    p_audit = sub.add_parser("audit", help="Vista de auditoría: Fase 3 para revisión profunda")
+    p_audit.add_argument(
+        "--top-n",
+        type=int,
+        default=10,
+        dest="top_n",
+        help="Mostrar top N entradas por sección (default: 10)",
+    )
+    p_audit.add_argument(
+        "--full",
+        action="store_true",
+        default=False,
+        help="Mostrar todas las entradas (no limitar por --top-n)",
+    )
+
     # hotspots
     p_hotspots = sub.add_parser("hotspots", help="Hotspots: churn × acoplamiento estructural")
     p_hotspots.add_argument("--limit", "-l", type=int, default=None)
@@ -1422,6 +1598,7 @@ def main() -> None:
         "baseline": cmd_baseline,
         "callers": cmd_callers,
         "untested": cmd_untested,
+        "audit": cmd_audit,
         "hotspots": cmd_hotspots,
         "temporal-coupling": cmd_temporal_coupling,
         "bus-factor": cmd_bus_factor,
