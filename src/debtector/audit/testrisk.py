@@ -53,6 +53,28 @@ class TestRiskFinding:
     __test__ = False
 
 
+@dataclass(frozen=True)
+class CohesionFinding:
+    """A class-level low-cohesion finding.
+
+    Args:
+        qualified_name: Fully qualified name of the class.
+        lcom4: LCOM4 value (1 = cohesive, >1 = candidate to split).
+        methods_count: Number of methods in the class.
+        candidate_to_split: Boolean flag if lcom4 > 1.
+        severity: ``"high"`` for low-cohesion classes. Consumed by health-score.
+    """
+
+    qualified_name: str
+    lcom4: float
+    methods_count: int
+    candidate_to_split: bool
+    severity: str = "high"
+
+    # Prevent pytest from collecting this dataclass as a test class.
+    __test__ = False
+
+
 def untested_high_coupling(
     untested_files: Iterable[str],
     module_metrics: Iterable[ModuleMetrics],

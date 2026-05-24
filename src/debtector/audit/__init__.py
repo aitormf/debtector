@@ -9,6 +9,7 @@ from .cycle_priority import PrioritizedCycle, prioritize_cycles
 from .health_score import HealthScore, SeverityCounts, compute_health_score
 from .lcom4 import compute_lcom4
 from .testrisk import (
+    CohesionFinding,
     TestRiskFinding,
     critical_knowledge_concentration,
     untested_high_coupling,
@@ -16,6 +17,7 @@ from .testrisk import (
 )
 
 __all__ = [
+    "CohesionFinding",
     "HealthScore",
     "PrioritizedCycle",
     "SeverityCounts",

@@ -18,12 +18,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-#: Per-severity penalty applied to the score.
-_SEVERITY_WEIGHTS: dict[str, int] = {
-    "critical": 10,
+#: Per-severity penalty applied to the score. Must match docs/audit-schema.md.
+_SEVERITY_WEIGHTS: dict[str, float] = {
+    "critical": 15,
     "high": 5,
     "medium": 2,
-    "low": 1,
+    "low": 0.5,
 }
 
 
