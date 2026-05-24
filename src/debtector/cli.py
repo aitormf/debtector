@@ -323,35 +323,6 @@ def cmd_status(args) -> None:
                 print(f"    {k:15s} {v}")
 
 
-def cmd_semantic(args) -> None:
-    """[DEPRECADO] Búsqueda semántica por concepto.
-
-    Este comando está congelado. La búsqueda semántica (embeddings + sqlite-vec)
-    no forma parte del objetivo actual de debtector (análisis de acoplamiento para CI/PR).
-    El código se conserva pero no se desarrollará más.
-
-    Instala ``debtector[semantic]`` si necesitas usar esta funcionalidad.
-
-    Args:
-        args: Parsed argument namespace.  Expected attributes:
-
-            - ``project`` (str): Path to the project root.
-            - ``query`` (str): Natural-language search string.
-            - ``limit`` (int): Maximum number of results.
-            - ``json`` (bool): Emit JSON instead of human-readable text.
-    """
-    msg = (
-        "El comando 'semantic' está deprecado y congelado.\n"
-        "La búsqueda semántica no forma parte del objetivo actual de debtector.\n"
-        "Si aún necesitas esta funcionalidad: uv add 'debtector[semantic]'"
-    )
-    if args.json:
-        _json_out({"error": msg})
-    else:
-        print(f"DEPRECADO: {msg}", file=sys.stderr)
-    sys.exit(1)
-
-
 def cmd_callers(args) -> None:
     """Print all callers of a given symbol (by qualified name).
 
@@ -1470,19 +1441,6 @@ def main() -> None:
         default=None,
         help="Formato CI: github (Annotations) o gitlab (section markers)",
     )
-    # semantic (congelado — no forma parte del objetivo CI/PR)
-    p_sem = sub.add_parser(
-        "semantic",
-        help="[DEPRECADO] Búsqueda semántica por concepto. Congelado; no se desarrollará más.",
-    )
-    p_sem.add_argument("query", help="Query en lenguaje natural")
-    p_sem.add_argument(
-        "--limit",
-        "-l",
-        type=int,
-        default=10,
-        help="Número máximo de resultados (default: 10)",
-    )
 
     # coupling (ex-metrics)
     p_coupling = sub.add_parser(
@@ -1595,7 +1553,6 @@ def main() -> None:
     cmds = {
         "index": cmd_index,
         "search": cmd_search,
-        "semantic": cmd_semantic,
         "summary": cmd_summary,
         "impact": cmd_impact,
         "imports": cmd_imports,

@@ -188,9 +188,8 @@ class GraphStore:
         self._nxg_cache = None
         self._cache_lock = threading.Lock()
 
-        # sqlite-vec: disponible si la extensión se carga correctamente
+        # sqlite-vec: embeddings are frozen/not maintained; always False
         self._vec_available: bool = False
-        self._try_load_sqlite_vec()
 
     def __enter__(self) -> GraphStore:
         """Support usage as a context manager."""
