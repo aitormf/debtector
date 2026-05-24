@@ -64,12 +64,14 @@ class HotspotMetrics:
         churn: Número de commits que tocan el archivo.
         coupling: fan_in + fan_out del módulo en el grafo estructural.
         hotspot_score: churn × coupling — ranking de deuda técnica.
+        severity: Severity level for health score aggregation.
     """
 
     file_path: str
     churn: int
     coupling: float
     hotspot_score: float
+    severity: str = "medium"
 
 
 @dataclass

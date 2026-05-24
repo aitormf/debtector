@@ -22,6 +22,7 @@ from pathlib import Path
 import structlog
 
 from .audit import (
+    CohesionFinding,
     compute_health_score,
     compute_lcom4,
     critical_knowledge_concentration,
@@ -428,7 +429,7 @@ def cmd_audit(args) -> None:
     module_metrics = compute_metrics(store)
     cycles = find_cycles(store)
     hotspots = compute_hotspots(store, args.project)
-    bus_factor = compute_bus_factor(args.project)
+    bus_factor = compute_bus_factor(store, args.project)
     inheritance = inheritance_metrics(store)
     uncovered_files = _get_uncovered_files(store)
     churn = parse_churn(args.project)
@@ -443,23 +444,26 @@ def cmd_audit(args) -> None:
     # Compute LCOM4 for each class
     classes = store.search_nodes("", kind=NodeKind.CLASS)
     cohesion = [
-        {
-            "qualified_name": c.qualified_name,
-            "lcom4": compute_lcom4(store, c.qualified_name),
-            "methods_count": len(
+        CohesionFinding(
+            qualified_name=c.qualified_name,
+            lcom4=compute_lcom4(store, c.qualified_name),
+            methods_count=len(
                 [e for e in store.get_outgoing(c.qualified_name) if e.kind == "HAS_METHOD"]
             ),
-        }
+            candidate_to_split=compute_lcom4(store, c.qualified_name) > 1,
+        )
         for c in classes
     ]
-    cohesion = [{**x, "candidate_to_split": x["lcom4"] > 1} for x in cohesion]
 
     # Health score and stats before closing store
     health = compute_health_score(tr_findings + cohesion + hotspots)
     stats = store.get_stats()
 
-    # Prioritize cycles after computing all metrics
+    # Prioritize cycles and detect god modules before closing store
     prioritized_cycles = prioritize_cycles(store)
+    god_modules_set = god_modules(store)
+
+    # Close store after all reads
     store.close()
 
     # Format output
@@ -468,14 +472,12 @@ def cmd_audit(args) -> None:
     def limit(lst):
         return lst if top_n is None else lst[:top_n]
 
-    god_modules_set = god_modules(module_metrics)
-
     if args.json:
         # Format cycles
         cycles_out = [
             {
                 "nodes": c.cycle,
-                "pivot": c.cycle[0] if c.cycle else None,
+                "pivot": c.pivot,
                 "pivot_ca": c.max_fan_in,
                 "rationale": "break first" if i == 0 else "follow-up",
             }
@@ -504,9 +506,14 @@ def cmd_audit(args) -> None:
             "cycles": cycles_out,
             "cohesion": limit(
                 [
-                    x
-                    for x in sorted(cohesion, key=lambda x: x["lcom4"], reverse=True)
-                    if x["lcom4"] > 0
+                    {
+                        "qualified_name": x.qualified_name,
+                        "lcom4": round(x.lcom4, 2),
+                        "methods_count": x.methods_count,
+                        "candidate_to_split": x.candidate_to_split,
+                    }
+                    for x in sorted(cohesion, key=lambda x: x.lcom4, reverse=True)
+                    if x.lcom4 > 0
                 ]
             ),
             "testRisk": {

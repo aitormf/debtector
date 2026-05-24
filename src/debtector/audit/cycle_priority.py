@@ -26,10 +26,12 @@ class PrioritizedCycle:
     Args:
         cycle: Qualified names of the nodes in the strongly connected component.
         max_fan_in: Maximum fan-in (Ca) across ``cycle``. Higher = break first.
+        pivot: Node within the cycle that has the highest fan-in (Ca).
     """
 
     cycle: list[str]
     max_fan_in: float
+    pivot: str = ""
 
 
 def prioritize_cycles(store: GraphStore) -> list[PrioritizedCycle]:
@@ -48,12 +50,11 @@ def prioritize_cycles(store: GraphStore) -> list[PrioritizedCycle]:
 
     fan_in_by_file: dict[str, float] = {m.file_path: m.fan_in for m in compute_metrics(store)}
 
-    ranked: list[PrioritizedCycle] = [
-        PrioritizedCycle(
-            cycle=cycle,
-            max_fan_in=max((fan_in_by_file.get(n, 0.0) for n in cycle), default=0.0),
-        )
-        for cycle in cycles
-    ]
+    ranked: list[PrioritizedCycle] = []
+    for cycle in cycles:
+        fan_ins = [(n, fan_in_by_file.get(n, 0.0)) for n in cycle]
+        max_fan_in = max((f for _, f in fan_ins), default=0.0)
+        pivot = max(fan_ins, key=lambda x: x[1])[0] if fan_ins else ""
+        ranked.append(PrioritizedCycle(cycle=cycle, max_fan_in=max_fan_in, pivot=pivot))
     ranked.sort(key=lambda c: c.max_fan_in, reverse=True)
     return ranked
