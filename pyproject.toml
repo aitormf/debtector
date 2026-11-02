@@ -16,12 +16,6 @@ dependencies = [
     "structlog>=24.0",
 ]
 
-[project.optional-dependencies]
-semantic = [
-    "sqlite-vec>=0.1.0",
-    "fastembed>=0.3.0",
-]
-
 [dependency-groups]
 dev = [
     "pytest>=7.0",

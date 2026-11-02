@@ -43,7 +43,6 @@ src/debtector/
 ├── metrics.py        # [Fase 1] Ca, Ce, inestabilidad, ciclos, god modules — TODO
 ├── cli.py            # CLI: index, search, summary, impact, imports, status, callers, metrics, baseline
 ├── logging.py        # Configuración structlog (dev vs prod)
-├── embedder.py       # [CONGELADO] Embeddings semánticos — no desarrollar más
 └── parser/
     ├── base.py           # LanguageParser (abstracta)
     ├── python_parser.py  # Tree-sitter Python

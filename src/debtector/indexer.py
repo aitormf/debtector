@@ -245,16 +245,6 @@ class Indexer:
                         edges=len(edges),
                     )
                     stats["indexed"] += 1
-
-                    # Generar embeddings semánticos (no-fatal: requiere [search])
-                    try:
-                        self.store.update_file_embeddings(rel_path)
-                    except Exception as emb_err:  # noqa: BLE001
-                        idx_log.debug(
-                            "embedding_skipped",
-                            file=rel_path,
-                            reason=str(emb_err),
-                        )
                 else:
                     idx_log.warning("parse_returned_none", file=rel_path)
                     stats["errors"] += 1
