@@ -134,6 +134,23 @@ class TestAutoIndex:
         files = {h["file_path"] for h in _json(capsys)["hotspots"]}
         assert files == {"src/pkg/a.py", "src/pkg/b.py"}
 
+    def test_index_without_recorded_root_is_left_as_is(
+        self, repo: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        cmd_index(_args(str(repo), path=str(repo / "src"), json=True))
+        store = _get_store(str(repo))
+        store._conn.execute("DELETE FROM metadata WHERE key = 'index_root'")
+        store._conn.commit()
+        store.close()
+        capsys.readouterr()
+
+        cmd_hotspots(_args(str(repo)))
+
+        store = _get_store(str(repo))
+        files = set(store.get_all_files())
+        store.close()
+        assert files == {"pkg/a.py", "pkg/b.py"}
+
 
 class TestTemporalCouplingCurrentFiles:
     def test_deleted_and_renamed_files_are_dropped(self, repo: Path) -> None:

@@ -365,7 +365,7 @@ class TestComputeTemporalCoupling:
         with patch("subprocess.run", return_value=_mock_run("")) as mock_run:
             compute_temporal_coupling(tmp_path, since="1 year ago")
 
-        cmd = mock_run.call_args[0][0]
+        cmd = mock_run.call_args_list[0][0][0]  # git log; the next call is git ls-files
         assert any("--since=1 year ago" in arg for arg in cmd)
 
 

@@ -174,7 +174,9 @@ def parse_churn(
         Lista de :class:`ChurnMetrics` ordenada por número de commits
         descendente. Vacía si no hay historial.
     """
-    cmd = ["git", "log", "--numstat", "--format=%H"]
+    # --relative: paths relative to project_root, which may be a subdirectory
+    # of the repo (e.g. ``debtector index ./src``), as in the graph.
+    cmd = ["git", "log", "--numstat", "--relative", "--format=%H"]
     if since:
         cmd.append(f"--since={since}")
 
@@ -296,11 +298,13 @@ def compute_temporal_coupling(
         Lista de :class:`TemporalCoupling` ordenada por commits
         compartidos descendente.
     """
-    cmd = ["git", "log", "--name-only", "--format=%H"]
+    cmd = ["git", "log", "--name-only", "--relative", "--format=%H"]
     if since:
         cmd.append(f"--since={since}")
 
     output = _run_git(cmd, project_root)
+    # Deleted or renamed files only exist in the history: drop them.
+    tracked = set(_run_git(["git", "ls-files"], project_root).splitlines())
 
     # commit_hash → conjunto de archivos modificados
     commit_files: dict[str, list[str]] = {}
@@ -315,7 +319,7 @@ def compute_temporal_coupling(
         if _is_hash(line):
             current_hash = line
             commit_files[current_hash] = []
-        elif current_hash is not None:
+        elif current_hash is not None and line in tracked:
             commit_files[current_hash].append(line)
             file_commits[line].add(current_hash)
 
