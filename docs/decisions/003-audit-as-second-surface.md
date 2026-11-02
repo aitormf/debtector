@@ -1,6 +1,6 @@
 # ADR-003: Audit como segunda superficie de presentación
 
-**Estado:** Aceptado
+**Estado:** Pendiente — el comando `audit` no está implementado
 **Fecha:** 2026-05-22
 **Contexto:** Debtector v0.4
 

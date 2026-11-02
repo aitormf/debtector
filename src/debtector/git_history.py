@@ -25,6 +25,9 @@ log = structlog.get_logger()
 # Patrón para reconocer un hash de commit SHA-1 (40 hex chars)
 _HASH_RE = re.compile(r"^[0-9a-f]{40}$")
 
+# Rename en --numstat con parte común: ``src/{old => new}/a.py``
+_RENAME_BRACES_RE = re.compile(r"^(.*)\{(.*) => (.*)\}(.*)$")
+
 # Umbral para el cálculo de bus factor: autores mínimos para cubrir X% del código
 _BUS_FACTOR_COVERAGE = 0.80
 
@@ -151,6 +154,86 @@ def _is_hash(line: str) -> bool:
     return bool(_HASH_RE.match(line))
 
 
+def _split_rename(path: str) -> tuple[str, str] | None:
+    """Separa una ruta de rename de ``--numstat`` en ``(antigua, nueva)``.
+
+    git escribe ``src/{old => new}/a.py`` o ``old.py => new.py``; una parte
+    del ``{}`` puede estar vacía (``{ => sub}/a.py``).
+
+    Returns:
+        ``(antigua, nueva)``, o ``None`` si *path* no es un rename.
+    """
+    m = _RENAME_BRACES_RE.match(path)
+    if m:
+        pre, old, new, post = m.groups()
+        return (
+            re.sub("/+", "/", pre + old + post).lstrip("/"),
+            re.sub("/+", "/", pre + new + post).lstrip("/"),
+        )
+    if " => " in path:
+        old, new = path.split(" => ", 1)
+        return old, new
+    return None
+
+
+def _log_changes(
+    project_root: str | Path,
+    since: str | None = None,
+) -> list[tuple[str, list[tuple[str, int, int]]]]:
+    """Lee ``git log --numstat`` con los renames resueltos al nombre actual.
+
+    ``--relative`` deja las rutas relativas a *project_root*, que puede ser un
+    subdirectorio del repo (p.ej. ``debtector index ./src``), como en el grafo.
+    El log va del commit más nuevo al más viejo: cuando aparece un rename, los
+    commits más viejos de la ruta antigua se atribuyen a la ruta actual.
+
+    Args:
+        project_root: Directorio desde el que ejecutar git.
+        since: Filtro de fecha opcional (e.g. ``"6 months ago"``).
+
+    Returns:
+        ``(hash, [(ruta_actual, añadidas, eliminadas), ...])`` por commit.
+        Los archivos binarios cuentan con líneas a 0.
+    """
+    cmd = ["git", "log", "--numstat", "--relative", "-M", "--format=%H"]
+    if since:
+        cmd.append(f"--since={since}")
+
+    output = _run_git(cmd, project_root)
+
+    current_name: dict[str, str] = {}
+    commits: list[tuple[str, list[tuple[str, int, int]]]] = []
+
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if _is_hash(line):
+            commits.append((line, []))
+            continue
+        if not commits or "\t" not in line:
+            continue
+        parts = line.split("\t", 2)
+        if len(parts) != 3:
+            continue
+        added_str, deleted_str, path = parts
+        try:
+            added, deleted = int(added_str), int(deleted_str)
+        except ValueError:
+            # Archivos binarios muestran "-"
+            added = deleted = 0
+        rename = _split_rename(path)
+        if rename:
+            old, new = rename
+            path = current_name.get(new, new)
+            current_name[old] = path
+        else:
+            path = current_name.get(path, path)
+        commits[-1][1].append((path, added, deleted))
+
+    return commits
+
+
 # ──────────────────────────────────────────────
 # API pública
 # ──────────────────────────────────────────────
@@ -174,37 +257,15 @@ def parse_churn(
         Lista de :class:`ChurnMetrics` ordenada por número de commits
         descendente. Vacía si no hay historial.
     """
-    cmd = ["git", "log", "--numstat", "--format=%H"]
-    if since:
-        cmd.append(f"--since={since}")
-
-    output = _run_git(cmd, project_root)
-
     commits_per_file: dict[str, set[str]] = defaultdict(set)
     lines_added: dict[str, int] = defaultdict(int)
     lines_deleted: dict[str, int] = defaultdict(int)
 
-    current_hash: str | None = None
-
-    for raw_line in output.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        if _is_hash(line):
-            current_hash = line
-        elif current_hash and "\t" in line:
-            parts = line.split("\t", 2)
-            if len(parts) == 3:
-                added_str, deleted_str, file_path = parts
-                try:
-                    added = int(added_str)
-                    deleted = int(deleted_str)
-                except ValueError:
-                    # Archivos binarios muestran "-"
-                    added = deleted = 0
-                commits_per_file[file_path].add(current_hash)
-                lines_added[file_path] += added
-                lines_deleted[file_path] += deleted
+    for commit_hash, changes in _log_changes(project_root, since=since):
+        for file_path, added, deleted in changes:
+            commits_per_file[file_path].add(commit_hash)
+            lines_added[file_path] += added
+            lines_deleted[file_path] += deleted
 
     results = [
         ChurnMetrics(
@@ -296,28 +357,20 @@ def compute_temporal_coupling(
         Lista de :class:`TemporalCoupling` ordenada por commits
         compartidos descendente.
     """
-    cmd = ["git", "log", "--name-only", "--format=%H"]
-    if since:
-        cmd.append(f"--since={since}")
+    changes = _log_changes(project_root, since=since)
+    # Deleted files only exist in the history: drop them.
+    tracked = set(_run_git(["git", "ls-files"], project_root).splitlines())
 
-    output = _run_git(cmd, project_root)
-
-    # commit_hash → conjunto de archivos modificados
-    commit_files: dict[str, list[str]] = {}
+    # commit_hash → archivos modificados (sin repetir: un rename y su edición)
+    commit_files: dict[str, set[str]] = {}
     # archivo → conjunto de commits que lo tocan
     file_commits: dict[str, set[str]] = defaultdict(set)
 
-    current_hash: str | None = None
-    for raw_line in output.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        if _is_hash(line):
-            current_hash = line
-            commit_files[current_hash] = []
-        elif current_hash is not None:
-            commit_files[current_hash].append(line)
-            file_commits[line].add(current_hash)
+    for commit_hash, files in changes:
+        current = {path for path, _, _ in files if path in tracked}
+        commit_files[commit_hash] = current
+        for path in current:
+            file_commits[path].add(commit_hash)
 
     # Contar commits compartidos por cada par de archivos
     pair_counts: dict[tuple[str, str], int] = defaultdict(int)

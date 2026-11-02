@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -34,6 +35,10 @@ from .metrics import compute_metrics, find_cycles, god_modules
 from .models import node_to_dict
 
 log = structlog.get_logger()
+
+# Metadata key: indexed directory, relative to the project root (portable if
+# index.db is committed).
+_INDEX_ROOT_KEY = "index_root"
 
 # ──────────────────────────────────────────────
 # Helpers
@@ -66,12 +71,24 @@ def _auto_index(project: str) -> None:
     index run, this is effectively a no-op.  All output goes to the log file;
     nothing is printed to stdout.
 
+    Re-indexes the directory recorded by the last ``debtector index``. An
+    index from an older version, with no recorded root, is left as is.
+
     Args:
         project: Path to the project root directory.
     """
     try:
-        indexer = Indexer(project)
-        indexer.index(project)
+        store = _get_store(project)
+        try:
+            rel = store.get_metadata(_INDEX_ROOT_KEY)
+            if rel is None and store.get_all_files():
+                # Index from before index_root was stored: its root is unknown,
+                # and re-indexing from the project root would rewrite every path.
+                log.info("auto_index_skipped_unknown_root", project=project)
+                return
+            Indexer(store).index(str(Path(project) / rel) if rel else project)
+        finally:
+            store.close()
     except Exception:  # noqa: BLE001
         # Never let a failed auto-index abort the analysis command that called it.
         log.warning("auto_index_failed", project=project, exc_info=True)
@@ -90,6 +107,26 @@ def _get_store(project: str) -> GraphStore:
     """
     db_path = _debtector_dir(project) / "index.db"
     return GraphStore(str(db_path))
+
+
+def _index_root(project: str) -> str:
+    """Return the directory last indexed for *project*.
+
+    Paths in the graph are relative to it, so auto-index and git (churn,
+    temporal coupling, blame) must run from it, not from the project root.
+
+    Args:
+        project: Path to the project root directory.
+
+    Returns:
+        The indexed directory, or *project* if it has never been indexed.
+    """
+    store = _get_store(project)
+    try:
+        rel = store.get_metadata(_INDEX_ROOT_KEY)
+    finally:
+        store.close()
+    return str(Path(project) / rel) if rel else project
 
 
 def _json_out(data) -> None:
@@ -123,6 +160,8 @@ def cmd_index(args) -> None:
         print(f"Indexando {args.path}...")
 
     stats = indexer.index(args.path)
+    rel_root = Path(os.path.relpath(Path(args.path).resolve(), Path(args.project).resolve()))
+    store.set_metadata(_INDEX_ROOT_KEY, rel_root.as_posix())
     store.close()
 
     if args.json:
@@ -817,10 +856,11 @@ def cmd_hotspots(args) -> None:
             - ``min_coupling`` (float): Minimum coupling to include. Default 0.
     """
     _auto_index(args.project)
+    root = _index_root(args.project)
     store = _get_store(args.project)
     hotspots = compute_hotspots(
         store,
-        args.project,
+        root,
         since=getattr(args, "since", None),
         limit=getattr(args, "limit", None),
     )
@@ -871,8 +911,9 @@ def cmd_temporal_coupling(args) -> None:
             - ``min_shared`` (int): Minimum shared commits. Default 5.
             - ``min_ratio`` (float): Minimum coupling ratio. Default 0.3.
     """
+    root = _index_root(args.project)
     pairs = compute_temporal_coupling(
-        args.project,
+        root,
         min_shared=getattr(args, "min_shared", 5),
         min_ratio=getattr(args, "min_ratio", 0.3),
         since=getattr(args, "since", None),
@@ -929,8 +970,9 @@ def cmd_bus_factor(args) -> None:
             - ``limit`` (int | None): Max results.
     """
     _auto_index(args.project)
+    root = _index_root(args.project)
     store = _get_store(args.project)
-    results = compute_bus_factor(store, args.project)
+    results = compute_bus_factor(store, root)
     store.close()
 
     limit = getattr(args, "limit", None)
@@ -989,20 +1031,21 @@ def cmd_git_coupling(args) -> None:
             - ``min_ratio`` (float): Min ratio for temporal coupling.
     """
     _auto_index(args.project)
+    root = _index_root(args.project)
     store = _get_store(args.project)
     hotspots = compute_hotspots(
         store,
-        args.project,
+        root,
         since=getattr(args, "since", None),
         limit=getattr(args, "limit", None),
     )
     temporal = compute_temporal_coupling(
-        args.project,
+        root,
         min_shared=getattr(args, "min_shared", 5),
         min_ratio=getattr(args, "min_ratio", 0.3),
         since=getattr(args, "since", None),
     )
-    bus = compute_bus_factor(store, args.project)
+    bus = compute_bus_factor(store, root)
     store.close()
 
     limit = getattr(args, "limit", None)
@@ -1091,6 +1134,7 @@ def cmd_report(args) -> None:
             ``coupling`` and ``git-coupling`` commands.
     """
     _auto_index(args.project)
+    root = _index_root(args.project)
 
     # ── Structural coupling ──
     cfg = load_config(args.project)
@@ -1103,17 +1147,17 @@ def cmd_report(args) -> None:
     # ── Behavioral coupling ──
     hotspots = compute_hotspots(
         store,
-        args.project,
+        root,
         since=getattr(args, "since", None),
         limit=getattr(args, "limit", None),
     )
     temporal = compute_temporal_coupling(
-        args.project,
+        root,
         min_shared=getattr(args, "min_shared", 5),
         min_ratio=getattr(args, "min_ratio", 0.3),
         since=getattr(args, "since", None),
     )
-    bus = compute_bus_factor(store, args.project)
+    bus = compute_bus_factor(store, root)
     store.close()
 
     # Shared filter threshold used by both JSON and human output
