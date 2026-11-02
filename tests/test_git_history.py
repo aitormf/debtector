@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from debtector.git_history import (
+    _split_rename,
     compute_bus_factor,
     compute_hotspots,
     compute_temporal_coupling,
@@ -79,22 +80,26 @@ NUMSTAT_OUTPUT = (
 #   HASH_A: auth.py, models.py
 #   HASH_B: auth.py, utils.py
 #   HASH_C: models.py, utils.py
-NAME_ONLY_OUTPUT = (
+# git log --numstat for temporal coupling: each pair shares 1 of 2 commits
+TEMPORAL_LOG_OUTPUT = (
     f"{_HASH_A}\n"
     "\n"
-    "src/auth.py\n"
-    "src/models.py\n"
+    "1\t0\tsrc/auth.py\n"
+    "1\t0\tsrc/models.py\n"
     "\n"
     f"{_HASH_B}\n"
     "\n"
-    "src/auth.py\n"
-    "src/utils.py\n"
+    "1\t0\tsrc/auth.py\n"
+    "1\t0\tsrc/utils.py\n"
     "\n"
     f"{_HASH_C}\n"
     "\n"
-    "src/models.py\n"
-    "src/utils.py\n"
+    "1\t0\tsrc/models.py\n"
+    "1\t0\tsrc/utils.py\n"
 )
+
+# git ls-files: the files of TEMPORAL_LOG_OUTPUT still exist
+TRACKED_OUTPUT = "src/auth.py\nsrc/models.py\nsrc/utils.py\n"
 
 # 5 lines: Alice×3, Bob×2  →  top=Alice 60%, bus_factor=2
 BLAME_OUTPUT = (
@@ -310,7 +315,10 @@ class TestComputeTemporalCoupling:
     """Unit tests for compute_temporal_coupling()."""
 
     def test_finds_co_changing_pairs(self, tmp_path: Path) -> None:
-        with patch("subprocess.run", return_value=_mock_run(NAME_ONLY_OUTPUT)):
+        with patch(
+            "subprocess.run",
+            side_effect=[_mock_run(TEMPORAL_LOG_OUTPUT), _mock_run(TRACKED_OUTPUT)],
+        ):
             results = compute_temporal_coupling(tmp_path, min_shared=1, min_ratio=0.0)
 
         pairs = {(t.file_a, t.file_b) for t in results}
@@ -320,7 +328,10 @@ class TestComputeTemporalCoupling:
 
     def test_coupling_ratio_calculation(self, tmp_path: Path) -> None:
         """Each pair shares 1 out of 2 commits → ratio = 0.5."""
-        with patch("subprocess.run", return_value=_mock_run(NAME_ONLY_OUTPUT)):
+        with patch(
+            "subprocess.run",
+            side_effect=[_mock_run(TEMPORAL_LOG_OUTPUT), _mock_run(TRACKED_OUTPUT)],
+        ):
             results = compute_temporal_coupling(tmp_path, min_shared=1, min_ratio=0.0)
 
         for t in results:
@@ -328,28 +339,40 @@ class TestComputeTemporalCoupling:
 
     def test_min_shared_filter(self, tmp_path: Path) -> None:
         """min_shared=2 filters out all pairs (each has only 1 shared commit)."""
-        with patch("subprocess.run", return_value=_mock_run(NAME_ONLY_OUTPUT)):
+        with patch(
+            "subprocess.run",
+            side_effect=[_mock_run(TEMPORAL_LOG_OUTPUT), _mock_run(TRACKED_OUTPUT)],
+        ):
             results = compute_temporal_coupling(tmp_path, min_shared=2, min_ratio=0.0)
 
         assert results == []
 
     def test_min_ratio_filter(self, tmp_path: Path) -> None:
         """min_ratio=0.8 filters out all pairs (all have ratio=0.5)."""
-        with patch("subprocess.run", return_value=_mock_run(NAME_ONLY_OUTPUT)):
+        with patch(
+            "subprocess.run",
+            side_effect=[_mock_run(TEMPORAL_LOG_OUTPUT), _mock_run(TRACKED_OUTPUT)],
+        ):
             results = compute_temporal_coupling(tmp_path, min_shared=1, min_ratio=0.8)
 
         assert results == []
 
     def test_pairs_are_ordered_file_a_lt_file_b(self, tmp_path: Path) -> None:
         """File pair order is canonical: file_a < file_b alphabetically."""
-        with patch("subprocess.run", return_value=_mock_run(NAME_ONLY_OUTPUT)):
+        with patch(
+            "subprocess.run",
+            side_effect=[_mock_run(TEMPORAL_LOG_OUTPUT), _mock_run(TRACKED_OUTPUT)],
+        ):
             results = compute_temporal_coupling(tmp_path, min_shared=1, min_ratio=0.0)
 
         for t in results:
             assert t.file_a <= t.file_b
 
     def test_sorted_by_shared_commits_desc(self, tmp_path: Path) -> None:
-        with patch("subprocess.run", return_value=_mock_run(NAME_ONLY_OUTPUT)):
+        with patch(
+            "subprocess.run",
+            side_effect=[_mock_run(TEMPORAL_LOG_OUTPUT), _mock_run(TRACKED_OUTPUT)],
+        ):
             results = compute_temporal_coupling(tmp_path, min_shared=1, min_ratio=0.0)
 
         shared = [t.shared_commits for t in results]
@@ -460,3 +483,22 @@ class TestComputeBusFactor:
         paths = {r.file_path for r in results}
         assert "src/auth.py" not in paths
         assert "src/models.py" in paths
+
+
+# ──────────────────────────────────────────────
+# _split_rename
+# ──────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("src/{codeindex => debtector}/cli.py", ("src/codeindex/cli.py", "src/debtector/cli.py")),
+        ("{ => sub}/a.py", ("a.py", "sub/a.py")),
+        ("src/{old => }/a.py", ("src/old/a.py", "src/a.py")),
+        ("old.py => new.py", ("old.py", "new.py")),
+        ("src/plain.py", None),
+    ],
+)
+def test_split_rename(path: str, expected: tuple[str, str] | None) -> None:
+    assert _split_rename(path) == expected
