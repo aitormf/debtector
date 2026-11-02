@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from debtector.cli import _get_store, cmd_bus_factor, cmd_hotspots, cmd_index
-from debtector.git_history import compute_temporal_coupling
+from debtector.git_history import compute_temporal_coupling, parse_churn
 from debtector.logging import configure_logging
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
@@ -163,3 +163,28 @@ class TestTemporalCouplingCurrentFiles:
         files = {p.file_a for p in pairs} | {p.file_b for p in pairs}
         assert "src/pkg/b.py" not in files
         assert files == {"src/pkg/a.py", "src/pkg/renamed.py"}
+
+
+class TestRenamesKeepHistory:
+    """Commits before a rename count for the file under its current name."""
+
+    def _rename_and_edit(self, repo: Path) -> None:
+        _git(repo, "mv", "src/pkg", "src/lib")
+        _git(repo, "commit", "-q", "-m", "rename pkg to lib")
+        _commit(repo, {"src/lib/a.py": "X = 9\n", "src/lib/b.py": "Y = 1\n"}, "edit")
+
+    def test_churn_follows_renames(self, repo: Path) -> None:
+        self._rename_and_edit(repo)
+
+        churn = {c.file_path: c.commits for c in parse_churn(repo)}
+
+        assert churn == {"src/lib/a.py": 5, "src/lib/b.py": 5}
+
+    def test_temporal_coupling_follows_renames(self, repo: Path) -> None:
+        self._rename_and_edit(repo)
+
+        pairs = compute_temporal_coupling(repo, min_shared=1, min_ratio=0.0)
+
+        assert [(p.file_a, p.file_b, p.shared_commits) for p in pairs] == [
+            ("src/lib/a.py", "src/lib/b.py", 5)
+        ]
