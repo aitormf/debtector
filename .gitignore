@@ -47,9 +47,3 @@ Thumbs.db
 *.log
 .karajan/
 .reviews/
-
-# javascript project
-node_modules/
-coverage/
-.cache/
-*.tsbuildinfo

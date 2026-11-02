@@ -462,16 +462,17 @@ def cmd_audit(args) -> None:
         args: Parsed argument namespace with project, top_n, full, json flags.
     """
     _auto_index(args.project)
+    root = _index_root(args.project)
     store = _get_store(args.project)
 
     # Compute core metrics
     module_metrics = compute_metrics(store)
     cycles = find_cycles(store)
-    hotspots = compute_hotspots(store, args.project)
-    bus_factor = compute_bus_factor(store, args.project)
+    hotspots = compute_hotspots(store, root)
+    bus_factor = compute_bus_factor(store, root)
     inheritance = inheritance_metrics(store)
     uncovered_files = _get_uncovered_files(store)
-    churn = parse_churn(args.project)
+    churn = parse_churn(root)
 
     # Compute testRisk joins
     tr_findings = (

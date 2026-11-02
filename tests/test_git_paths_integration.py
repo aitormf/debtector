@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from debtector.cli import _get_store, cmd_bus_factor, cmd_hotspots, cmd_index
+from debtector.cli import _get_store, cmd_audit, cmd_bus_factor, cmd_hotspots, cmd_index
 from debtector.git_history import compute_temporal_coupling, parse_churn
 from debtector.logging import configure_logging
 
@@ -108,6 +108,18 @@ class TestSubdirectoryIndex:
 
         files = {b["file_path"] for b in _json(capsys)["bus_factor"]}
         assert files == {"pkg/a.py", "pkg/b.py"}
+
+    def test_audit_git_sections_match_git_history(
+        self, repo: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        cmd_index(_args(str(repo), path=str(repo / "src"), json=True))
+        capsys.readouterr()
+
+        cmd_audit(_args(str(repo), top_n=10, full=False))
+
+        audit = _json(capsys)
+        assert {h["file_path"] for h in audit["hotspots"]} == {"pkg/a.py", "pkg/b.py"}
+        assert {b["file_path"] for b in audit["busFactor"]} == {"pkg/a.py", "pkg/b.py"}
 
     def test_auto_index_keeps_indexed_root(
         self, repo: Path, capsys: pytest.CaptureFixture[str]
