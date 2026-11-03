@@ -95,6 +95,10 @@ contexto.
 
 ### Embeddings — siguen congelados
 
+> **Actualización 2026-11-02:** el código congelado se ha eliminado (ver
+> [ADR-001](001-semantic-search.md)). La decisión de no ofrecer búsqueda
+> semántica se mantiene.
+
 `embedder.py`, `sqlite-vec` y `fastembed` siguen en el grupo opcional
 `[semantic]` y `debtector semantic` sigue devolviendo error de deprecación
 (continúa lo decidido en [ADR-002](002-pivot-ci-coupling.md)).

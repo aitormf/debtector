@@ -1,6 +1,6 @@
 # ADR-001: Búsqueda semántica — FTS5 + sqlite-vec + fastembed
 
-**Estado:** Aceptado
+**Estado:** Retirado (2026-11-02) — la capa de embeddings (`embedder.py`, `sqlite-vec`, `fastembed`, comando `semantic`) se ha eliminado del código; la búsqueda FTS5 se mantiene. Ver [ADR-002](002-pivot-ci-coupling.md).
 **Fecha:** 2026-04-07
 **Contexto:** Debtector v0.2
 

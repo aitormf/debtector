@@ -27,8 +27,6 @@ src/debtector/
 │                     #       hotspots, temporal-coupling, bus-factor, git-coupling, report
 ├── utils.py          # Shared utilities: is_test_file()
 ├── logging.py        # structlog configuration (colored dev / JSON prod)
-├── embedder.py       # [FROZEN] Semantic embeddings — do not develop further
-│                     #   Available with uv add 'debtector[semantic]'
 └── parser/
     ├── base.py           # LanguageParser — abstract class
     ├── python_parser.py  # PythonParser — Tree-sitter Python
@@ -45,7 +43,6 @@ src/debtector/
 | `metrics.py` | Computes **structural** coupling metrics on the graph: Ca, Ce, instability, cycles (Tarjan), god modules (p90), inheritance depth |
 | `git_history.py` | Computes **behavioral** coupling metrics on git history: churn (`git log --numstat`), hotspot score, temporal coupling, bus factor (`git blame`). Read-only; does not write to DB |
 | `config.py` | Reads `debtector.toml` with `tomllib` (stdlib). Exposes `DebtectorConfig` with configurable thresholds and severities |
-| `embedder.py` | **[Frozen]** Converts nodes to text and generates float32 vectors with fastembed. Do not develop further |
 | `utils.py` | Shared utilities with no internal dependencies: `is_test_file()` |
 | `parser/*` | Transform a source file into `(list[NodeInfo], list[EdgeInfo])` using Tree-sitter. No DB access |
 | `cli.py` | Translates command-line arguments into calls to GraphStore, metrics and git_history. No business logic of its own. Silently auto-indexes before each analysis command |
@@ -90,8 +87,6 @@ CLI / CI pipeline
     ├── Full report          → coupling + git-coupling   (debtector report)
     └── Baseline / ratcheting → baseline.json + delta    (debtector baseline)
 ```
-
-> Semantic search (`sqlite-vec` KNN) is frozen. See [Frozen semantics](#frozen-semantics).
 
 ---
 
@@ -347,50 +342,9 @@ The type hint extractor maintains a `set[str]` shared per file (`uses_type_seen`
 
 ---
 
-## Frozen semantics
-
-`embedder.py`, `sqlite-vec` and `fastembed` are frozen: the code exists but will not be developed further. They are not part of the CI/PR objective.
-
-- Available as an optional dependency: `uv add 'debtector[semantic]'`
-- The `debtector semantic` command returns an error with a deprecation message
-- Embedding tests still exist but do not cover the current objective
-
-See [ADR-002](decisions/002-pivot-ci-coupling.md) for the full reasoning.
-
----
-
-## Parsers
-
-Each parser implements `LanguageParser` (abstract in `parser/base.py`) and receives a file path, returning `(list[NodeInfo], list[EdgeInfo])`.
-
-### What each parser extracts
-
-- `File` node for the file itself
-- `Class`, `Function`, `Method` nodes for each symbol
-- `CONTAINS`, `HAS_METHOD`, `IMPORTS_FROM`, `INHERITS`, `CALLS` edges
-- `USES_TYPE` edges from type hints in signatures (uppercase-initial names only)
-- `signature` and `docstring` when available
-
-### Supported languages
-
-| Language | Extensions | Parser |
-|---|---|---|
-| Python | `.py` | `PythonParser` (Tree-sitter) |
-| JavaScript/TypeScript | `.js`, `.jsx`, `.ts`, `.tsx` | `JavaScriptParser` (Tree-sitter) |
-
----
-
-## Directories ignored during indexing
-
-`.git`, `__pycache__`, `node_modules`, `.next`, `dist`, `build`, `.venv`, `venv`, `.idea`, `.vscode`
-
-Additional support for `.debtectorignore` (gitignore-style).
-
----
-
 ## Architecture decisions
 
 | ADR | Decision |
 |---|---|
-| [001](decisions/001-semantic-search.md) | FTS5 + sqlite-vec + fastembed for semantic search (implemented, then frozen) |
+| [001](decisions/001-semantic-search.md) | FTS5 + sqlite-vec + fastembed for semantic search (implemented, frozen, then removed; FTS5 remains) |
 | [002](decisions/002-pivot-ci-coupling.md) | Pivot: from AI navigation to coupling analysis for CI/PR |
