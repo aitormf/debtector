@@ -153,6 +153,17 @@ def test_author_elsewhere_in_the_repo_counts_as_multi_author(
     assert out["summary"]["health_score"] == 73
 
 
+def test_bot_authors_are_ignored(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """One human plus a `[bot]` account is still a single-author repository."""
+    repo = _make_repo(tmp_path, second_author=False)
+    _commit(repo, {"docs/bump.txt": "v2\n"}, "github-actions[bot]")
+
+    assert list_authors(repo) == {"Alice"}
+    out = _audit(repo, capsys)
+    assert "hub.py" in out["testRisk"]["critical_knowledge_concentration"]
+    assert out["summary"]["health_score"] == 100
+
+
 def test_shallow_clone_never_gets_the_single_author_exemption(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
