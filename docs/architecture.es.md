@@ -269,7 +269,9 @@ Archivo opcional en la raíz del proyecto. Usa `tomllib` de la stdlib (Python 3.
 ```toml
 [metrics.thresholds]
 god_module_percentile = 90    # percentil Ca para god module (default: 90)
-instability_threshold = 0.8   # I >= umbral → aviso (default: 0.8)
+god_module_min_ca     = 10    # Ca mínimo absoluto para god module (default: 10)
+sdp_margin            = 0.1   # I(B) - I(A) mínimo para marcar A -> B como violación SDP (default: 0.1)
+# instability_threshold: obsoleto, se ignora (se registra un aviso)
 max_inheritance_depth = 5     # profundidad máxima de herencia (default: 5)
 max_children          = 10    # hijos directos máximos (default: 10)
 
@@ -294,6 +296,7 @@ inheritance = "info"     # (default: info)
 - **Nuevos ciclos** no presentes en baseline → según `severity.cycles`
 - **Nuevos god modules** → según `severity.god_modules`
 - **Regresión de inestabilidad** > `_INSTABILITY_TOLERANCE` (0.05) → según `severity.instability`
+- **Nuevas violaciones SDP** (`A → B` con `I(B) > I(A) + sdp_margin`) → según `severity.instability`. Solo se comparan si el baseline contiene `sdp_violations`; un baseline antiguo no se marca
 - **Sin baseline** → siempre exit code 0 (modo silencioso)
 
 ### CI reporter

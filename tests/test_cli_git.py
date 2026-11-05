@@ -20,7 +20,7 @@ from debtector.cli import (
 )
 from debtector.git_history import BusFactorMetrics, HotspotMetrics, TemporalCoupling
 from debtector.logging import configure_logging
-from debtector.metrics import ModuleMetrics
+from debtector.metrics import ModuleMetrics, SdpViolation
 from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
 # ──────────────────────────────────────────────
@@ -334,13 +334,17 @@ class TestCmdReport:
         assert isinstance(data, dict)
 
     def test_json_modules_only_flagged(self, tmp_path: Path, capsys) -> None:
-        """Clean modules (no god, instability < threshold) must not appear in JSON."""
+        """Clean modules (no god, not the target of an SDP violation) must not appear in JSON."""
         _seed(str(tmp_path), {"src/a.py": []})
         flagged = ModuleMetrics(file_path="src/a.py", fan_in=1.0, fan_out=4.0, instability=0.8)
         clean = ModuleMetrics(file_path="src/b.py", fan_in=5.0, fan_out=1.0, instability=0.167)
         with (
             patch("debtector.cli.compute_metrics", return_value=[flagged, clean]),
             patch("debtector.cli.god_modules", return_value=[]),
+            patch(
+                "debtector.cli.sdp_violations",
+                return_value=[SdpViolation("src/b.py", "src/a.py", 0.167, 0.8)],
+            ),
             patch("debtector.cli.find_cycles", return_value=[]),
             patch("debtector.cli.compute_hotspots", return_value=[]),
             patch("debtector.cli.compute_temporal_coupling", return_value=[]),

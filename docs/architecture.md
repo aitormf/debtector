@@ -224,6 +224,8 @@ src/auth/service.py::create_app            → Function
 | Fan-out (Ce) | Weighted sum of outgoing IMPORTS_FROM + USES_TYPE edges | ≥ 0 |
 | Instability (I) | Ce / (Ca + Ce) | [0, 1] |
 
+A module is flagged **unstable** only if it is the target of a Stable Dependencies Principle violation: an `IMPORTS_FROM` edge `A → B` between indexed modules with `I(B) > I(A) + sdp_margin`. High I on a leaf is normal and is not flagged. A **god module** needs Ca above the `god_module_percentile` **and** `Ca >= god_module_min_ca`.
+
 Weights: `IMPORTS_FROM` = 1.0, `USES_TYPE` = 1.0. Both weights are public constants in `metrics.py` (`IMPORTS_FROM_WEIGHT`, `USES_TYPE_WEIGHT`) to facilitate adjustments in experiments.
 
 ### Cycles
@@ -269,7 +271,9 @@ Optional file at the project root. Uses `tomllib` from the stdlib (Python 3.12+)
 ```toml
 [metrics.thresholds]
 god_module_percentile = 90    # Ca percentile for god module (default: 90)
-instability_threshold = 0.8   # I >= threshold → warning (default: 0.8)
+god_module_min_ca     = 10    # absolute minimum Ca for a god module (default: 10)
+sdp_margin            = 0.1   # min I(B) - I(A) to flag A -> B as SDP violation (default: 0.1)
+# instability_threshold: deprecated, ignored (warning logged)
 max_inheritance_depth = 5     # maximum inheritance depth (default: 5)
 max_children          = 10    # maximum direct children (default: 10)
 
@@ -294,6 +298,7 @@ inheritance = "info"     # (default: info)
 - **New cycles** not present in baseline → according to `severity.cycles`
 - **New god modules** → according to `severity.god_modules`
 - **Instability regression** > `_INSTABILITY_TOLERANCE` (0.05) → according to `severity.instability`
+- **New SDP violations** (`A → B` with `I(B) > I(A) + sdp_margin`) → according to `severity.instability`. Only compared when the baseline contains `sdp_violations`; older baselines are not flagged
 - **No baseline** → always exit code 0 (silent mode)
 
 ### CI reporter

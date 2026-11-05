@@ -15,7 +15,9 @@ Ejemplo de ``debtector.toml``:
 
     [metrics.thresholds]
     god_module_percentile = 90
-    instability_threshold = 0.8
+    god_module_min_ca     = 10    # Ca mínimo absoluto para ser god module (además del percentil)
+    sdp_margin            = 0.1   # I(B) - I(A) mínimo para marcar A -> B como violación SDP
+    # instability_threshold está obsoleto: se ignora (se registra un aviso).
     max_inheritance_depth = 5
     max_children          = 10
 
@@ -41,8 +43,12 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 
+import structlog
+
 from .audit.health_score import DEFAULT_HOTSPOT_MIN_SCORE, DEFAULT_HOTSPOT_PERCENTILE
 from .audit.testrisk import DEFAULT_HIGH_CA, DEFAULT_HIGH_CE, DEFAULT_HIGH_CHURN
+
+log = structlog.get_logger()
 
 
 class Severity(StrEnum):
@@ -65,8 +71,13 @@ class MetricsThresholds:
     Args:
         god_module_percentile: Percentil de Ca por encima del cual un módulo
             se considera «god module». Default: 90.
-        instability_threshold: Valor de I a partir del cual el módulo se
-            considera inestable. Default: 0.8.
+        god_module_min_ca: Ca mínimo absoluto (inclusivo) que además debe
+            alcanzar un módulo para ser «god module». Evita que el percentil
+            marque siempre algo en proyectos pequeños. Default: 10 (el mismo
+            valor que ``audit.thresholds.testrisk_high_ca``).
+        sdp_margin: Diferencia mínima de I (estricta) para que una dependencia
+            ``A → B`` con ``I(B) > I(A)`` cuente como violación del Stable
+            Dependencies Principle. Default: 0.1.
         max_inheritance_depth: Profundidad máxima de la jerarquía de herencia
             antes de generar un aviso. Default: 5.
         max_children: Número máximo de hijos directos en la jerarquía de
@@ -74,7 +85,8 @@ class MetricsThresholds:
     """
 
     god_module_percentile: float = 90
-    instability_threshold: float = 0.8
+    god_module_min_ca: float = DEFAULT_HIGH_CA
+    sdp_margin: float = 0.1
     max_inheritance_depth: int = 5
     max_children: int = 10
 
@@ -86,7 +98,7 @@ class MetricsSeverity:
     Args:
         cycles: Ciclos de importación detectados.
         god_modules: Módulos con fan-in outlier.
-        instability: Módulos con inestabilidad alta.
+        instability: Regresiones de inestabilidad y nuevas violaciones SDP.
         inheritance: Jerarquías de herencia profundas o anchas.
     """
 
@@ -180,13 +192,18 @@ def load_config(project_root: str | Path) -> DebtectorConfig:
     # evitar acceder a atributos de clase de dataclass (frágil si se usara field())
     _thr_defaults = MetricsThresholds()
     thr_data = metrics_data.get("thresholds", {})
+    if "instability_threshold" in thr_data:
+        log.warning(
+            "deprecated_config_key",
+            key="metrics.thresholds.instability_threshold",
+            reason="ignored: modules are flagged unstable only for SDP violations; see sdp_margin",
+        )
     thresholds = MetricsThresholds(
         god_module_percentile=thr_data.get(
             "god_module_percentile", _thr_defaults.god_module_percentile
         ),
-        instability_threshold=thr_data.get(
-            "instability_threshold", _thr_defaults.instability_threshold
-        ),
+        god_module_min_ca=_non_negative(thr_data, "god_module_min_ca", _thr_defaults),
+        sdp_margin=_non_negative(thr_data, "sdp_margin", _thr_defaults),
         max_inheritance_depth=thr_data.get(
             "max_inheritance_depth", _thr_defaults.max_inheritance_depth
         ),
@@ -218,6 +235,29 @@ def load_config(project_root: str | Path) -> DebtectorConfig:
         audit=_load_audit_thresholds(data.get("audit", {}).get("thresholds", {})),
         test_paths=list(test_paths),
     )
+
+
+def _non_negative(data: dict, key: str, defaults: MetricsThresholds) -> float:
+    """Lee ``metrics.thresholds.<key>`` validando que sea un número >= 0.
+
+    Args:
+        data: Tabla ``[metrics.thresholds]`` ya parseada.
+        key: Nombre de la clave.
+        defaults: Instancia con los valores por defecto.
+
+    Returns:
+        El valor del toml o el por defecto.
+
+    Raises:
+        ValueError: Si el valor no es numérico o es negativo.
+    """
+    value = data.get(key, getattr(defaults, key))
+    if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
+        raise ValueError(
+            f"`metrics.thresholds.{key}` en debtector.toml debe ser un número >= 0, "
+            f"recibido {value!r}."
+        )
+    return value
 
 
 def _load_audit_thresholds(data: dict) -> AuditThresholds:
