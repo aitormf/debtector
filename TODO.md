@@ -39,16 +39,16 @@ ICP: dev/tech lead que usa agentes de código.
 ## Fase 3 — Audit (vista de auditoría)
 *Segundo presenter sobre el mismo backend de Fase 1+2. Para revisión profunda por tech lead, no para PR. Mismo grafo, presentación distinta — sin nueva fuente de datos. Ver [ADR-003](docs/decisions/003-audit-as-second-surface.md).*
 
-- [ ] **LCOM4** — cohesión interna de clases vía componentes conexas en aristas CALLS método↔método dentro de la misma clase. Cada clase recibe un valor (1 = cohesiva, >1 = candidata a partir)
-- [ ] **Priorización de ciclos** — ordenar ciclos detectados por fan-in del nodo más expuesto del ciclo ("qué ciclo romper primero")
-- [ ] **Joins de testRisk** — cruces que el grafo permite y los reportes sueltos no:
+- [x] **LCOM4** — cohesión interna de clases vía componentes conexas en aristas CALLS método↔método dentro de la misma clase. Cada clase recibe un valor (1 = cohesiva, >1 = candidata a partir)
+- [x] **Priorización de ciclos** — ordenar ciclos detectados por fan-in del nodo más expuesto del ciclo ("qué ciclo romper primero")
+- [x] **Joins de testRisk** — cruces que el grafo permite y los reportes sueltos no:
   - untested × Ce alto → "untested high-coupling" (riesgo máximo en cambios futuros)
   - untested × churn alto → "untested hotspots" (deuda más probable de explotar)
   - bus factor 1 × Ca alto → "critical knowledge concentration"
-- [ ] **Health score agregado** — valor 0-100 + conteos por severidad (critical / high / medium / low)
-- [ ] **`debtector audit`** — comando opinado con 8 secciones: `summary`, `coupling`, `cycles`, `cohesion`, `testRisk`, `hotspots`, `busFactor`, `inheritance`. Top-N por dimensión por defecto. `--full` para listado completo, `--json` para consumo programático
-- [ ] **Schema versionado para `audit --json`** — campo `schema_version: 1` en la raíz para que consumidores externos puedan evolucionar sin romperse
-- [ ] **`docs/audit-schema.md`** — contrato JSON estable: shape, semántica de cada campo, ejemplos
+- [x] **Health score agregado** — valor 0-100 + conteos por severidad (critical / high / medium / low)
+- [x] **`debtector audit`** — comando opinado con 8 secciones: `summary`, `coupling`, `cycles`, `cohesion`, `testRisk`, `hotspots`, `busFactor`, `inheritance`. Top-N por dimensión por defecto. `--full` para listado completo, `--json` para consumo programático
+- [x] **Schema versionado para `audit --json`** — campo `schema_version: 1` en la raíz para que consumidores externos puedan evolucionar sin romperse
+- [x] **`docs/audit-schema.md`** — contrato JSON estable: shape, semántica de cada campo, ejemplos
 
 ---
 
@@ -72,14 +72,11 @@ ICP: dev/tech lead que usa agentes de código.
 
 ## Deuda técnica pendiente (no roadmap)
 
-- [ ] **Schema migrations** — tabla `metadata` con `schema_version` + migración automática al abrir DB antigua
+- [ ] **LCOM4 con atributos compartidos** — hoy solo une métodos por `CALLS`, así que clases cohesivas (`IgnoreRules`, bases abstractas) salen con LCOM4 > 1. Añadir arista de acceso a atributos (`self.x`) en los parsers y excluir métodos abstractos/sin cuerpo; hasta entonces `cohesion` no cuenta en el health score
+- [ ] **Rutas en Windows** — el indexer guarda rutas con el separador del sistema (`os.path.relpath`) pero la clasificación de tests y los patrones SQL esperan `/`; normalizar a POSIX al guardar
+- [ ] **Tests como módulos al indexar `.`** — si el usuario indexa la raíz, los ficheros de test cuentan en Ca/Ce, hotspots y god modules; solo se excluyen los que llegan vía `test_paths`
+- [ ] **`debtector status` cuenta los ficheros de `test_paths`** — `get_stats` los incluye en `files_count` y en los conteos por tipo
 - [ ] **Más lenguajes** — Go, Rust, Java (Tree-sitter los soporta; solo falta escribir el parser siguiendo `base.py`)
-
----
-
-## Congelado — no desarrollar más
-
-- **Búsqueda semántica** (`embedder.py`, `sqlite-vec`, `fastembed`) — código conservado en grupo opcional `[semantic]`; no forma parte del objetivo CI/PR
 
 ---
 
@@ -95,4 +92,5 @@ ICP: dev/tech lead que usa agentes de código.
 - [x] `debtector install-hook` — pre-commit hook de git
 - [x] `debtector install-skill` — skills para Claude Code
 - [x] `debtector impact` — radio de impacto de cambios
-- [x] Búsqueda semántica (`sqlite-vec` + `fastembed`) — congelada, movida a `[semantic]`
+- [x] Búsqueda semántica (`sqlite-vec` + `fastembed`) — retirada; ver ADR-001
+- [x] **Schema migrations** — `GraphStore._apply_migrations` migra la DB al abrirla
