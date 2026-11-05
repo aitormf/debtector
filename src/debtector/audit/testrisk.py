@@ -132,7 +132,9 @@ def critical_knowledge_concentration(
             detail={"fan_in": ca_by_file[b.file_path], "bus_factor": float(b.bus_factor)},
         )
         for b in bus_factor_metrics
-        if b.bus_factor == 1 and ca_by_file.get(b.file_path, 0.0) >= ca_threshold
+        if b.bus_factor == 1
+        and b.file_path in ca_by_file
+        and ca_by_file[b.file_path] >= ca_threshold
     ]
     findings.sort(key=lambda f: f.detail["fan_in"], reverse=True)
     return findings

@@ -124,3 +124,10 @@ class TestCriticalKnowledgeConcentration:
             module_metrics=[_module("src/shared.py", fan_in=20)],
         )
         assert findings == []
+
+
+def test_knowledge_concentration_ignores_files_absent_from_module_metrics() -> None:
+    """With ca_threshold=0 a bus-factor file with no module metrics is skipped, not a KeyError."""
+    bus = [BusFactorMetrics("../tests/test_x.py", "Ada", 100.0, 1)]
+
+    assert critical_knowledge_concentration(bus, [_module("src/a.py")], ca_threshold=0) == []
