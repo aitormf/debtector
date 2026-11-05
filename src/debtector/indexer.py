@@ -8,6 +8,7 @@ con Tree-sitter y almacena los nodos y aristas en el GraphStore.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from fnmatch import fnmatch
 from pathlib import Path, PurePosixPath
 
@@ -171,7 +172,7 @@ class Indexer:
         self.ignore_dirs = ignore_dirs or DEFAULT_IGNORE_DIRS
         self.ignore_files = ignore_files or DEFAULT_IGNORE_FILES
 
-    def index(self, project_path: str) -> dict:
+    def index(self, project_path: str, extra_paths: list[str] | None = None) -> dict:
         """Index a project directory with incremental change detection.
 
         Walks *project_path* recursively, skips ignored directories and
@@ -181,6 +182,11 @@ class Indexer:
 
         Args:
             project_path: Absolute or relative path to the project root.
+            extra_paths: Additional directories to index (the ``test_paths`` of
+                ``debtector.toml``).  Those outside *project_path* are stored
+                with a path relative to it (``../tests/test_x.py``), which is
+                how the rest of the code recognises them; those inside it are
+                already covered by the main walk and ignored here.
 
         Returns:
             Dict with integer counters:
@@ -196,7 +202,7 @@ class Indexer:
         indexed_files = set(self.store.get_all_files())
         current_files: set[str] = set()
 
-        for file_path in self._discover_files(project_path, ignore_rules):
+        for file_path in self._discover_all(project_path, ignore_rules, extra_paths or []):
             rel_path = os.path.relpath(file_path, project_path)
             current_files.add(rel_path)
             stats["scanned"] += 1
@@ -267,6 +273,33 @@ class Indexer:
 
         idx_log.info("indexing_finished", **stats)
         return stats
+
+    def _discover_all(
+        self, project_path: str, ignore_rules: IgnoreRules, extra_paths: list[str]
+    ) -> Iterator[str]:
+        """Yield the files under *project_path* plus those of external *extra_paths*.
+
+        Args:
+            project_path: Absolute index root.
+            ignore_rules: Rules from ``.debtectorignore``, applied to the index root only.
+            extra_paths: Extra directories; those inside *project_path* are skipped.
+
+        Yields:
+            Absolute file paths, without duplicates.
+        """
+        yield from self._discover_files(project_path, ignore_rules)
+        seen: set[str] = set()
+        for extra in extra_paths:
+            extra = os.path.abspath(extra)
+            if not os.path.isdir(extra):
+                continue
+            # Inside the index root (already walked) or an ancestor of it: skip.
+            if os.path.commonpath([extra, project_path]) in (extra, project_path):
+                continue
+            for file_path in self._discover_files(extra):
+                if file_path not in seen:
+                    seen.add(file_path)
+                    yield file_path
 
     def _discover_files(self, root_path: str, ignore_rules: IgnoreRules | None = None):
         """Yield absolute paths of source files under *root_path*.

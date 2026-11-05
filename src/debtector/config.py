@@ -8,6 +8,11 @@ Ejemplo de ``debtector.toml``:
 
 .. code-block:: toml
 
+    # Rutas de tests relativas a la raíz del proyecto (opcional). Se suman a
+    # las convenciones por nombre y, si caen fuera del directorio indexado,
+    # también se indexan para construir las aristas COVERS.
+    test_paths = ["tests"]
+
     [metrics.thresholds]
     god_module_percentile = 90
     instability_threshold = 0.8
@@ -94,9 +99,16 @@ class DebtectorConfig:
 
     Args:
         metrics: Configuración del subsistema de métricas.
+        test_paths: Rutas (relativas a la raíz del proyecto, donde vive
+            ``debtector.toml``) cuyos archivos son tests, además de las
+            convenciones por nombre/directorio (``test_*``, ``tests/``...).
+            Si apuntan fuera del directorio indexado, el indexador también
+            las parsea para construir las aristas COVERS. Por defecto vacío:
+            solo se usan las convenciones. Ejemplo: ``test_paths = ["tests"]``.
     """
 
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
+    test_paths: list[str] = field(default_factory=list)
 
 
 def load_config(project_root: str | Path) -> DebtectorConfig:
@@ -159,4 +171,11 @@ def load_config(project_root: str | Path) -> DebtectorConfig:
             f"Valores permitidos: {valid}. Detalle: {exc}"
         ) from exc
 
-    return DebtectorConfig(metrics=MetricsConfig(thresholds=thresholds, severity=severity))
+    test_paths = data.get("test_paths", [])
+    if not isinstance(test_paths, list) or not all(isinstance(p, str) for p in test_paths):
+        raise ValueError("`test_paths` en debtector.toml debe ser una lista de strings.")
+
+    return DebtectorConfig(
+        metrics=MetricsConfig(thresholds=thresholds, severity=severity),
+        test_paths=list(test_paths),
+    )

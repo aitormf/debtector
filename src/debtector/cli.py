@@ -96,7 +96,10 @@ def _auto_index(project: str) -> None:
                 # and re-indexing from the project root would rewrite every path.
                 log.info("auto_index_skipped_unknown_root", project=project)
                 return
-            Indexer(store).index(str(Path(project) / rel) if rel else project)
+            Indexer(store).index(
+                str(Path(project) / rel) if rel else project,
+                extra_paths=_test_dirs(project),
+            )
         finally:
             store.close()
     except Exception:  # noqa: BLE001
@@ -116,7 +119,48 @@ def _get_store(project: str) -> GraphStore:
         An open :class:`~debtector.graph_store.GraphStore` instance.
     """
     db_path = _debtector_dir(project) / "index.db"
-    return GraphStore(str(db_path))
+    store = GraphStore(str(db_path))
+    rel = store.get_metadata(_INDEX_ROOT_KEY)
+    store.test_prefixes = _test_prefixes(project, str(Path(project) / rel) if rel else project)
+    return store
+
+
+def _test_dirs(project: str) -> list[str]:
+    """Return the absolute ``test_paths`` of ``debtector.toml``.
+
+    A config that cannot be loaded yields no extra paths (logged, not fatal):
+    analysis commands must keep working with the conventions alone.
+
+    Args:
+        project: Path to the project root (where ``debtector.toml`` lives).
+
+    Returns:
+        Absolute paths, one per entry in ``test_paths``.
+    """
+    try:
+        cfg = load_config(project)
+    except ValueError:
+        log.warning("test_paths_config_invalid", project=project, exc_info=True)
+        return []
+    return [os.path.abspath(Path(project) / p) for p in cfg.test_paths]
+
+
+def _test_prefixes(project: str, index_root: str) -> list[str]:
+    """Return the ``test_paths`` as path prefixes relative to the index root.
+
+    Args:
+        project: Path to the project root.
+        index_root: Directory the graph's paths are relative to.
+
+    Returns:
+        Prefixes with a trailing ``/`` (``""`` for the index root itself),
+        matching how file paths are stored in the graph.
+    """
+    prefixes = []
+    for d in _test_dirs(project):
+        rel = Path(os.path.relpath(d, os.path.abspath(index_root))).as_posix()
+        prefixes.append("" if rel == "." else rel + "/")
+    return prefixes
 
 
 def _index_root(project: str) -> str:
@@ -169,7 +213,7 @@ def cmd_index(args) -> None:
     if not args.json:
         print(f"Indexando {args.path}...")
 
-    stats = indexer.index(args.path)
+    stats = indexer.index(args.path, extra_paths=_test_dirs(args.project))
     rel_root = Path(os.path.relpath(Path(args.path).resolve(), Path(args.project).resolve()))
     store.set_metadata(_INDEX_ROOT_KEY, rel_root.as_posix())
     store.close()
@@ -440,15 +484,21 @@ def cmd_audit(args) -> None:
     hotspots = compute_hotspots(store, root)
     bus_factor = compute_bus_factor(store, root)
     inheritance = inheritance_metrics(store)
-    uncovered_files = _get_uncovered_files(store)
     churn = parse_churn(root)
 
-    # Compute testRisk joins
-    tr_findings = (
-        untested_high_coupling(uncovered_files, module_metrics)
-        + untested_hotspots(uncovered_files, churn)
-        + critical_knowledge_concentration(bus_factor, module_metrics)
-    )
+    # testRisk: without tests every file looks "uncovered", so the untested
+    # joins would be noise; skip them (and keep the knowledge join).
+    tests_found = store.count_test_files() > 0
+    tr_findings = critical_knowledge_concentration(bus_factor, module_metrics)
+    if tests_found:
+        uncovered_files = _get_uncovered_files(store)
+        tr_findings = (
+            untested_high_coupling(uncovered_files, module_metrics)
+            + untested_hotspots(uncovered_files, churn)
+            + tr_findings
+        )
+    else:
+        log.warning("testrisk_skipped", reason="no_tests_found", project=args.project)
 
     # Compute LCOM4 for each class
     cohesion = []
@@ -529,6 +579,11 @@ def cmd_audit(args) -> None:
                 ]
             ),
             "testRisk": {
+                **(
+                    {"status": "ok"}
+                    if tests_found
+                    else {"status": "skipped", "reason": "no_tests_found"}
+                ),
                 "untested_high_coupling": [
                     f.file_path for f in tr_findings if f.label == "untested high-coupling"
                 ],
@@ -573,6 +628,12 @@ def cmd_audit(args) -> None:
         print(f"│  modules={stats.files_count}  cycles={len(cycles)}")
         print(f"│  critical={health.counts.critical}  high={health.counts.high}")
         print("└─\n")
+        if not tests_found:
+            print(
+                "No se han encontrado tests; testRisk desactivado. "
+                "Configura `test_paths` en `debtector.toml`.",
+                file=sys.stderr,
+            )
 
 
 # ──────────────────────────────────────────────

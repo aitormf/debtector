@@ -160,6 +160,10 @@ class GraphStore:
 
         self._init_schema()
 
+        # Directorios de ``test_paths`` (relativos a la raíz indexada, con "/"
+        # final) que cuentan como tests además de las convenciones.
+        self.test_prefixes: list[str] = []
+
         # Cache de NetworkX para traversals
         self._nxg_cache = None
         self._cache_lock = threading.Lock()
@@ -819,38 +823,62 @@ class GraphStore:
     # COVERS: test coverage edges
     # ══════════════════════════════════════════
 
-    # SQL fragment that identifies test files by path/name convention.
-    # Used in get_uncovered_symbols() with table alias ``n``.
+    # Path/name conventions that identify test files, as LIKE patterns.
     #
     # NOTE: the ``tests/`` prefix patterns here are intentionally broader than
     # ``is_test_file()`` in utils.py.  ``is_test_file()`` inspects only the
     # filename; this SQL also catches helpers and fixtures living inside a
     # ``tests/`` directory (e.g. ``tests/helpers.py``) which should not be
     # considered production symbols.
-    _TEST_FILE_SQL = """(
-        n.file_path LIKE 'test_%'
-        OR n.file_path LIKE '%/test_%'
-        OR n.file_path LIKE '%_test.py'
-        OR n.file_path LIKE '%.test.ts'
-        OR n.file_path LIKE '%.test.js'
-        OR n.file_path LIKE '%.spec.ts'
-        OR n.file_path LIKE '%.spec.js'
-        OR n.file_path LIKE 'tests/%'
-        OR n.file_path LIKE '%/tests/%'
-    )"""  # nosec B608 — class constant, not user input
+    #
+    # ``../%`` matches files outside the index root: the indexer only stores
+    # those when they come from ``test_paths`` in ``debtector.toml``.
+    _TEST_FILE_PATTERNS = (
+        "test_%",
+        "%/test_%",
+        "%_test.py",
+        "%.test.ts",
+        "%.test.js",
+        "%.spec.ts",
+        "%.spec.js",
+        "tests/%",
+        "%/tests/%",
+        "../%",
+    )
 
-    # Same fragment with alias ``src_n`` for the JOIN in update_covers_edges().
-    _TEST_FILE_SQL_SRCN = """(
-        src_n.file_path LIKE 'test_%'
-        OR src_n.file_path LIKE '%/test_%'
-        OR src_n.file_path LIKE '%_test.py'
-        OR src_n.file_path LIKE '%.test.ts'
-        OR src_n.file_path LIKE '%.test.js'
-        OR src_n.file_path LIKE '%.spec.ts'
-        OR src_n.file_path LIKE '%.spec.js'
-        OR src_n.file_path LIKE 'tests/%'
-        OR src_n.file_path LIKE '%/tests/%'
-    )"""  # nosec B608 — class constant, not user input
+    def _test_file_clause(self, alias: str = "n") -> tuple[str, list[str | int]]:
+        """Build the SQL predicate that identifies test files.
+
+        Combines the path conventions with ``self.test_prefixes`` (directories
+        from ``test_paths``, relative to the index root).
+
+        Args:
+            alias: Alias of the ``nodes`` table in the surrounding query.
+
+        Returns:
+            Tuple ``(sql, params)``; *sql* is a parenthesised boolean expression.
+        """
+        col = f"{alias}.file_path"
+        parts = [f"{col} LIKE '{p}'" for p in self._TEST_FILE_PATTERNS]
+        params: list[str | int] = []
+        for prefix in self.test_prefixes:
+            # prefix is "" for the root itself, otherwise "dir/" (trailing slash).
+            parts.append(f"substr({col}, 1, ?) = ?")
+            params.extend([len(prefix), prefix])
+        return "(" + " OR ".join(parts) + ")", params
+
+    def count_test_files(self) -> int:
+        """Count indexed File nodes that are test files.
+
+        Returns:
+            Number of File nodes matching the test conventions or ``test_paths``.
+        """
+        clause, params = self._test_file_clause("n")
+        row = self._conn.execute(
+            f"SELECT COUNT(*) FROM nodes n WHERE n.kind = 'File' AND {clause}",  # nosec B608
+            params,
+        ).fetchone()
+        return int(row[0])
 
     # Batch size for IN (...) queries — stays well below SQLite's 999-variable limit.
     _BATCH_SIZE = 450
@@ -872,7 +900,8 @@ class GraphStore:
         self._conn.execute("DELETE FROM edges WHERE kind = 'COVERS'")
 
         # Unresolved CALLS from test functions toward bare names.
-        # Uses _TEST_FILE_SQL_SRCN because the JOIN aliases the nodes table as src_n.
+        # The JOIN aliases the nodes table as src_n.
+        src_clause, src_params = self._test_file_clause("src_n")
         unresolved = self._conn.execute(
             f"""
             SELECT e.source_qualified, e.target_qualified AS raw_name, e.file_path, e.line
@@ -880,8 +909,9 @@ class GraphStore:
             JOIN nodes src_n ON src_n.qualified_name = e.source_qualified
             WHERE e.kind = 'CALLS'
               AND e.extra LIKE '%"unresolved"%'
-              AND {self._TEST_FILE_SQL_SRCN}
-            """  # nosec B608 — _TEST_FILE_SQL_SRCN is a class constant
+              AND {src_clause}
+            """,  # nosec B608 — clause built from class constants and placeholders
+            src_params,
         ).fetchall()
 
         if not unresolved:
@@ -897,6 +927,7 @@ class GraphStore:
             )
 
         distinct_names = list(callers_by_name.keys())
+        prod_clause, prod_params = self._test_file_clause("n")
         now = time.time()
         count = 0
         inserts: list[tuple] = []
@@ -910,9 +941,9 @@ class GraphStore:
                 SELECT n.name, n.qualified_name FROM nodes n
                 WHERE n.name IN ({placeholders})
                   AND n.kind IN ('Function', 'Method')
-                  AND NOT {self._TEST_FILE_SQL}
+                  AND NOT {prod_clause}
                 """,  # nosec B608 — only placeholders and class constants
-                batch,
+                [*batch, *prod_params],
             ).fetchall()
 
             for prod in prod_rows:
@@ -947,16 +978,16 @@ class GraphStore:
             List of :class:`~debtector.models.GraphNode` instances that have no
             incoming COVERS edge.
         """
+        clause, params = self._test_file_clause("n")
         query = f"""
             SELECT n.* FROM nodes n
             WHERE n.kind IN ('Function', 'Method')
-              AND NOT {self._TEST_FILE_SQL}
+              AND NOT {clause}
               AND n.qualified_name NOT IN (
                 SELECT target_qualified FROM edges WHERE kind = 'COVERS'
               )
-        """  # nosec B608 — _TEST_FILE_SQL is a class constant, not user input
+        """  # nosec B608 — clause built from class constants and placeholders
 
-        params: list[str] = []
         if path_filter:
             query += " AND n.file_path LIKE ?"
             params.append(f"{path_filter}%")

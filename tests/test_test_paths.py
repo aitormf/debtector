@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess  # nosec B404
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,6 +12,7 @@ import pytest
 
 from debtector.cli import _get_store, cmd_audit, cmd_index
 from debtector.config import load_config
+from debtector.logging import configure_logging
 from debtector.metrics import compute_metrics
 
 _HIGH_CE_MODULE = "".join(f"import mod{i}\n" for i in range(12)) + (
@@ -35,7 +38,21 @@ def _make_project(
         (root / tests_dir / "test_service.py").write_text(_TEST_MODULE, encoding="utf-8")
     if toml is not None:
         (root / "debtector.toml").write_text(toml, encoding="utf-8")
+    _git_commit_all(root)
     return root
+
+
+def _git_commit_all(root: Path) -> None:
+    """Initialise a git repo with one commit (audit reads churn and blame)."""
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.com",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.com",
+    }
+    for cmd in (["init", "-q"], ["add", "-A"], ["commit", "-q", "-m", "init"]):
+        subprocess.run(["git", *cmd], cwd=root, check=True, env=env)  # nosec B603 B607
 
 
 def _index(project: Path, path: str) -> None:
@@ -146,9 +163,15 @@ class TestAuditTestRisk:
     def test_no_tests_not_in_score(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        _make_project(tmp_path, with_tests=False)
-        _index(tmp_path, "src")
-        assert _audit_json(tmp_path, capsys)["summary"]["health_score"] == 100
+        # Same sources, with and without tests: the "untested high-coupling"
+        # finding of risky.py only costs score when tests exist.
+        skipped_root = _make_project(tmp_path / "a", with_tests=False)
+        _index(skipped_root, "src")
+        skipped = _audit_json(skipped_root, capsys)["summary"]["health_score"]
+        ok_root = _make_project(tmp_path / "b", with_tests=True, toml='test_paths = ["tests"]\n')
+        _index(ok_root, "src")
+        scored = _audit_json(ok_root, capsys)["summary"]["health_score"]
+        assert skipped > scored
 
     def test_no_tests_human_warning_on_stderr(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -189,3 +212,9 @@ class TestAuditTestRisk:
         capsys.readouterr()
         cmd_audit(SimpleNamespace(project=str(tmp_path), top_n=10, full=False, json=False))
         assert "No se han encontrado tests" not in capsys.readouterr().err
+
+
+@pytest.fixture(autouse=True)
+def _file_logging(tmp_path: Path) -> None:
+    """Route logs to ``.debtector/debtector.log`` as the real CLI does."""
+    configure_logging(project=str(tmp_path))
