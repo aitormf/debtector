@@ -39,17 +39,22 @@ class PythonParser(LanguageParser):
         """Return ``[".py"]``."""
         return [".py"]
 
-    def parse(self, file_path: str) -> tuple[list[NodeInfo], list[EdgeInfo]]:
+    def parse(
+        self, file_path: str, is_test: bool | None = None
+    ) -> tuple[list[NodeInfo], list[EdgeInfo]]:
         """Parse a Python file and return its structural graph data.
 
         Args:
             file_path: Absolute path to the ``.py`` file.
+            is_test: Whether the file is a test (its calls feed COVERS edges).
+                ``None`` falls back to the filename convention.
 
         Returns:
             A ``(nodes, edges)`` tuple where *nodes* includes one File node plus
             Class, Function, and Method nodes, and *edges* includes CONTAINS,
             HAS_METHOD, IMPORTS_FROM, and INHERITS relationships.
         """
+        self._in_test = is_test_file(file_path) if is_test is None else is_test
         log.debug("parsing_file", file=file_path, language=self.language)
         source = self.read_source(file_path)
         tree = self._parser.parse(source)
@@ -532,7 +537,7 @@ class PythonParser(LanguageParser):
             symbol_index: Name-to-qualified-name lookup from the first pass.
             edges: Mutable list to which new CALLS edges are appended.
         """
-        in_test = is_test_file(file_path)
+        in_test = self._in_test
         for node in self._walk(body_node):
             if node.type != "call":
                 continue

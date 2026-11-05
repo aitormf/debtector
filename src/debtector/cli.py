@@ -213,6 +213,8 @@ def cmd_index(args) -> None:
     if not args.json:
         print(f"Indexando {args.path}...")
 
+    # Prefixes must be relative to the directory being indexed now, not the stored root.
+    store.test_prefixes = _test_prefixes(args.project, args.path)
     stats = indexer.index(args.path, extra_paths=_test_dirs(args.project))
     rel_root = Path(os.path.relpath(Path(args.path).resolve(), Path(args.project).resolve()))
     store.set_metadata(_INDEX_ROOT_KEY, rel_root.as_posix())

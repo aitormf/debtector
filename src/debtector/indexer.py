@@ -48,6 +48,9 @@ DEFAULT_IGNORE_FILES = {".DS_Store", "Thumbs.db"}
 
 DEBTECTORIGNORE = ".debtectorignore"
 
+# Metadata key: test_paths prefixes in effect at the last index run.
+_TEST_PATHS_KEY = "test_prefixes"
+
 
 class IgnoreRules:
     """Parses and applies patterns from a ``.debtectorignore`` file.
@@ -199,6 +202,11 @@ class Indexer:
 
         ignore_rules = IgnoreRules.from_file(Path(project_path))
 
+        # Whether a file is a test is baked into its CALLS edges at parse time, so a
+        # change in test_paths forces a reparse of everything (hash skip disabled).
+        test_sig = "\n".join(self.store.test_prefixes)
+        force_reparse = (self.store.get_metadata(_TEST_PATHS_KEY) or "") != test_sig
+
         indexed_files = set(self.store.get_all_files())
         current_files: set[str] = set()
 
@@ -219,13 +227,13 @@ class Indexer:
                 continue
 
             stored_hash = self.store.get_file_hash(rel_path)
-            if stored_hash == current_hash:
+            if stored_hash == current_hash and not force_reparse:
                 idx_log.debug("file_skipped", file=rel_path)
                 stats["skipped"] += 1
                 continue
 
             try:
-                result = self.registry.parse(file_path)
+                result = self.registry.parse(file_path, self.store.is_test_path(rel_path))
                 if result:
                     nodes, edges = result
                     for node in nodes:
@@ -262,6 +270,8 @@ class Indexer:
             self.store.remove_file(removed)
             idx_log.info("file_removed", file=removed)
             stats["removed"] += 1
+
+        self.store.set_metadata(_TEST_PATHS_KEY, test_sig)
 
         # Rebuild COVERS edges from unresolved CALLS in test files (non-fatal)
         try:

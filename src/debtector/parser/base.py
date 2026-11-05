@@ -34,11 +34,15 @@ class LanguageParser(ABC):
         ...
 
     @abstractmethod
-    def parse(self, file_path: str) -> tuple[list[NodeInfo], list[EdgeInfo]]:
+    def parse(
+        self, file_path: str, is_test: bool | None = None
+    ) -> tuple[list[NodeInfo], list[EdgeInfo]]:
         """Parse a source file and return its structural graph data.
 
         Args:
             file_path: Absolute path to the source file to parse.
+            is_test: Whether the file is a test (its calls feed COVERS edges).
+                ``None`` falls back to the filename convention.
 
         Returns:
             A tuple ``(nodes, edges)`` ready to be stored via

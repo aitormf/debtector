@@ -833,10 +833,12 @@ class GraphStore:
     #
     # ``../%`` matches files outside the index root: the indexer only stores
     # those when they come from ``test_paths`` in ``debtector.toml``.
+    # LIKE patterns with ``\`` as escape char: ``\_`` is a literal underscore
+    # (an unescaped ``_`` would match any character, e.g. ``testrisk.py``).
     _TEST_FILE_PATTERNS = (
-        "test_%",
-        "%/test_%",
-        "%_test.py",
+        "test\\_%",
+        "%/test\\_%",
+        "%\\_test.py",
         "%.test.ts",
         "%.test.js",
         "%.spec.ts",
@@ -845,6 +847,37 @@ class GraphStore:
         "%/tests/%",
         "../%",
     )
+
+    @staticmethod
+    def _like_to_regex(pattern: str) -> re.Pattern[str]:
+        """Translate a LIKE pattern (``%``, ``\\`` escape) into a compiled regex."""
+        out = []
+        it = iter(pattern)
+        for ch in it:
+            if ch == "\\":
+                out.append(re.escape(next(it, "\\")))
+            elif ch == "%":
+                out.append(".*")
+            else:
+                out.append(re.escape(ch))
+        return re.compile("".join(out), re.DOTALL)
+
+    def is_test_path(self, file_path: str) -> bool:
+        """Return whether *file_path* (relative to the index root) is a test file.
+
+        Same classification as the SQL predicate of :meth:`_test_file_clause`:
+        path conventions plus ``test_prefixes``.  The indexer passes the result
+        to the parsers so they emit the CALLS edges that become COVERS edges.
+
+        Args:
+            file_path: POSIX path relative to the index root.
+
+        Returns:
+            ``True`` for test files.
+        """
+        if any(file_path.startswith(prefix) for prefix in self.test_prefixes):
+            return True
+        return any(self._like_to_regex(p).fullmatch(file_path) for p in self._TEST_FILE_PATTERNS)
 
     def _test_file_clause(self, alias: str = "n") -> tuple[str, list[str | int]]:
         """Build the SQL predicate that identifies test files.
@@ -859,7 +892,7 @@ class GraphStore:
             Tuple ``(sql, params)``; *sql* is a parenthesised boolean expression.
         """
         col = f"{alias}.file_path"
-        parts = [f"{col} LIKE '{p}'" for p in self._TEST_FILE_PATTERNS]
+        parts = [f"{col} LIKE '{p}' ESCAPE '\\'" for p in self._TEST_FILE_PATTERNS]
         params: list[str | int] = []
         for prefix in self.test_prefixes:
             # prefix is "" for the root itself, otherwise "dir/" (trailing slash).
