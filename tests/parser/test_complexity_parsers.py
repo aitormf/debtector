@@ -155,6 +155,61 @@ def test_nested_scopes_keep_outer_complexity_radon_compatible(tmp_path: Path) ->
     assert "nested_complexity" not in by_name["flat"].extra
 
 
+SCOPED_SRC = """\
+def cond(a):
+    if a:
+        def c1(x):
+            if x:
+                pass
+    else:
+        pass
+
+
+def loop_try(xs):
+    for x in xs:
+        def c2(y):
+            while y:
+                pass
+    try:
+        def c3(z):
+            if z:
+                pass
+    except Exception:
+        pass
+
+
+def local_class():
+    class K:
+        def m(self, a):
+            if a and a:
+                pass
+
+    return K
+
+
+def two_level(a):
+    def mid(b):
+        if b:
+            def low(c):
+                if c:
+                    pass
+"""
+
+
+def test_nested_scopes_inside_blocks_and_local_classes_are_collected(tmp_path: Path) -> None:
+    path = tmp_path / "mod.py"
+    path.write_text(SCOPED_SRC, encoding="utf-8")
+
+    nodes, _ = PythonParser().parse(str(path))
+
+    by_name = {n.name: n.extra for n in nodes if n.kind == NodeKind.FUNCTION}
+    assert by_name["cond"] == {"complexity": 2, "nested_complexity": 2}  # radon cond (2), c1 (2)
+    assert by_name["loop_try"] == {"complexity": 3, "nested_complexity": 2 + 2}  # c2 (2), c3 (2)
+    assert by_name["local_class"] == {"complexity": 1, "nested_complexity": 3}  # K.m (3)
+    # mid (2) + low (2), each counted exactly once
+    assert by_name["two_level"] == {"complexity": 1, "nested_complexity": 4}
+
+
 def test_file_complexity_includes_nested_scopes(tmp_path: Path) -> None:
     from debtector.git_history import _file_complexities
     from debtector.graph_store import GraphStore

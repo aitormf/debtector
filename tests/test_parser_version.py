@@ -69,8 +69,8 @@ def test_index_without_version_key_reparses_and_backfills_complexity(
     assert node.extra["complexity"] == 2
 
 
-def test_parser_version_is_3() -> None:
-    assert PARSER_VERSION == 3
+def test_parser_version_is_4() -> None:
+    assert PARSER_VERSION == 4
 
 
 def test_failed_reparse_does_not_advance_parser_version(project: Path, store: GraphStore) -> None:
