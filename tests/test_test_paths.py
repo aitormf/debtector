@@ -227,3 +227,95 @@ class TestAuditTestRisk:
 def _file_logging(tmp_path: Path) -> None:
     """Route logs to ``.debtector/debtector.log`` as the real CLI does."""
     configure_logging(project=str(tmp_path))
+
+
+class TestNonConventionalTestDir:
+    """Parsers must classify tests like the store does (conventions + test_paths)."""
+
+    def _project(self, root: Path, toml: str) -> Path:
+        _make_project(root, with_tests=False, toml=toml)
+        (root / "checks").mkdir()
+        (root / "checks" / "verify.py").write_text(
+            "from service import helper\n\n\ndef check_helper():\n    assert helper() == 1\n",
+            encoding="utf-8",
+        )
+        return root
+
+    def test_covers_from_non_conventional_dir(self, tmp_path: Path) -> None:
+        self._project(tmp_path, 'test_paths = ["checks"]\n')
+        _index(tmp_path, ".")
+        store = _get_store(str(tmp_path))
+        try:
+            covered = store._conn.execute(
+                "SELECT target_qualified FROM edges WHERE kind = 'COVERS'"
+            ).fetchall()
+            uncovered = {s.qualified_name for s in store.get_uncovered_symbols()}
+        finally:
+            store.close()
+        assert any(c["target_qualified"].endswith("service.py::helper") for c in covered)
+        assert not any(q.endswith("service.py::helper") for q in uncovered)
+
+    def test_changing_test_paths_reparses_indexed_files(self, tmp_path: Path) -> None:
+        self._project(tmp_path, "")
+        _index(tmp_path, ".")
+        (tmp_path / "debtector.toml").write_text('test_paths = ["checks"]\n')
+        _index(tmp_path, ".")
+        store = _get_store(str(tmp_path))
+        try:
+            n = store._conn.execute("SELECT COUNT(*) FROM edges WHERE kind='COVERS'").fetchone()[0]
+        finally:
+            store.close()
+        assert n >= 1
+
+    def test_fresh_index_of_subdir_uses_new_root_for_prefixes(self, tmp_path: Path) -> None:
+        _make_project(tmp_path, with_tests=False, toml='test_paths = ["src/checks"]\n')
+        (tmp_path / "src" / "checks").mkdir()
+        (tmp_path / "src" / "checks" / "verify.py").write_text(
+            "from service import helper\n\n\ndef check_helper():\n    assert helper() == 1\n",
+            encoding="utf-8",
+        )
+        _index(tmp_path, "src")
+        store = _get_store(str(tmp_path))
+        try:
+            assert store.test_prefixes == ["checks/"]
+            n = store._conn.execute("SELECT COUNT(*) FROM edges WHERE kind='COVERS'").fetchone()[0]
+        finally:
+            store.close()
+        assert n >= 1
+
+
+class TestLikeEscaping:
+    """``_`` and ``%`` in conventions must not act as wildcards."""
+
+    @pytest.mark.parametrize(
+        ("path", "expected"),
+        [
+            ("audit/testrisk.py", False),
+            ("my_test_utils/x.py", False),
+            ("src/latest_result.py", False),
+            ("tests/test_x.py", True),
+            ("a/test_b.py", True),
+            ("test_a.py", True),
+            ("a/b_test.py", True),
+            ("web/a.spec.ts", True),
+        ],
+    )
+    def test_is_test_path(self, tmp_path: Path, path: str, expected: bool) -> None:
+        from debtector.graph_store import GraphStore
+
+        store = GraphStore(tmp_path / "x.db")
+        try:
+            assert store.is_test_path(path) is expected
+        finally:
+            store.close()
+
+    def test_test_path_prefix_with_wildcards_is_literal(self, tmp_path: Path) -> None:
+        from debtector.graph_store import GraphStore
+
+        store = GraphStore(tmp_path / "x.db")
+        store.test_prefixes = ["my_checks%/"]
+        try:
+            assert store.is_test_path("my_checks%/a.py")
+            assert not store.is_test_path("my_checksX/a.py")
+        finally:
+            store.close()
