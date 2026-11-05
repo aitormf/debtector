@@ -1444,39 +1444,54 @@ def main() -> None:
         help="Emitir JSON compacto en stdout (para consumo por IA)",
     )
 
+    # Shared by every sub-parser so the options also work after the sub-command.
+    # SUPPRESS keeps a value given before the sub-command from being overwritten.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--project", "-p", default=argparse.SUPPRESS, help="Ruta al proyecto")
+    common.add_argument(
+        "--json",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Emitir JSON compacto en stdout (para consumo por IA)",
+    )
+
     sub = parser.add_subparsers(dest="command")
 
     # index
-    p_idx = sub.add_parser("index", help="Indexar un proyecto")
+    p_idx = sub.add_parser("index", parents=[common], help="Indexar un proyecto")
     p_idx.add_argument("path", help="Ruta al directorio a indexar")
 
     # search
-    p_search = sub.add_parser("search", help="Buscar símbolos")
+    p_search = sub.add_parser("search", parents=[common], help="Buscar símbolos")
     p_search.add_argument("query", help="Texto a buscar")
     p_search.add_argument("--kind", "-k", help="Filtrar: Class, Function, Method")
 
     # summary
-    p_sum = sub.add_parser("summary", help="Resumen de un archivo")
+    p_sum = sub.add_parser("summary", parents=[common], help="Resumen de un archivo")
     p_sum.add_argument("file", help="Ruta relativa del archivo")
 
     # impact
-    p_imp = sub.add_parser("impact", help="Análisis de impacto")
+    p_imp = sub.add_parser("impact", parents=[common], help="Análisis de impacto")
     p_imp.add_argument("files", nargs="+", help="Archivos modificados")
     p_imp.add_argument("--depth", "-d", type=int, default=2, help="Profundidad máxima")
 
     # imports
-    p_imports = sub.add_parser("imports", help="Buscar imports de un módulo")
+    p_imports = sub.add_parser("imports", parents=[common], help="Buscar imports de un módulo")
     p_imports.add_argument("module", help="Módulo a buscar")
 
     # status
-    sub.add_parser("status", help="Estadísticas del índice")
+    sub.add_parser("status", parents=[common], help="Estadísticas del índice")
 
     # baseline
-    p_baseline = sub.add_parser("baseline", help="Gestión del baseline de métricas")
+    p_baseline = sub.add_parser(
+        "baseline", parents=[common], help="Gestión del baseline de métricas"
+    )
     p_baseline_sub = p_baseline.add_subparsers(dest="baseline_cmd")
-    p_baseline_sub.add_parser("save", help="Guardar snapshot de métricas como baseline")
+    p_baseline_sub.add_parser(
+        "save", parents=[common], help="Guardar snapshot de métricas como baseline"
+    )
     p_status = p_baseline_sub.add_parser(
-        "status", help="Comparar métricas actuales con el baseline"
+        "status", parents=[common], help="Comparar métricas actuales con el baseline"
     )
     p_status.add_argument(
         "--reporter",
@@ -1487,7 +1502,9 @@ def main() -> None:
 
     # coupling (ex-metrics)
     p_coupling = sub.add_parser(
-        "coupling", help="Acoplamiento estructural (Ca, Ce, I, ciclos, god modules)"
+        "coupling",
+        parents=[common],
+        help="Acoplamiento estructural (Ca, Ce, I, ciclos, god modules)",
     )
     p_coupling.add_argument(
         "--sort",
@@ -1506,6 +1523,7 @@ def main() -> None:
     # metrics — deprecated alias for coupling
     p_metrics_alias = sub.add_parser(
         "metrics",
+        parents=[common],
         help="[DEPRECADO] Usa 'coupling'. Métricas de acoplamiento estructural.",
     )
     p_metrics_alias.add_argument(
@@ -1516,11 +1534,13 @@ def main() -> None:
     p_metrics_alias.add_argument("--limit", "-l", type=int, default=None)
 
     # callers
-    p_callers = sub.add_parser("callers", help="¿Quién llama a un símbolo?")
+    p_callers = sub.add_parser("callers", parents=[common], help="¿Quién llama a un símbolo?")
     p_callers.add_argument("qualified_name", help="qualified_name del símbolo")
 
     # untested
-    p_untested = sub.add_parser("untested", help="Símbolos sin tests (sin arista COVERS)")
+    p_untested = sub.add_parser(
+        "untested", parents=[common], help="Símbolos sin tests (sin arista COVERS)"
+    )
     p_untested.add_argument(
         "path",
         nargs="?",
@@ -1529,7 +1549,9 @@ def main() -> None:
     )
 
     # audit
-    p_audit = sub.add_parser("audit", help="Vista de auditoría: Fase 3 para revisión profunda")
+    p_audit = sub.add_parser(
+        "audit", parents=[common], help="Vista de auditoría: Fase 3 para revisión profunda"
+    )
     p_audit.add_argument(
         "--top-n",
         type=int,
@@ -1545,25 +1567,31 @@ def main() -> None:
     )
 
     # hotspots
-    p_hotspots = sub.add_parser("hotspots", help="Hotspots: churn × acoplamiento estructural")
+    p_hotspots = sub.add_parser(
+        "hotspots", parents=[common], help="Hotspots: churn × acoplamiento estructural"
+    )
     p_hotspots.add_argument("--limit", "-l", type=int, default=None)
     p_hotspots.add_argument("--since", default=None, help="Filtro de fecha (e.g. '6 months ago')")
     p_hotspots.add_argument("--min-coupling", type=float, default=0.0, dest="min_coupling")
 
     # temporal-coupling
-    p_tc = sub.add_parser("temporal-coupling", help="Archivos que co-cambian frecuentemente")
+    p_tc = sub.add_parser(
+        "temporal-coupling", parents=[common], help="Archivos que co-cambian frecuentemente"
+    )
     p_tc.add_argument("--limit", "-l", type=int, default=None)
     p_tc.add_argument("--since", default=None)
     p_tc.add_argument("--min-shared", type=int, default=5, dest="min_shared")
     p_tc.add_argument("--min-ratio", type=float, default=0.3, dest="min_ratio")
 
     # bus-factor
-    p_bus = sub.add_parser("bus-factor", help="Riesgo de autor único por archivo")
+    p_bus = sub.add_parser("bus-factor", parents=[common], help="Riesgo de autor único por archivo")
     p_bus.add_argument("--limit", "-l", type=int, default=None)
 
     # git-coupling
     p_git = sub.add_parser(
-        "git-coupling", help="Análisis behavioral completo: hotspots + temporal + bus factor"
+        "git-coupling",
+        parents=[common],
+        help="Análisis behavioral completo: hotspots + temporal + bus factor",
     )
     p_git.add_argument("--limit", "-l", type=int, default=None)
     p_git.add_argument("--since", default=None)
@@ -1572,7 +1600,7 @@ def main() -> None:
 
     # report
     p_report = sub.add_parser(
-        "report", help="Informe completo: acoplamiento estructural + behavioral"
+        "report", parents=[common], help="Informe completo: acoplamiento estructural + behavioral"
     )
     p_report.add_argument(
         "--sort",

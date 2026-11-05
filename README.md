@@ -139,6 +139,8 @@ debtector --json baseline status
 debtector --json search "AuthService"
 ```
 
+`--json` and `--project` are accepted before or after the sub-command (`debtector audit --json` is equivalent to `debtector --json audit`).
+
 ---
 
 ## Available metrics

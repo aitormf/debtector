@@ -485,3 +485,50 @@ class TestMainEntry:
             main()
         out = json.loads(capsys.readouterr().out)
         assert isinstance(out, list)
+
+
+class TestGlobalOptionsPosition:
+    """--json and --project are accepted before and after the sub-command."""
+
+    @staticmethod
+    def _parse(
+        monkeypatch: pytest.MonkeyPatch, command: str, argv: list[str]
+    ) -> argparse.Namespace:
+        """Run main() with ``argv`` and return the Namespace given to the handler."""
+        captured: dict[str, argparse.Namespace] = {}
+        monkeypatch.setattr(
+            f"debtector.cli.cmd_{command}", lambda args: captured.setdefault("args", args)
+        )
+        monkeypatch.setattr("debtector.cli.configure_logging", lambda **kwargs: None)
+        monkeypatch.setattr(sys, "argv", ["debtector", *argv])
+        main()
+        return captured["args"]
+
+    @pytest.mark.parametrize(
+        ("command", "sub"), [("status", ["status"]), ("baseline", ["baseline", "status"])]
+    )
+    def test_json_positions(
+        self, monkeypatch: pytest.MonkeyPatch, command: str, sub: list[str]
+    ) -> None:
+        """--json is True before or after the sub-command and False when omitted."""
+        before = self._parse(monkeypatch, command, ["--json", *sub])
+        after = self._parse(monkeypatch, command, [*sub, "--json"])
+        absent = self._parse(monkeypatch, command, sub)
+        assert (before.json, after.json, absent.json) == (True, True, False)
+
+    @pytest.mark.parametrize(
+        ("command", "sub"), [("status", ["status"]), ("baseline", ["baseline", "status"])]
+    )
+    def test_project_positions(
+        self, monkeypatch: pytest.MonkeyPatch, command: str, sub: list[str]
+    ) -> None:
+        """--project works before or after the sub-command; default is '.'."""
+        before = self._parse(monkeypatch, command, ["--project", "/x", *sub])
+        after = self._parse(monkeypatch, command, [*sub, "--project", "/x"])
+        absent = self._parse(monkeypatch, command, sub)
+        assert (before.project, after.project, absent.project) == ("/x", "/x", ".")
+
+    def test_value_before_subcommand_not_overwritten(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A global option given first survives the sub-parser defaults."""
+        args = self._parse(monkeypatch, "baseline", ["-p", "/x", "--json", "baseline", "save"])
+        assert (args.project, args.json) == ("/x", True)
