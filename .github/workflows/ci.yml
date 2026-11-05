@@ -24,6 +24,25 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev
 
+      # tree-sitter-language-pack downloads grammars from GitHub on first use;
+      # cache them so a GitHub outage (HTTP 5xx) does not fail the whole suite.
+      - name: Cache tree-sitter grammars
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/tree-sitter-language-pack
+          key: tree-sitter-grammars-${{ hashFiles('uv.lock') }}
+
+      - name: Download tree-sitter grammars
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if uv run python -c "import tree_sitter_language_pack as t; t.download(['python', 'typescript'])"; then
+              exit 0
+            fi
+            echo "Grammar download failed (attempt ${attempt}), retrying..."
+            sleep $((attempt * 10))
+          done
+          exit 1
+
       - name: Run tests
         run: uv run pytest -v --cov=debtector --cov-report=term-missing
 
