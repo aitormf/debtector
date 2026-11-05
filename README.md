@@ -104,6 +104,7 @@ The index lives in `.debtector/index.db`. The baseline in `.debtector/baseline.j
 
 | Command | Description |
 |---------|-------------|
+| `complexity` | Functions and methods sorted by cyclomatic complexity. `--limit N`, `--min N`, `--json` |
 | `coupling` | Ca, Ce, I table per module + cycles + god modules. `--sort fan_in\|fan_out\|instability`, `--limit N`, `--json` |
 | `baseline save` | Save metrics snapshot to `.debtector/baseline.json` |
 | `baseline status` | Compare current metrics against the baseline. Exit 1 on regressions (configurable) |
@@ -114,7 +115,7 @@ The index lives in `.debtector/index.db`. The baseline in `.debtector/baseline.j
 
 | Command | Description |
 |---------|-------------|
-| `hotspots` | Technical debt ranking: churn × (fan_in + fan_out). `--limit N`, `--since DATE` |
+| `hotspots` | Technical debt ranking: churn × cyclomatic complexity (coupling shown for context). `--limit N`, `--since DATE` |
 | `temporal-coupling` | File pairs that change together without a direct import. `--min-shared N`, `--min-ratio F`, `--since DATE` |
 | `bus-factor` | Knowledge concentration risk: % of lines by dominant author. `--limit N` |
 | `git-coupling` | Aggregated view of the three above. `--json` combines all three sections |
@@ -178,19 +179,19 @@ Inheritance hierarchy depth and number of direct children per class.
 
 | Metric | Description |
 |--------|-------------|
-| **Hotspot score** | `churn × (fan_in + fan_out)`. The most changed and most coupled modules carry the highest technical debt risk |
+| **Hotspot score** | `churn × complexity`, where complexity is the sum of the cyclomatic (McCabe) complexity of the file's functions. The most changed and most complex files carry the highest technical debt risk |
 | **Temporal coupling** | File pairs that appear together in commits more frequently than a configurable threshold, even without a direct `import` between them |
 | **Bus factor** | Minimum number of authors needed to cover 80% of the lines in a file. 1 = single point of failure |
 
 Example output of `debtector hotspots`:
 
 ```
-Module                            Churn  Coupling     Score
-────────────────────────────────────────────────────────────
-src/graph_store.py                   47      15.00    705.00
-src/cli.py                           31      14.50    449.50
-src/parser/python_parser.py          28       3.00     84.00
-────────────────────────────────────────────────────────────
+Module                            Churn  Complexity   Coupling     Score
+───────────────────────────────────────────────────────────────────────
+src/cli.py                           31         290      14.50   8990.00
+src/graph_store.py                   47         138      15.00   6486.00
+src/parser/python_parser.py          28         130       3.00   3640.00
+───────────────────────────────────────────────────────────────────────
 Total: 8 hotspots
 ```
 
@@ -393,7 +394,8 @@ Logs always go to `.debtector/debtector.log`, never to stdout.
 - [x] **Bus factor** — knowledge concentration risk per file
 - [x] **`debtector git-coupling` / `report`** — aggregated behavioral and full views
 - [x] **`debtector audit`** — tech-lead view: health score, cohesion (LCOM4), testRisk, cycle priority ([schema](docs/audit-schema.md))
-- [ ] Cyclomatic/cognitive complexity per function — complexity × churn hotspots
+- [x] **Cyclomatic complexity per function** (`debtector complexity`) — churn × complexity hotspots
+- [ ] Cognitive complexity per function
 - [ ] Graph diff — metric delta between base branch and PR
 - [ ] GitHub Action — automatic comment on PRs
 - [ ] More languages — Go, Rust, Java

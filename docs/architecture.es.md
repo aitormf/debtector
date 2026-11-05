@@ -81,7 +81,7 @@ CLI / CI pipeline
     ├── Acoplamiento struct.  → metrics.py + grafo        (debtector coupling)
     ├── Acoplamiento behav.   → git_history.py + git      (debtector git-coupling)
     │     ├── churn           → git log --numstat
-    │     ├── hotspots        → churn × (fan_in + fan_out)
+    │     ├── hotspots        → churn × complejidad ciclomática
     │     ├── temporal coupl. → git log --name-only, pares co-cambiantes
     │     └── bus factor      → git blame --line-porcelain
     ├── Informe completo      → coupling + git-coupling   (debtector report)
@@ -248,7 +248,7 @@ Número de commits distintos que tocan cada archivo, calculado con `git log --nu
 
 ### Hotspot score
 
-`churn × (fan_in + fan_out)` — combina la actividad histórica con el acoplamiento estructural. Un archivo muy cambiado y muy acoplado es el punto de mayor riesgo de deuda técnica. Ordenado descendente.
+`churn × complejidad` — combina la actividad histórica con la complejidad del código (suma de la complejidad ciclomática de las funciones y métodos del archivo, calculada al indexar). Un archivo muy cambiado y complejo es el punto de mayor riesgo de deuda técnica; los archivos sin funciones puntúan 0. El acoplamiento estructural (`fan_in + fan_out`) se muestra aparte pero no entra en el score. Ordenado descendente.
 
 ### Temporal coupling
 

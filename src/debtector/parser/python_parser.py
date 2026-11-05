@@ -14,6 +14,7 @@ from tree_sitter_language_pack import get_parser
 from ..models import EdgeInfo, EdgeKind, NodeInfo, NodeKind, make_qualified_name
 from ..utils import is_test_file
 from .base import LanguageParser
+from .complexity import PYTHON_RULES, cyclomatic_complexity
 
 log = structlog.get_logger()
 
@@ -317,6 +318,11 @@ class PythonParser(LanguageParser):
                         signature=signature,
                         docstring=docstring,
                         decorators=decorators,
+                        extra={
+                            "complexity": cyclomatic_complexity(
+                                child.child_by_field_name("body"), PYTHON_RULES
+                            )
+                        },
                     )
                 )
 

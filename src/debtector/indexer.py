@@ -16,7 +16,7 @@ import structlog
 
 from .graph_store import GraphStore
 from .models import NodeKind
-from .parser import ParserRegistry
+from .parser import PARSER_VERSION, ParserRegistry
 from .parser.base import LanguageParser
 
 log = structlog.get_logger()
@@ -50,6 +50,9 @@ DEBTECTORIGNORE = ".debtectorignore"
 
 # Metadata key: test_paths prefixes in effect at the last index run.
 _TEST_PATHS_KEY = "test_prefixes"
+
+# Metadata key: PARSER_VERSION the stored nodes/edges were produced with.
+_PARSER_VERSION_KEY = "parser_version"
 
 
 class IgnoreRules:
@@ -206,6 +209,11 @@ class Indexer:
         # change in test_paths forces a reparse of everything (hash skip disabled).
         test_sig = "\n".join(self.store.test_prefixes)
         force_reparse = (self.store.get_metadata(_TEST_PATHS_KEY) or "") != test_sig
+        # Likewise when the parsers emit something new (e.g. complexity): stored files
+        # were produced by an older parser even though their hash is unchanged.
+        if self.store.get_metadata(_PARSER_VERSION_KEY) != str(PARSER_VERSION):
+            idx_log.info("parser_version_changed", version=PARSER_VERSION)
+            force_reparse = True
 
         indexed_files = set(self.store.get_all_files())
         current_files: set[str] = set()
@@ -272,6 +280,7 @@ class Indexer:
             stats["removed"] += 1
 
         self.store.set_metadata(_TEST_PATHS_KEY, test_sig)
+        self.store.set_metadata(_PARSER_VERSION_KEY, str(PARSER_VERSION))
 
         # Rebuild COVERS edges from unresolved CALLS in test files (non-fatal)
         try:

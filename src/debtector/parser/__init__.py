@@ -7,6 +7,11 @@ from .base import LanguageParser
 from .js_parser import JavaScriptParser
 from .python_parser import PythonParser
 
+#: Version of what the parsers emit. Bump it whenever parser output changes (new node
+#: ``extra`` data, new edges...) so ``index`` re-parses files even if their hash is unchanged.
+#: 1 = original output; 2 = adds ``extra["complexity"]`` to Function/Method nodes.
+PARSER_VERSION = 2
+
 
 class ParserRegistry:
     """Registry that maps source files to the appropriate language parser.
@@ -71,6 +76,7 @@ class ParserRegistry:
 
 
 __all__ = [
+    "PARSER_VERSION",
     "ParserRegistry",
     "LanguageParser",
     "PythonParser",

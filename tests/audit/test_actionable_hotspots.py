@@ -26,9 +26,9 @@ def _hotspots(scores: list[float]) -> list[HotspotMetrics]:
 
 
 def test_defaults() -> None:
-    """p90 and a minimum score of 20 (e.g. 5 commits on a module with coupling 4)."""
+    """p90 and a minimum score of 50 (e.g. 5 commits on a module with complexity 10)."""
     assert DEFAULT_HOTSPOT_PERCENTILE == 90
-    assert DEFAULT_HOTSPOT_MIN_SCORE == 20
+    assert DEFAULT_HOTSPOT_MIN_SCORE == 50
 
 
 def test_below_percentile_is_not_scored() -> None:
@@ -65,7 +65,7 @@ def test_empty_and_single_hotspot() -> None:
     """No percentile can be computed from <2 points: only the minimum applies."""
     assert select_actionable_hotspots([]) == []
     assert select_actionable_hotspots(_hotspots([5.0])) == []
-    assert len(select_actionable_hotspots(_hotspots([25.0]))) == 1
+    assert len(select_actionable_hotspots(_hotspots([75.0]))) == 1
 
 
 def test_percentile_is_configurable() -> None:

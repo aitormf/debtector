@@ -104,6 +104,7 @@ El índice vive en `.debtector/index.db`. El baseline en `.debtector/baseline.js
 
 | Comando | Descripción |
 |---------|-------------|
+| `complexity` | Funciones y métodos ordenados por complejidad ciclomática. `--limit N`, `--min N`, `--json` |
 | `coupling` | Tabla de Ca, Ce, I por módulo + ciclos + god modules. `--sort fan_in\|fan_out\|instability`, `--limit N`, `--json` |
 | `baseline save` | Guarda snapshot de métricas en `.debtector/baseline.json` |
 | `baseline status` | Compara métricas actuales con el baseline. Exit 1 si hay regresiones (configurable) |
@@ -114,7 +115,7 @@ El índice vive en `.debtector/index.db`. El baseline en `.debtector/baseline.js
 
 | Comando | Descripción |
 |---------|-------------|
-| `hotspots` | Ranking de deuda técnica: churn × (fan_in + fan_out). `--limit N`, `--since DATE` |
+| `hotspots` | Ranking de deuda técnica: churn × complejidad ciclomática (el acoplamiento se muestra como contexto). `--limit N`, `--since DATE` |
 | `temporal-coupling` | Pares de archivos que cambian juntos sin import directo. `--min-shared N`, `--min-ratio F`, `--since DATE` |
 | `bus-factor` | Riesgo de concentración de conocimiento: % de líneas por autor dominante. `--limit N` |
 | `git-coupling` | Vista agregada de los tres anteriores. `--json` combina las tres secciones |
@@ -175,19 +176,19 @@ Profundidad de jerarquía de herencia y número de hijos directos por clase.
 
 | Métrica | Descripción |
 |---------|-------------|
-| **Hotspot score** | `churn × (fan_in + fan_out)`. Los módulos más cambiados y más acoplados son el mayor riesgo de deuda técnica |
+| **Hotspot score** | `churn × complejidad`, donde la complejidad es la suma de la complejidad ciclomática (McCabe) de las funciones del archivo. Los archivos más cambiados y más complejos son el mayor riesgo de deuda técnica |
 | **Temporal coupling** | Pares de archivos que aparecen juntos en commits con frecuencia > umbral configurable, aunque no tengan `import` directo entre ellos |
 | **Bus factor** | Mínimo de autores necesarios para cubrir el 80% de las líneas de un archivo. 1 = punto único de fallo |
 
 Ejemplo de salida de `debtector hotspots`:
 
 ```
-Módulo                            Churn  Coupling     Score
-────────────────────────────────────────────────────────────
-src/graph_store.py                   47      15.00    705.00
-src/cli.py                           31      14.50    449.50
-src/parser/python_parser.py          28       3.00     84.00
-────────────────────────────────────────────────────────────
+Módulo                            Churn  Complexity   Coupling     Score
+───────────────────────────────────────────────────────────────────────
+src/cli.py                           31         290      14.50   8990.00
+src/graph_store.py                   47         138      15.00   6486.00
+src/parser/python_parser.py          28         130       3.00   3640.00
+───────────────────────────────────────────────────────────────────────
 Total: 8 hotspots
 ```
 
@@ -347,7 +348,8 @@ Los logs siempre van a `.debtector/debtector.log`, nunca a stdout.
 - [x] **Bus factor** — riesgo de concentración de conocimiento por archivo
 - [x] **`debtector git-coupling` / `report`** — vistas agregadas behavioral y completa
 - [x] **`debtector audit`** — vista para tech lead: health score, cohesión (LCOM4), testRisk, prioridad de ciclos ([schema](docs/audit-schema.md))
-- [ ] Complejidad ciclomática/cognitiva por función — hotspots complejidad × churn
+- [x] **Complejidad ciclomática por función** (`debtector complexity`) — hotspots churn × complejidad
+- [ ] Complejidad cognitiva por función
 - [ ] Graph diff — delta de métricas entre rama base y PR
 - [ ] GitHub Action — comentario automático en PRs
 - [ ] Más lenguajes — Go, Rust, Java

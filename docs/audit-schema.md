@@ -41,7 +41,7 @@ Object. Aggregate counts and the health score for the whole index.
 | `cycles`       | int  | Number of strongly-connected components of size > 1.    |
 | `classes`      | int  | Number of indexed `Class` nodes.                        |
 | `health_score` | int  | Aggregate score in `[0, 100]` (see Health score below). |
-| `health_score_version` | int | Meaning of `health_score`; currently `2`. Absent in version 1. |
+| `health_score_version` | int | Meaning of `health_score`; currently `3`. Absent in version 1. |
 
 ## `coupling`
 
@@ -105,13 +105,17 @@ a `../`-prefixed path and are excluded from `coupling` and `summary` metrics.
 
 ## `hotspots`
 
-Array of churn × coupling hotspots with score > 0.
+Array of churn × complexity hotspots with score > 0. `score = churn × complexity`, where
+`complexity` is the file's cyclomatic complexity: the sum of the McCabe complexities of its
+functions and methods (see `debtector complexity`). Files without functions have complexity
+`0`, score `0`, and are not listed.
 
 | field       | type   | meaning                                          |
 |-------------|--------|--------------------------------------------------|
 | `file_path` | string | Relative file path.                              |
 | `churn`     | int    | Recent commit count.                             |
-| `score`     | number | Composite hotspot score.                         |
+| `complexity`| int    | Sum of cyclomatic complexity of the file's functions and methods. Additive field, added with health score version 3. |
+| `score`     | number | Hotspot score: `churn × complexity`.             |
 
 ## `busFactor`
 
@@ -136,7 +140,7 @@ Array of class-level inheritance metrics.
 ## Health score
 
 Severity buckets and 0-100 score. A project with no scored findings scores `100`.
-This is **health score version 2** (`summary.health_score_version`).
+This is **health score version 3** (`summary.health_score_version`).
 
 | severity   | source signals (scored)                                                   | penalty |
 |------------|---------------------------------------------------------------------------|---------|
@@ -159,8 +163,8 @@ With `modules == 0` the score is `100`.
 
 **Actionable hotspots.** The `hotspots` section keeps listing the top-N as before, but only
 hotspots with `score` at or above **both** the project's `hotspot_percentile` (default 90) of
-the hotspot scores **and** `hotspot_min_score` (default 20, i.e. commits × (Ca + Ce), for
-example 5 commits on a module with coupling 4) count towards the score.
+the hotspot scores **and** `hotspot_min_score` (default 50, i.e. commits × file complexity, for
+example 5 commits on a file with complexity 10) count towards the score.
 
 **Single author.** If the whole repository's commit history (not just the indexed directory) has exactly one author, bus factor 1 is
 meaningless. Shallow clones (e.g. `fetch-depth: 1` in CI) never get this exemption, since
@@ -178,20 +182,23 @@ testrisk_high_ce    = 10   # untested_high_coupling: Ce >=
 testrisk_high_churn = 5    # untested_hotspots: commits >=
 testrisk_high_ca    = 10   # critical_knowledge_concentration: Ca >=
 hotspot_percentile  = 90   # in [1, 99]
-hotspot_min_score   = 20
+hotspot_min_score   = 50
 ```
 
-**Versioning.** Version 2 changes what `health_score` means (scores are not comparable with
-version 1). Rather than bump `schema_version` (the shape of the payload is unchanged), the
-additive field `summary.health_score_version` (`2`) lets consumers detect it; its absence
-means version 1.
+**Versioning.** Each version changes what `health_score` means, so scores are not comparable
+across versions. Version 2 normalised by project size and scored only actionable hotspots.
+Version 3 ranks hotspots by churn × cyclomatic complexity instead of churn × coupling (the
+`hotspot_min_score` default moved from 20 to 50 to match the new scale; coupling is no longer
+part of the hotspot score). Rather than bump `schema_version` (the shape of the payload is
+unchanged), the additive field `summary.health_score_version` (`3`) lets consumers detect
+it; its absence means version 1.
 
 ## Example payload
 
 ```json
 {
   "schema_version": 1,
-  "summary": {"modules": 12, "cycles": 0, "classes": 4, "health_score": 92, "health_score_version": 2},
+  "summary": {"modules": 12, "cycles": 0, "classes": 4, "health_score": 92, "health_score_version": 3},
   "coupling": [
     {"file_path": "src/app.py", "fan_in": 5, "fan_out": 3, "instability": 0.375, "god_module": false}
   ],

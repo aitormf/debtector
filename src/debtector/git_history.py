@@ -56,18 +56,20 @@ class ChurnMetrics:
 
 @dataclass
 class HotspotMetrics:
-    """Intersection of churn and structural coupling.
+    """Intersection of churn and code complexity (Tornhill's hotspots).
 
-    A hotspot is a file with high change activity *and* high coupling
-    with other modules. It is the most reliable signal of actionable
-    technical debt.
+    A hotspot is a file with high change activity *and* complex code. It is the
+    most reliable signal of actionable technical debt. Structural coupling is kept
+    as an informative field but does not take part in the score.
 
     Attributes:
         file_path: Relative path of the file.
         churn: Number of commits that touch the file.
-        coupling: fan_in + fan_out of the module in the structural graph.
-        hotspot_score: churn × coupling — technical debt ranking.
+        coupling: fan_in + fan_out of the module in the structural graph (informative).
+        hotspot_score: churn × complexity — technical debt ranking.
         severity: Severity level for health score aggregation.
+        complexity: Sum of the cyclomatic complexities of the file's functions
+            and methods (0 if it has none).
     """
 
     file_path: str
@@ -75,6 +77,7 @@ class HotspotMetrics:
     coupling: float
     hotspot_score: float
     severity: str = "medium"
+    complexity: int = 0
 
 
 @dataclass
@@ -281,16 +284,38 @@ def parse_churn(
     return sorted(results, key=lambda m: m.commits, reverse=True)
 
 
+def _file_complexities(store: GraphStore) -> dict[str, int]:  # type: ignore[name-defined]  # noqa: F821
+    """Sum the cyclomatic complexity of the functions and methods of each file.
+
+    Args:
+        store: :class:`~debtector.graph_store.GraphStore` holding the index.
+
+    Returns:
+        Mapping of file path to total complexity. Nodes indexed before complexity
+        existed (no value) count as 0.
+    """
+    from .models import NodeKind
+
+    totals: dict[str, int] = defaultdict(int)
+    for kind in (NodeKind.FUNCTION, NodeKind.METHOD):
+        for node in store.get_nodes_by_kind(kind):
+            totals[node.file_path] += int(node.extra.get("complexity", 0))
+    return dict(totals)
+
+
 def compute_hotspots(
     store: GraphStore,  # type: ignore[name-defined]  # noqa: F821
     project_root: str | Path,
     since: str | None = None,
     limit: int | None = None,
 ) -> list[HotspotMetrics]:
-    """Combine churn with structural coupling to identify hotspots.
+    """Combine churn with code complexity to identify hotspots.
 
-    The hotspot score is ``churn × (fan_in + fan_out)``. Only files that
-    have git history *and* are indexed in the graph are included.
+    The hotspot score is ``churn × complexity`` where complexity is the sum of
+    the cyclomatic complexities of the file's functions and methods. Files with
+    no functions (constants, ``__init__``, data) have complexity 0 and score 0:
+    they stay in the list, ranked last, so churn and coupling remain visible.
+    Only files that have git history *and* are indexed in the graph are included.
 
     Args:
         store: :class:`~debtector.graph_store.GraphStore` holding the index.
@@ -313,19 +338,21 @@ def compute_hotspots(
     # Iterate over currently-indexed files so renamed/deleted files from git
     # history don't pollute results with coupling=0.
     coupling_map = {m.file_path: m.fan_in + m.fan_out for m in module_metrics}
+    complexity_map = _file_complexities(store)
 
     hotspots: list[HotspotMetrics] = []
     for file_path, coupling in coupling_map.items():
         churn_data = churn_map.get(file_path)
         if churn_data is None:
             continue
-        score = churn_data.commits * coupling
+        complexity = complexity_map.get(file_path, 0)
         hotspots.append(
             HotspotMetrics(
                 file_path=file_path,
                 churn=churn_data.commits,
                 coupling=coupling,
-                hotspot_score=score,
+                hotspot_score=churn_data.commits * complexity,
+                complexity=complexity,
             )
         )
 
