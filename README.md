@@ -298,6 +298,10 @@ hotspot_percentile  = 90   # percentile [1, 99] of the project's hotspot scores
 hotspot_min_score   = 20   # absolute minimum: commits x (Ca + Ce)
 ```
 
+Authors are counted from the whole repository history by name (honouring `.mailmap`); bot
+accounts (names ending in `[bot]`) are ignored. If one person commits under several name
+variants, add a `.mailmap` so they count once; otherwise the repository looks multi-author.
+
 See [`docs/audit-schema.md`](docs/audit-schema.md#health-score) for the full formula.
 
 ---

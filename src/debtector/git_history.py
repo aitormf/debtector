@@ -423,7 +423,8 @@ def list_authors(project_root: str | Path) -> set[str]:
     """Devuelve los autores distintos del historial de todo el repositorio.
 
     Usa ``git log`` (no ``git blame``): no cuenta líneas sin commitear ni
-    depende de qué líneas sobreviven. Respeta ``.mailmap``. Cuenta todo el
+    depende de qué líneas sobreviven. Respeta ``.mailmap``. Ignora cuentas bot (nombres acabados
+    en ``[bot]``, p.ej. ``github-actions[bot]``). Cuenta todo el
     repositorio, no solo el subdirectorio indexado: quien contribuye fuera
     de él sigue siendo un autor más del equipo.
 
@@ -439,7 +440,8 @@ def list_authors(project_root: str | Path) -> set[str]:
     """
     top = _run_git(["git", "rev-parse", "--show-toplevel"], project_root).strip()
     output = _run_git(["git", "log", "--format=%aN"], top)
-    return {line.strip() for line in output.splitlines() if line.strip()}
+    names = {line.strip() for line in output.splitlines() if line.strip()}
+    return {n for n in names if not n.endswith("[bot]")}
 
 
 def compute_bus_factor(

@@ -164,7 +164,10 @@ example 5 commits on a module with coupling 4) count towards the score.
 
 **Single author.** If the whole repository's commit history (not just the indexed directory) has exactly one author, bus factor 1 is
 meaningless. Shallow clones (e.g. `fetch-depth: 1` in CI) never get this exemption, since
-their history is truncated and authorship is unknown. In the exempt case, `critical_knowledge_concentration` entries are still listed in `testRisk` (and
+their history is truncated and authorship is unknown. Bot accounts (names ending in `[bot]`,
+e.g. `github-actions[bot]`) are ignored when counting authors. Authors are counted by name as
+`git log` reports it (honouring `.mailmap`): a person with several name variants should add a
+`.mailmap` so they count once. In the exempt case, `critical_knowledge_concentration` entries are still listed in `testRisk` (and
 `busFactor` is unchanged) but do not count towards the score.
 
 **Configuration** (`debtector.toml`, all optional):
