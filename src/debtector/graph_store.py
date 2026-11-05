@@ -415,6 +415,21 @@ class GraphStore:
         ).fetchone()
         return self._row_to_node(row) if row else None
 
+    def get_nodes_by_kind(self, kind: str) -> list[GraphNode]:
+        """Return every node of a given kind across all files.
+
+        Args:
+            kind: Node kind (a :class:`NodeKind` value, e.g. ``NodeKind.CLASS``).
+
+        Returns:
+            List of :class:`GraphNode` objects ordered by file path and line number.
+        """
+        rows = self._conn.execute(
+            "SELECT * FROM nodes WHERE kind = ? ORDER BY file_path, line_start",
+            (kind,),
+        ).fetchall()
+        return [self._row_to_node(r) for r in rows]
+
     def get_nodes_by_file(self, file_path: str) -> list[GraphNode]:
         """Return all nodes that belong to a given file, ordered by line number.
 

@@ -451,21 +451,24 @@ def cmd_audit(args) -> None:
     )
 
     # Compute LCOM4 for each class
-    classes = store.search_nodes("", kind=NodeKind.CLASS)
-    cohesion = [
-        CohesionFinding(
-            qualified_name=c.qualified_name,
-            lcom4=compute_lcom4(store, c.qualified_name),
-            methods_count=len(
-                [e for e in store.get_outgoing(c.qualified_name) if e.kind == "HAS_METHOD"]
-            ),
-            candidate_to_split=compute_lcom4(store, c.qualified_name) > 1,
+    cohesion = []
+    for c in store.get_nodes_by_kind(NodeKind.CLASS):
+        lcom4 = compute_lcom4(store, c.qualified_name)
+        cohesion.append(
+            CohesionFinding(
+                qualified_name=c.qualified_name,
+                lcom4=lcom4,
+                methods_count=len(
+                    [e for e in store.get_outgoing(c.qualified_name) if e.kind == "HAS_METHOD"]
+                ),
+                candidate_to_split=lcom4 > 1,
+            )
         )
-        for c in classes
-    ]
+    # Only split candidates count towards the score; cohesive classes stay in the output
+    split_candidates = [f for f in cohesion if f.candidate_to_split]
 
     # Health score and stats before closing store
-    health = compute_health_score(tr_findings + cohesion + hotspots)
+    health = compute_health_score(tr_findings + split_candidates + hotspots)
     stats = store.get_stats()
 
     # Prioritize cycles and detect god modules before closing store
