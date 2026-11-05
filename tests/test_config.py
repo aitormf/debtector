@@ -25,7 +25,8 @@ class TestDefaults:
     def test_default_thresholds(self, tmp_path: Path) -> None:
         cfg = load_config(tmp_path)
         assert cfg.metrics.thresholds.god_module_percentile == 90
-        assert cfg.metrics.thresholds.instability_threshold == 0.8
+        assert cfg.metrics.thresholds.god_module_min_ca == 10
+        assert cfg.metrics.thresholds.sdp_margin == 0.1
         assert cfg.metrics.thresholds.max_inheritance_depth == 5
         assert cfg.metrics.thresholds.max_children == 10
 
@@ -50,10 +51,33 @@ class TestTomlLoading:
 
     def test_partial_override_keeps_defaults(self, tmp_path: Path) -> None:
         """Unspecified keys keep their default values."""
-        self._write_toml(tmp_path, "[metrics.thresholds]\ninstability_threshold = 0.5\n")
+        self._write_toml(tmp_path, "[metrics.thresholds]\ngod_module_min_ca = 4\n")
         cfg = load_config(tmp_path)
-        assert cfg.metrics.thresholds.instability_threshold == 0.5
+        assert cfg.metrics.thresholds.god_module_min_ca == 4
         assert cfg.metrics.thresholds.god_module_percentile == 90  # default
+
+    def test_sdp_margin_override(self, tmp_path: Path) -> None:
+        self._write_toml(tmp_path, "[metrics.thresholds]\nsdp_margin = 0.3\n")
+        assert load_config(tmp_path).metrics.thresholds.sdp_margin == 0.3
+
+    @pytest.mark.parametrize(
+        "line", ["god_module_min_ca = -1", 'god_module_min_ca = "x"', "sdp_margin = -0.1"]
+    )
+    def test_invalid_new_thresholds_raise(self, tmp_path: Path, line: str) -> None:
+        self._write_toml(tmp_path, f"[metrics.thresholds]\n{line}\n")
+        with pytest.raises(ValueError, match="debtector.toml"):
+            load_config(tmp_path)
+
+    def test_deprecated_instability_threshold_still_loads(self, tmp_path: Path) -> None:
+        """Old configs keep working: the key is ignored and a warning is logged."""
+        from structlog.testing import capture_logs
+
+        self._write_toml(tmp_path, "[metrics.thresholds]\ninstability_threshold = 0.5\n")
+        with capture_logs() as logs:
+            cfg = load_config(tmp_path)
+        assert cfg.metrics.thresholds.god_module_percentile == 90
+        assert not hasattr(cfg.metrics.thresholds, "instability_threshold")
+        assert any(e["log_level"] == "warning" and "instability_threshold" in str(e) for e in logs)
 
     def test_severity_override(self, tmp_path: Path) -> None:
         self._write_toml(tmp_path, '[metrics.severity]\ncycles = "warning"\n')
