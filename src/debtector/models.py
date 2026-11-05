@@ -1,15 +1,15 @@
 """
-Modelos de datos para Debtector.
+Data models for Debtector.
 
-Diseño inspirado en graph stores reales: cada símbolo es un NODO con un
-qualified_name único, y las relaciones (imports, herencia, llamadas) son
-ARISTAS dirigidas entre nodos.
+Design inspired by real graph stores: every symbol is a NODE with a unique
+qualified_name, and relations (imports, inheritance, calls) are directed
+EDGES between nodes.
 
-El qualified_name es la "dirección completa" de cada símbolo:
-    archivo.py                          → El archivo en sí
-    archivo.py::MiClase                 → Una clase
-    archivo.py::MiClase.mi_metodo       → Un método
-    archivo.py::mi_funcion              → Una función top-level
+The qualified_name is the "full address" of each symbol:
+    file.py                             → The file itself
+    file.py::MyClass                    → A class
+    file.py::MyClass.my_method          → A method
+    file.py::my_function                → A top-level function
 """
 
 from __future__ import annotations
@@ -18,12 +18,12 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 # ──────────────────────────────────────────────
-# Tipos de nodos y aristas
+# Node and edge kinds
 # ──────────────────────────────────────────────
 
 
 class NodeKind(StrEnum):
-    """Tipos de nodos en el grafo de código."""
+    """Node kinds in the code graph."""
 
     FILE = "File"
     CLASS = "Class"
@@ -32,44 +32,44 @@ class NodeKind(StrEnum):
 
 
 class EdgeKind(StrEnum):
-    """Tipos de relaciones entre nodos."""
+    """Kinds of relations between nodes."""
 
-    CONTAINS = "CONTAINS"  # archivo contiene clase/función
-    HAS_METHOD = "HAS_METHOD"  # clase contiene método
-    IMPORTS_FROM = "IMPORTS_FROM"  # archivo importa de módulo
-    CALLS = "CALLS"  # función/método llama a otra
-    INHERITS = "INHERITS"  # clase hereda de otra
-    DEPENDS_ON = "DEPENDS_ON"  # dependencia genérica
-    COVERS = "COVERS"  # función/método de test ejerce a símbolo de producción
-    USES_TYPE = "USES_TYPE"  # función/método referencia un tipo en su firma
+    CONTAINS = "CONTAINS"  # file contains class/function
+    HAS_METHOD = "HAS_METHOD"  # class contains method
+    IMPORTS_FROM = "IMPORTS_FROM"  # file imports from module
+    CALLS = "CALLS"  # function/method calls another
+    INHERITS = "INHERITS"  # class inherits from another
+    DEPENDS_ON = "DEPENDS_ON"  # generic dependency
+    COVERS = "COVERS"  # test function/method exercises a production symbol
+    USES_TYPE = "USES_TYPE"  # function/method references a type in its signature
 
 
 # ──────────────────────────────────────────────
-# Nodos
+# Nodes
 # ──────────────────────────────────────────────
 
 
 @dataclass
 class NodeInfo:
     """
-    Información de un nodo para insertar en el grafo.
+    Node information to insert into the graph.
 
-    Es lo que un parser produce. El GraphStore lo convierte en un
-    registro persistente con ID y timestamps.
+    This is what a parser produces. The GraphStore turns it into a
+    persistent record with an ID and timestamps.
 
     Args:
-        kind: Tipo de nodo (File, Class, Function, Method)
-        name: Nombre corto ("get_user", "UserService")
-        qualified_name: Nombre completo único ("src/app.py::UserService.get_user")
-        file_path: Ruta del archivo donde vive
-        line_start: Línea de inicio
-        line_end: Línea de fin
-        language: Lenguaje de programación
-        parent_name: Nombre de la clase padre (para métodos)
-        signature: Firma completa ("def get_user(self, id: int) -> User")
-        docstring: Documentación del símbolo
-        decorators: Lista de decoradores
-        extra: Datos adicionales en formato libre
+        kind: Node kind (File, Class, Function, Method)
+        name: Short name ("get_user", "UserService")
+        qualified_name: Unique full name ("src/app.py::UserService.get_user")
+        file_path: Path of the file where it lives
+        line_start: Start line
+        line_end: End line
+        language: Programming language
+        parent_name: Name of the parent class (for methods)
+        signature: Full signature ("def get_user(self, id: int) -> User")
+        docstring: Documentation of the symbol
+        decorators: List of decorators
+        extra: Additional free-form data
     """
 
     kind: str
@@ -89,17 +89,17 @@ class NodeInfo:
 @dataclass
 class EdgeInfo:
     """
-    Información de una arista para insertar en el grafo.
+    Edge information to insert into the graph.
 
-    Conecta dos nodos por sus qualified_names.
+    Connects two nodes by their qualified_names.
 
     Args:
-        kind: Tipo de relación (CONTAINS, IMPORTS_FROM, CALLS, etc.)
-        source: qualified_name del nodo origen
-        target: qualified_name del nodo destino
-        file_path: Archivo donde se establece la relación
-        line: Línea donde ocurre (ej: línea del import o la llamada)
-        extra: Datos adicionales
+        kind: Relation kind (CONTAINS, IMPORTS_FROM, CALLS, etc.)
+        source: qualified_name of the source node
+        target: qualified_name of the target node
+        file_path: File where the relation is established
+        line: Line where it occurs (e.g. the line of the import or call)
+        extra: Additional data
     """
 
     kind: str
@@ -111,13 +111,13 @@ class EdgeInfo:
 
 
 # ──────────────────────────────────────────────
-# Resultados de consultas (lo que devuelve el GraphStore)
+# Query results (what the GraphStore returns)
 # ──────────────────────────────────────────────
 
 
 @dataclass
 class GraphNode:
-    """Nodo almacenado en el grafo (con ID y metadatos del store)."""
+    """Node stored in the graph (with ID and store metadata)."""
 
     id: int
     kind: str
@@ -136,7 +136,7 @@ class GraphNode:
 
 @dataclass
 class GraphEdge:
-    """Arista almacenada en el grafo."""
+    """Edge stored in the graph."""
 
     id: int
     kind: str
@@ -149,7 +149,7 @@ class GraphEdge:
 
 @dataclass
 class GraphStats:
-    """Estadísticas agregadas del grafo."""
+    """Aggregated graph statistics."""
 
     total_nodes: int
     total_edges: int
@@ -171,9 +171,9 @@ def make_qualified_name(
     parent_name: str | None = None,
 ) -> str:
     """
-    Construye el qualified_name de un símbolo.
+    Build the qualified_name of a symbol.
 
-    Ejemplos:
+    Examples:
         make_qualified_name("src/app.py", "app.py", "File")
             → "src/app.py"
         make_qualified_name("src/app.py", "UserService", "Class")
@@ -191,7 +191,7 @@ def make_qualified_name(
 
 
 def node_to_dict(n: GraphNode) -> dict:
-    """Convierte un GraphNode a diccionario (para serialización/API)."""
+    """Convert a GraphNode to a dictionary (for serialization/API)."""
     return {
         "id": n.id,
         "kind": n.kind,
@@ -207,7 +207,7 @@ def node_to_dict(n: GraphNode) -> dict:
 
 
 def edge_to_dict(e: GraphEdge) -> dict:
-    """Convierte un GraphEdge a diccionario."""
+    """Convert a GraphEdge to a dictionary."""
     return {
         "id": e.id,
         "kind": e.kind,

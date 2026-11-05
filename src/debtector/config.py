@@ -1,23 +1,23 @@
 """
-Configuración de Debtector desde ``debtector.toml``.
+Debtector configuration loaded from ``debtector.toml``.
 
-El archivo de configuración es opcional. Si no existe, se aplican los valores
-por defecto. Los campos no especificados también usan sus valores por defecto.
+The configuration file is optional. If it does not exist, the default values
+are used. Fields that are not specified also use their default values.
 
-Ejemplo de ``debtector.toml``:
+Example of ``debtector.toml``:
 
 .. code-block:: toml
 
-    # Rutas de tests relativas a la raíz del proyecto (opcional). Se suman a
-    # las convenciones por nombre y, si caen fuera del directorio indexado,
-    # también se indexan para construir las aristas COVERS.
+    # Test paths relative to the project root (optional). They are added to
+    # the name-based conventions and, if they fall outside the indexed
+    # directory, they are also indexed to build the COVERS edges.
     test_paths = ["tests"]
 
     [metrics.thresholds]
     god_module_percentile = 90
-    god_module_min_ca     = 10    # Ca mínimo absoluto para ser god module (además del percentil)
-    sdp_margin            = 0.1   # I(B) - I(A) mínimo para marcar A -> B como violación SDP
-    # instability_threshold está obsoleto: se ignora (se registra un aviso).
+    god_module_min_ca     = 10    # Minimum absolute Ca for a god module (besides the percentile)
+    sdp_margin            = 0.1   # Minimum I(B) - I(A) to flag A -> B as an SDP violation
+    # instability_threshold is deprecated: it is ignored (a warning is logged).
     max_inheritance_depth = 5
     max_children          = 10
 
@@ -27,13 +27,13 @@ Ejemplo de ``debtector.toml``:
     instability = "warning"
     inheritance = "info"
 
-    # Calibración de ``debtector audit`` (todo opcional; valores por defecto).
+    # Calibration of ``debtector audit`` (all optional; default values).
     [audit.thresholds]
-    testrisk_high_ce    = 10   # Ce a partir del cual un módulo sin tests es "alto acoplamiento"
-    testrisk_high_churn = 5    # commits a partir de los cuales un módulo sin tests es hotspot
-    testrisk_high_ca    = 10   # Ca a partir del cual bus factor 1 es "conocimiento crítico"
-    hotspot_percentile  = 90   # percentil de hotspot_score que debe alcanzar un hotspot
-    hotspot_min_score   = 20   # hotspot_score mínimo absoluto (commits x (Ca + Ce))
+    testrisk_high_ce    = 10   # Ce from which a module without tests is "high coupling"
+    testrisk_high_churn = 5    # commits from which a module without tests is a hotspot
+    testrisk_high_ca    = 10   # Ca from which bus factor 1 is "critical knowledge"
+    hotspot_percentile  = 90   # hotspot_score percentile a hotspot must reach
+    hotspot_min_score   = 20   # minimum absolute hotspot_score (commits x (Ca + Ce))
 """
 
 from __future__ import annotations
@@ -52,11 +52,11 @@ log = structlog.get_logger()
 
 
 class Severity(StrEnum):
-    """Nivel de severidad de una violación de métrica.
+    """Severity level of a metric violation.
 
-    - ``ERROR``   — termina con exit code 1; bloquea el CI.
-    - ``WARNING`` — reporta la violación pero exit code 0; no bloquea.
-    - ``INFO``    — solo informa, sin énfasis visual. Exit code 0.
+    - ``ERROR``   — exits with code 1; blocks CI.
+    - ``WARNING`` — reports the violation but exits with code 0; does not block.
+    - ``INFO``    — informational only, no visual emphasis. Exit code 0.
     """
 
     ERROR = "error"
@@ -66,22 +66,22 @@ class Severity(StrEnum):
 
 @dataclass
 class MetricsThresholds:
-    """Umbrales numéricos para las métricas de acoplamiento.
+    """Numeric thresholds for the coupling metrics.
 
     Args:
-        god_module_percentile: Percentil de Ca por encima del cual un módulo
-            se considera «god module». Default: 90.
-        god_module_min_ca: Ca mínimo absoluto (inclusivo) que además debe
-            alcanzar un módulo para ser «god module». Evita que el percentil
-            marque siempre algo en proyectos pequeños. Default: 10 (el mismo
-            valor que ``audit.thresholds.testrisk_high_ca``).
-        sdp_margin: Diferencia mínima de I (estricta) para que una dependencia
-            ``A → B`` con ``I(B) > I(A)`` cuente como violación del Stable
-            Dependencies Principle. Default: 0.1.
-        max_inheritance_depth: Profundidad máxima de la jerarquía de herencia
-            antes de generar un aviso. Default: 5.
-        max_children: Número máximo de hijos directos en la jerarquía de
-            herencia antes de generar un aviso. Default: 10.
+        god_module_percentile: Ca percentile above which a module
+            is considered a "god module". Default: 90.
+        god_module_min_ca: Minimum absolute Ca (inclusive) that a module must
+            also reach to be a "god module". Prevents the percentile from
+            always flagging something in small projects. Default: 10 (the same
+            value as ``audit.thresholds.testrisk_high_ca``).
+        sdp_margin: Minimum (strict) difference in I for a dependency
+            ``A → B`` with ``I(B) > I(A)`` to count as a Stable
+            Dependencies Principle violation. Default: 0.1.
+        max_inheritance_depth: Maximum depth of the inheritance hierarchy
+            before a warning is raised. Default: 5.
+        max_children: Maximum number of direct children in the inheritance
+            hierarchy before a warning is raised. Default: 10.
     """
 
     god_module_percentile: float = 90
@@ -93,13 +93,13 @@ class MetricsThresholds:
 
 @dataclass
 class MetricsSeverity:
-    """Severidad asociada a cada tipo de violación de métrica.
+    """Severity associated with each type of metric violation.
 
     Args:
-        cycles: Ciclos de importación detectados.
-        god_modules: Módulos con fan-in outlier.
-        instability: Regresiones de inestabilidad y nuevas violaciones SDP.
-        inheritance: Jerarquías de herencia profundas o anchas.
+        cycles: Detected import cycles.
+        god_modules: Modules with outlier fan-in.
+        instability: Instability regressions and new SDP violations.
+        inheritance: Deep or wide inheritance hierarchies.
     """
 
     cycles: Severity = Severity.ERROR
@@ -110,7 +110,7 @@ class MetricsSeverity:
 
 @dataclass
 class MetricsConfig:
-    """Configuración completa del subsistema de métricas."""
+    """Full configuration of the metrics subsystem."""
 
     thresholds: MetricsThresholds = field(default_factory=MetricsThresholds)
     severity: MetricsSeverity = field(default_factory=MetricsSeverity)
@@ -118,20 +118,20 @@ class MetricsConfig:
 
 @dataclass
 class AuditThresholds:
-    """Umbrales de calibración de ``debtector audit`` (``[audit.thresholds]``).
+    """Calibration thresholds for ``debtector audit`` (``[audit.thresholds]``).
 
     Args:
-        testrisk_high_ce: Ce a partir del cual un módulo sin tests se marca
-            como «alto acoplamiento». Default: 10.
-        testrisk_high_churn: Commits a partir de los cuales un módulo sin
-            tests se marca como hotspot. Default: 5.
-        testrisk_high_ca: Ca a partir del cual un módulo con bus factor 1 es
-            «conocimiento crítico». Default: 10.
-        hotspot_percentile: Percentil (1-99) del ``hotspot_score`` del proyecto
-            que debe alcanzar un hotspot para puntuar en el health score.
+        testrisk_high_ce: Ce from which a module without tests is flagged
+            as "high coupling". Default: 10.
+        testrisk_high_churn: Commits from which a module without
+            tests is flagged as a hotspot. Default: 5.
+        testrisk_high_ca: Ca from which a module with bus factor 1 is
+            "critical knowledge". Default: 10.
+        hotspot_percentile: Percentile (1-99) of the project's ``hotspot_score``
+            that a hotspot must reach to count toward the health score.
             Default: 90.
-        hotspot_min_score: ``hotspot_score`` mínimo absoluto (commits x
-            (Ca + Ce)) para puntuar en el health score. Default: 20.
+        hotspot_min_score: Minimum absolute ``hotspot_score`` (commits x
+            (Ca + Ce)) to count toward the health score. Default: 20.
     """
 
     testrisk_high_ce: float = DEFAULT_HIGH_CE
@@ -143,17 +143,17 @@ class AuditThresholds:
 
 @dataclass
 class DebtectorConfig:
-    """Configuración raíz de Debtector.
+    """Root Debtector configuration.
 
     Args:
-        metrics: Configuración del subsistema de métricas.
-        test_paths: Rutas (relativas a la raíz del proyecto, donde vive
-            ``debtector.toml``) cuyos archivos son tests, además de las
-            convenciones por nombre/directorio (``test_*``, ``tests/``...).
-            Si apuntan fuera del directorio indexado, el indexador también
-            las parsea para construir las aristas COVERS. Por defecto vacío:
-            solo se usan las convenciones. Ejemplo: ``test_paths = ["tests"]``.
-        audit: Umbrales de calibración de ``debtector audit``.
+        metrics: Metrics subsystem configuration.
+        test_paths: Paths (relative to the project root, where
+            ``debtector.toml`` lives) whose files are tests, in addition to the
+            name/directory conventions (``test_*``, ``tests/``...).
+            If they point outside the indexed directory, the indexer also
+            parses them to build the COVERS edges. Empty by default:
+            only the conventions are used. Example: ``test_paths = ["tests"]``.
+        audit: Calibration thresholds for ``debtector audit``.
     """
 
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
@@ -162,21 +162,21 @@ class DebtectorConfig:
 
 
 def load_config(project_root: str | Path) -> DebtectorConfig:
-    """Carga la configuración desde ``debtector.toml`` en el directorio raíz.
+    """Load the configuration from ``debtector.toml`` in the root directory.
 
-    Si el archivo no existe, devuelve la configuración por defecto.
-    Los campos no especificados en el toml mantienen sus valores por defecto.
+    If the file does not exist, return the default configuration.
+    Fields not specified in the toml keep their default values.
 
     Args:
-        project_root: Directorio raíz del proyecto donde buscar
+        project_root: Project root directory in which to look for
             ``debtector.toml``.
 
     Returns:
-        :class:`DebtectorConfig` con los valores del toml fusionados con
-        los valores por defecto.
+        :class:`DebtectorConfig` with the toml values merged with
+        the defaults.
 
     Raises:
-        ValueError: Si algún valor de severidad no es válido.
+        ValueError: If a severity value is not valid.
     """
     path = Path(project_root) / "debtector.toml"
 
@@ -188,8 +188,8 @@ def load_config(project_root: str | Path) -> DebtectorConfig:
 
     metrics_data = data.get("metrics", {})
 
-    # Thresholds — usamos una instancia default como fuente de verdad para
-    # evitar acceder a atributos de clase de dataclass (frágil si se usara field())
+    # Thresholds — use a default instance as the source of truth to
+    # avoid accessing dataclass class attributes (fragile if field() were used)
     _thr_defaults = MetricsThresholds()
     thr_data = metrics_data.get("thresholds", {})
     if "instability_threshold" in thr_data:
@@ -210,7 +210,7 @@ def load_config(project_root: str | Path) -> DebtectorConfig:
         max_children=thr_data.get("max_children", _thr_defaults.max_children),
     )
 
-    # Severity — validamos explícitamente para dar error claro al usuario
+    # Severity — validate explicitly to give the user a clear error
     sev_data = metrics_data.get("severity", {})
     try:
         severity = MetricsSeverity(
@@ -222,13 +222,12 @@ def load_config(project_root: str | Path) -> DebtectorConfig:
     except ValueError as exc:
         valid = [s.value for s in Severity]
         raise ValueError(
-            f"Valor de severidad inválido en debtector.toml. "
-            f"Valores permitidos: {valid}. Detalle: {exc}"
+            f"Invalid severity value in debtector.toml. Allowed values: {valid}. Detail: {exc}"
         ) from exc
 
     test_paths = data.get("test_paths", [])
     if not isinstance(test_paths, list) or not all(isinstance(p, str) for p in test_paths):
-        raise ValueError("`test_paths` en debtector.toml debe ser una lista de strings.")
+        raise ValueError("`test_paths` in debtector.toml must be a list of strings.")
 
     return DebtectorConfig(
         metrics=MetricsConfig(thresholds=thresholds, severity=severity),
@@ -238,40 +237,39 @@ def load_config(project_root: str | Path) -> DebtectorConfig:
 
 
 def _non_negative(data: dict, key: str, defaults: MetricsThresholds) -> float:
-    """Lee ``metrics.thresholds.<key>`` validando que sea un número >= 0.
+    """Read ``metrics.thresholds.<key>``, validating that it is a number >= 0.
 
     Args:
-        data: Tabla ``[metrics.thresholds]`` ya parseada.
-        key: Nombre de la clave.
-        defaults: Instancia con los valores por defecto.
+        data: Already parsed ``[metrics.thresholds]`` table.
+        key: Name of the key.
+        defaults: Instance holding the default values.
 
     Returns:
-        El valor del toml o el por defecto.
+        The toml value or the default.
 
     Raises:
-        ValueError: Si el valor no es numérico o es negativo.
+        ValueError: If the value is not numeric or is negative.
     """
     value = data.get(key, getattr(defaults, key))
     if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
         raise ValueError(
-            f"`metrics.thresholds.{key}` en debtector.toml debe ser un número >= 0, "
-            f"recibido {value!r}."
+            f"`metrics.thresholds.{key}` in debtector.toml must be a number >= 0, got {value!r}."
         )
     return value
 
 
 def _load_audit_thresholds(data: dict) -> AuditThresholds:
-    """Valida y construye :class:`AuditThresholds` desde ``[audit.thresholds]``.
+    """Validate and build :class:`AuditThresholds` from ``[audit.thresholds]``.
 
     Args:
-        data: Tabla ``[audit.thresholds]`` ya parseada (vacía si no existe).
+        data: Already parsed ``[audit.thresholds]`` table (empty if absent).
 
     Returns:
-        Umbrales con los valores del toml fusionados con los por defecto.
+        Thresholds with the toml values merged with the defaults.
 
     Raises:
-        ValueError: Si un valor no es numérico, es negativo o el percentil
-            queda fuera de ``[1, 99]``.
+        ValueError: If a value is not numeric, is negative, or the percentile
+            falls outside ``[1, 99]``.
     """
     defaults = AuditThresholds()
     values: dict[str, float] = {}
@@ -279,13 +277,12 @@ def _load_audit_thresholds(data: dict) -> AuditThresholds:
         value = data.get(key, getattr(defaults, key))
         if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
             raise ValueError(
-                f"`audit.thresholds.{key}` en debtector.toml debe ser un número >= 0, "
-                f"recibido {value!r}."
+                f"`audit.thresholds.{key}` in debtector.toml must be a number >= 0, got {value!r}."
             )
         values[key] = value
     if not 1 <= values["hotspot_percentile"] <= 99:
         raise ValueError(
-            "`audit.thresholds.hotspot_percentile` en debtector.toml debe estar en [1, 99], "
-            f"recibido {values['hotspot_percentile']!r}."
+            "`audit.thresholds.hotspot_percentile` in debtector.toml must be in [1, 99], "
+            f"got {values['hotspot_percentile']!r}."
         )
     return AuditThresholds(**values)

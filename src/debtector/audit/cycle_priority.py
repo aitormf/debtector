@@ -7,7 +7,7 @@ cycle between two leaf modules.
 
 The heuristic adopted here ranks each cycle by the **fan-in (Ca) of its most
 exposed node** — i.e. ``max(fan_in[n] for n in cycle)``. Breaking that cycle
-unblocks the largest blast radius first. This is the "qué ciclo romper primero"
+unblocks the largest blast radius first. This is the "which cycle to break first"
 question stated in the Phase 3 audit spec.
 """
 

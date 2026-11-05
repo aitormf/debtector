@@ -1,8 +1,8 @@
 """
-Indexador principal: conecta parsers con el GraphStore.
+Main indexer: connects parsers with the GraphStore.
 
-Recorre el proyecto, detecta archivos nuevos/modificados, los parsea
-con Tree-sitter y almacena los nodos y aristas en el GraphStore.
+Walks the project, detects new/modified files, parses them
+with Tree-sitter and stores the nodes and edges in the GraphStore.
 """
 
 from __future__ import annotations
@@ -146,12 +146,12 @@ class IgnoreRules:
 
 class Indexer:
     """
-    Orquestador de indexación.
+    Indexing orchestrator.
 
-    Uso:
+    Usage:
         store = GraphStore(".debtector.db")
         indexer = Indexer(store)
-        stats = indexer.index("./mi-proyecto")
+        stats = indexer.index("./my-project")
     """
 
     def __init__(

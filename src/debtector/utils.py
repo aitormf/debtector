@@ -1,7 +1,7 @@
-"""Utilidades compartidas de Debtector.
+"""Shared Debtector utilities.
 
-Funciones auxiliares sin dependencias internas que pueden importarse
-desde parsers, GraphStore y CLI sin riesgo de ciclos de importación.
+Helper functions with no internal dependencies that can be imported
+from parsers, GraphStore and the CLI without risking import cycles.
 """
 
 from __future__ import annotations

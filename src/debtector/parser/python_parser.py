@@ -1,9 +1,9 @@
 """
-Parser de Python usando Tree-sitter.
+Python parser using Tree-sitter.
 
-Produce NodeInfo y EdgeInfo con qualified_names. Además de extraer la
-estructura, genera aristas CONTAINS (archivo→clase, clase→método),
-IMPORTS_FROM (archivo→módulo) y HAS_METHOD (clase→método).
+Produces NodeInfo and EdgeInfo with qualified_names. Besides extracting the
+structure, it generates CONTAINS (file→class, class→method),
+IMPORTS_FROM (file→module) and HAS_METHOD (class→method) edges.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ class PythonParser(LanguageParser):
         nodes: list[NodeInfo] = []
         edges: list[EdgeInfo] = []
 
-        # Nodo del archivo
+        # File node
         file_qn = make_qualified_name(file_path, file_path, NodeKind.FILE)
         module_docstring = self._get_module_docstring(root, source)
         nodes.append(
@@ -79,11 +79,11 @@ class PythonParser(LanguageParser):
             )
         )
 
-        # Extraer imports
+        # Extract imports
         self._extract_imports(root, source, file_path, file_qn, edges)
 
-        # Extraer clases, funciones, métodos
-        # uses_type_seen: set compartido por todo el archivo para dedup O(1) de USES_TYPE
+        # Extract classes, functions, methods
+        # uses_type_seen: file-wide set for O(1) USES_TYPE dedup
         uses_type_seen: set[str] = set()
         self._extract_symbols(
             root,
@@ -96,7 +96,7 @@ class PythonParser(LanguageParser):
             uses_type_seen=uses_type_seen,
         )
 
-        # Segunda pasada: aristas CALLS (requiere índice completo de símbolos)
+        # Second pass: CALLS edges (requires the complete symbol index)
         symbol_index = self._build_symbol_index(nodes)
         self._extract_file_calls(root, source, file_path, symbol_index, edges, parent=None)
 
@@ -192,7 +192,7 @@ class PythonParser(LanguageParser):
         return None
 
     # ──────────────────────────────────────────────
-    # Símbolos (clases, funciones, métodos)
+    # Symbols (classes, functions, methods)
     # ──────────────────────────────────────────────
 
     def _extract_symbols(
@@ -222,8 +222,8 @@ class PythonParser(LanguageParser):
                 objects are appended in-place.
             parent: Name of the enclosing class when recursing into a class body,
                 or ``None`` at module level.
-            uses_type_seen: Set compartido a nivel de archivo para dedup de USES_TYPE
-                en O(1). Se crea en ``parse()`` y se reutiliza en toda la recursión.
+            uses_type_seen: File-wide set for O(1) USES_TYPE dedup. Created in
+                ``parse()`` and reused throughout the recursion.
         """
         if uses_type_seen is None:
             uses_type_seen = set()
@@ -260,7 +260,7 @@ class PythonParser(LanguageParser):
                     )
                 )
 
-                # Arista: archivo CONTAINS clase
+                # Edge: file CONTAINS class
                 edges.append(
                     EdgeInfo(
                         kind=EdgeKind.CONTAINS,
@@ -271,7 +271,7 @@ class PythonParser(LanguageParser):
                     )
                 )
 
-                # Herencia
+                # Inheritance
                 for base in self._get_bases(child, source):
                     edges.append(
                         EdgeInfo(
@@ -283,7 +283,7 @@ class PythonParser(LanguageParser):
                         )
                     )
 
-                # Recursión para métodos dentro de la clase
+                # Recurse into methods inside the class
                 body = self._get_body(child)
                 if body:
                     self._extract_symbols(
@@ -320,7 +320,7 @@ class PythonParser(LanguageParser):
                     )
                 )
 
-                # Arista: CONTAINS o HAS_METHOD
+                # Edge: CONTAINS or HAS_METHOD
                 if parent:
                     parent_qn = make_qualified_name(file_path, parent, NodeKind.CLASS)
                     edges.append(
@@ -343,7 +343,7 @@ class PythonParser(LanguageParser):
                         )
                     )
 
-                # Aristas USES_TYPE desde las anotaciones de tipo de la firma
+                # USES_TYPE edges from the signature's type annotations
                 self._extract_uses_type(
                     child,
                     source,
@@ -374,7 +374,7 @@ class PythonParser(LanguageParser):
         *func_node*.  Only type names starting with an uppercase letter are
         emitted (heuristic to skip primitive types like ``int``, ``str``).
         Duplicate edges for the same type within the same file are suppressed
-        via *uses_type_seen*, un set compartido a nivel de archivo (O(1) lookup).
+        via *uses_type_seen*, a file-wide set (O(1) lookup).
 
         Args:
             func_node: A tree-sitter ``function_definition`` node.
@@ -384,9 +384,9 @@ class PythonParser(LanguageParser):
             line: Line number of the function definition.
             edges: Mutable list to which new :class:`~debtector.models.EdgeInfo`
                 objects are appended in-place.
-            uses_type_seen: Set de tipos ya emitidos para este archivo.
-                Se muta en-place para acumular los tipos emitidos. Permite
-                dedup en O(1) sin escanear la lista ``edges``.
+            uses_type_seen: Set of types already emitted for this file.
+                Mutated in place to accumulate emitted types. Enables
+                O(1) dedup without scanning the ``edges`` list.
         """
         type_names: set[str] = set()
 

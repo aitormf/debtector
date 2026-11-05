@@ -1,12 +1,12 @@
-"""Análisis de comportamiento basado en historial de git.
+"""Behavioural analysis based on git history.
 
-Extrae métricas como churn, hotspots, acoplamiento temporal y bus factor
-a partir de ``git log`` y ``git blame``. Estas señales complementan el
-grafo de acoplamiento estructural con evidencia de qué módulos generan
-más deuda técnica en la práctica.
+Extracts metrics such as churn, hotspots, temporal coupling and bus factor
+from ``git log`` and ``git blame``. These signals complement the structural
+coupling graph with evidence of which modules generate the most technical
+debt in practice.
 
-Ninguna función de este módulo escribe en la base de datos; todas son
-consultas de solo lectura sobre el repositorio git del proyecto.
+No function in this module writes to the database; all of them are
+read-only queries against the project's git repository.
 """
 
 from __future__ import annotations
@@ -22,30 +22,30 @@ import structlog
 
 log = structlog.get_logger()
 
-# Patrón para reconocer un hash de commit SHA-1 (40 hex chars)
+# Pattern that recognises a SHA-1 commit hash (40 hex chars)
 _HASH_RE = re.compile(r"^[0-9a-f]{40}$")
 
-# Rename en --numstat con parte común: ``src/{old => new}/a.py``
+# Rename in --numstat with a common part: ``src/{old => new}/a.py``
 _RENAME_BRACES_RE = re.compile(r"^(.*)\{(.*) => (.*)\}(.*)$")
 
-# Umbral para el cálculo de bus factor: autores mínimos para cubrir X% del código
+# Bus factor threshold: minimum authors needed to cover X% of the code
 _BUS_FACTOR_COVERAGE = 0.80
 
 
 # ──────────────────────────────────────────────
-# Dataclasses públicas
+# Public dataclasses
 # ──────────────────────────────────────────────
 
 
 @dataclass
 class ChurnMetrics:
-    """Actividad de un archivo en el historial de git.
+    """Activity of a file in the git history.
 
     Attributes:
-        file_path: Ruta relativa del archivo.
-        commits: Número de commits distintos que tocan el archivo.
-        lines_added: Total de líneas añadidas en todos los commits.
-        lines_deleted: Total de líneas eliminadas en todos los commits.
+        file_path: Relative path of the file.
+        commits: Number of distinct commits that touch the file.
+        lines_added: Total lines added across all commits.
+        lines_deleted: Total lines deleted across all commits.
     """
 
     file_path: str
@@ -56,17 +56,17 @@ class ChurnMetrics:
 
 @dataclass
 class HotspotMetrics:
-    """Cruce de churn y acoplamiento estructural.
+    """Intersection of churn and structural coupling.
 
-    Un hotspot es un archivo con alta actividad de cambios *y* alto
-    acoplamiento con otros módulos. Es la señal más fiable de deuda
-    técnica accionable.
+    A hotspot is a file with high change activity *and* high coupling
+    with other modules. It is the most reliable signal of actionable
+    technical debt.
 
     Attributes:
-        file_path: Ruta relativa del archivo.
-        churn: Número de commits que tocan el archivo.
-        coupling: fan_in + fan_out del módulo en el grafo estructural.
-        hotspot_score: churn × coupling — ranking de deuda técnica.
+        file_path: Relative path of the file.
+        churn: Number of commits that touch the file.
+        coupling: fan_in + fan_out of the module in the structural graph.
+        hotspot_score: churn × coupling — technical debt ranking.
         severity: Severity level for health score aggregation.
     """
 
@@ -79,17 +79,17 @@ class HotspotMetrics:
 
 @dataclass
 class TemporalCoupling:
-    """Par de archivos que co-cambian frecuentemente.
+    """Pair of files that frequently change together.
 
-    Detecta dependencias implícitas entre módulos que no tienen un
-    import directo pero que el equipo modifica de forma coordinada.
+    Detects implicit dependencies between modules that have no direct
+    import but that the team modifies in a coordinated way.
 
     Attributes:
-        file_a: Ruta del primer archivo (lexicográficamente menor).
-        file_b: Ruta del segundo archivo.
-        shared_commits: Commits donde ambos archivos cambiaron.
+        file_a: Path of the first file (lexicographically smaller).
+        file_b: Path of the second file.
+        shared_commits: Commits in which both files changed.
         coupling_ratio: shared_commits / min(commits_a, commits_b).
-            1.0 significa acoplamiento perfecto.
+            1.0 means perfect coupling.
     """
 
     file_a: str
@@ -100,14 +100,14 @@ class TemporalCoupling:
 
 @dataclass
 class BusFactorMetrics:
-    """Riesgo de conocimiento concentrado en un único autor.
+    """Risk of knowledge concentrated in a single author.
 
     Attributes:
-        file_path: Ruta relativa del archivo.
-        top_author: Autor con más líneas vigentes según ``git blame``.
-        top_author_pct: Porcentaje de líneas del autor dominante.
-        bus_factor: Mínimo de autores necesarios para cubrir el 80% del código.
-            1 = punto único de fallo.
+        file_path: Relative path of the file.
+        top_author: Author with the most surviving lines according to ``git blame``.
+        top_author_pct: Percentage of lines owned by the dominant author.
+        bus_factor: Minimum number of authors needed to cover 80% of the code.
+            1 = single point of failure.
     """
 
     file_path: str
@@ -117,22 +117,22 @@ class BusFactorMetrics:
 
 
 # ──────────────────────────────────────────────
-# Helpers privados
+# Private helpers
 # ──────────────────────────────────────────────
 
 
 def _run_git(cmd: list[str], cwd: str | Path) -> str:
-    """Ejecuta un comando git y devuelve su stdout como texto.
+    """Run a git command and return its stdout as text.
 
     Args:
-        cmd: Partes del comando (e.g. ``["git", "log", "--numstat"]``).
-        cwd: Directorio donde ejecutar git.
+        cmd: Command parts (e.g. ``["git", "log", "--numstat"]``).
+        cwd: Directory in which to run git.
 
     Returns:
-        Salida estándar decodificada como cadena UTF-8.
+        Standard output decoded as a UTF-8 string.
 
     Raises:
-        RuntimeError: Si git no está disponible o el directorio no es un repo.
+        RuntimeError: If git is not available or the directory is not a repo.
     """
     try:
         result = subprocess.run(  # nosec B603 — cmd is constructed internally, never from user input
@@ -145,25 +145,25 @@ def _run_git(cmd: list[str], cwd: str | Path) -> str:
         return result.stdout
     except FileNotFoundError as exc:
         raise RuntimeError(
-            "git no está disponible en el PATH. Instala git para usar esta función."
+            "git is not available on the PATH. Install git to use this feature."
         ) from exc
     except subprocess.CalledProcessError as exc:
-        raise RuntimeError(f"Error ejecutando '{' '.join(cmd)}': {exc.stderr.strip()}") from exc
+        raise RuntimeError(f"Error running '{' '.join(cmd)}': {exc.stderr.strip()}") from exc
 
 
 def _is_hash(line: str) -> bool:
-    """Devuelve True si la línea es un hash de commit SHA-1."""
+    """Return True if the line is a SHA-1 commit hash."""
     return bool(_HASH_RE.match(line))
 
 
 def _split_rename(path: str) -> tuple[str, str] | None:
-    """Separa una ruta de rename de ``--numstat`` en ``(antigua, nueva)``.
+    """Split a ``--numstat`` rename path into ``(old, new)``.
 
-    git escribe ``src/{old => new}/a.py`` o ``old.py => new.py``; una parte
-    del ``{}`` puede estar vacía (``{ => sub}/a.py``).
+    git writes ``src/{old => new}/a.py`` or ``old.py => new.py``; one side
+    of the ``{}`` may be empty (``{ => sub}/a.py``).
 
     Returns:
-        ``(antigua, nueva)``, o ``None`` si *path* no es un rename.
+        ``(old, new)``, or ``None`` if *path* is not a rename.
     """
     m = _RENAME_BRACES_RE.match(path)
     if m:
@@ -182,20 +182,20 @@ def _log_changes(
     project_root: str | Path,
     since: str | None = None,
 ) -> list[tuple[str, list[tuple[str, int, int]]]]:
-    """Lee ``git log --numstat`` con los renames resueltos al nombre actual.
+    """Read ``git log --numstat`` with renames resolved to the current name.
 
-    ``--relative`` deja las rutas relativas a *project_root*, que puede ser un
-    subdirectorio del repo (p.ej. ``debtector index ./src``), como en el grafo.
-    El log va del commit más nuevo al más viejo: cuando aparece un rename, los
-    commits más viejos de la ruta antigua se atribuyen a la ruta actual.
+    ``--relative`` keeps paths relative to *project_root*, which may be a
+    subdirectory of the repo (e.g. ``debtector index ./src``), as in the graph.
+    The log goes from the newest commit to the oldest: when a rename appears,
+    the older commits of the old path are attributed to the current path.
 
     Args:
-        project_root: Directorio desde el que ejecutar git.
-        since: Filtro de fecha opcional (e.g. ``"6 months ago"``).
+        project_root: Directory from which to run git.
+        since: Optional date filter (e.g. ``"6 months ago"``).
 
     Returns:
-        ``(hash, [(ruta_actual, añadidas, eliminadas), ...])`` por commit.
-        Los archivos binarios cuentan con líneas a 0.
+        ``(hash, [(current_path, added, deleted), ...])`` per commit.
+        Binary files count with 0 lines.
     """
     cmd = ["git", "log", "--numstat", "--relative", "-M", "--format=%H"]
     if since:
@@ -222,7 +222,7 @@ def _log_changes(
         try:
             added, deleted = int(added_str), int(deleted_str)
         except ValueError:
-            # Archivos binarios muestran "-"
+            # Binary files show "-"
             added = deleted = 0
         rename = _split_rename(path)
         if rename:
@@ -237,7 +237,7 @@ def _log_changes(
 
 
 # ──────────────────────────────────────────────
-# API pública
+# Public API
 # ──────────────────────────────────────────────
 
 
@@ -245,19 +245,19 @@ def parse_churn(
     project_root: str | Path,
     since: str | None = None,
 ) -> list[ChurnMetrics]:
-    """Parsea ``git log --numstat`` para calcular churn por archivo.
+    """Parse ``git log --numstat`` to compute churn per file.
 
-    El churn mide cuántas veces se ha modificado cada archivo. Archivos
-    binarios (que muestran ``-`` en las columnas de líneas) se incluyen
-    con líneas a 0.
+    Churn measures how many times each file has been modified. Binary
+    files (which show ``-`` in the line columns) are included with
+    0 lines.
 
     Args:
-        project_root: Directorio raíz del repositorio git.
-        since: Filtro de fecha opcional (e.g. ``"6 months ago"``).
+        project_root: Root directory of the git repository.
+        since: Optional date filter (e.g. ``"6 months ago"``).
 
     Returns:
-        Lista de :class:`ChurnMetrics` ordenada por número de commits
-        descendente. Vacía si no hay historial.
+        List of :class:`ChurnMetrics` sorted by number of commits,
+        descending. Empty if there is no history.
     """
     commits_per_file: dict[str, set[str]] = defaultdict(set)
     lines_added: dict[str, int] = defaultdict(int)
@@ -287,20 +287,19 @@ def compute_hotspots(
     since: str | None = None,
     limit: int | None = None,
 ) -> list[HotspotMetrics]:
-    """Combina churn con acoplamiento estructural para identificar hotspots.
+    """Combine churn with structural coupling to identify hotspots.
 
-    La puntuación de hotspot es ``churn × (fan_in + fan_out)``. Solo
-    incluye archivos que tienen historial en git *y* están indexados en
-    el grafo.
+    The hotspot score is ``churn × (fan_in + fan_out)``. Only files that
+    have git history *and* are indexed in the graph are included.
 
     Args:
-        store: :class:`~debtector.graph_store.GraphStore` con el índice.
-        project_root: Directorio raíz del repositorio git.
-        since: Filtro de fecha opcional para el churn.
-        limit: Número máximo de resultados. ``None`` devuelve todos.
+        store: :class:`~debtector.graph_store.GraphStore` holding the index.
+        project_root: Root directory of the git repository.
+        since: Optional date filter for churn.
+        limit: Maximum number of results. ``None`` returns all of them.
 
     Returns:
-        Lista de :class:`HotspotMetrics` ordenada por puntuación descendente.
+        List of :class:`HotspotMetrics` sorted by score, descending.
     """
     from .metrics import compute_metrics
 
@@ -344,28 +343,28 @@ def compute_temporal_coupling(
     min_ratio: float = 0.3,
     since: str | None = None,
 ) -> list[TemporalCoupling]:
-    """Encuentra pares de archivos que cambian juntos frecuentemente.
+    """Find pairs of files that frequently change together.
 
-    Detecta dependencias implícitas: módulos que el equipo modifica de
-    forma coordinada aunque no tengan un ``import`` directo entre ellos.
+    Detects implicit dependencies: modules that the team modifies in a
+    coordinated way even though they have no direct ``import`` between them.
 
     Args:
-        project_root: Directorio raíz del repositorio git.
-        min_shared: Mínimo de commits compartidos para reportar un par.
-        min_ratio: Ratio mínimo ``shared / min(commits_a, commits_b)``.
-        since: Filtro de fecha opcional.
+        project_root: Root directory of the git repository.
+        min_shared: Minimum shared commits required to report a pair.
+        min_ratio: Minimum ratio ``shared / min(commits_a, commits_b)``.
+        since: Optional date filter.
 
     Returns:
-        Lista de :class:`TemporalCoupling` ordenada por commits
-        compartidos descendente.
+        List of :class:`TemporalCoupling` sorted by shared
+        commits, descending.
     """
     changes = _log_changes(project_root, since=since)
     # Deleted files only exist in the history: drop them.
     tracked = set(_run_git(["git", "ls-files"], project_root).splitlines())
 
-    # commit_hash → archivos modificados (sin repetir: un rename y su edición)
+    # commit_hash → modified files (deduplicated: a rename and its edit)
     commit_files: dict[str, set[str]] = {}
-    # archivo → conjunto de commits que lo tocan
+    # file → set of commits that touch it
     file_commits: dict[str, set[str]] = defaultdict(set)
 
     for commit_hash, files in changes:
@@ -374,7 +373,7 @@ def compute_temporal_coupling(
         for path in current:
             file_commits[path].add(commit_hash)
 
-    # Contar commits compartidos por cada par de archivos
+    # Count shared commits for each pair of files
     pair_counts: dict[tuple[str, str], int] = defaultdict(int)
     for files in commit_files.values():
         for a, b in itertools.combinations(sorted(files), 2):
@@ -405,38 +404,38 @@ def compute_temporal_coupling(
 
 
 def is_shallow_repository(project_root: str | Path) -> bool:
-    """Indica si el repositorio es un clon superficial (``--depth``).
+    """Return whether the repository is a shallow clone (``--depth``).
 
     Args:
-        project_root: Directorio dentro del repositorio git.
+        project_root: Directory inside the git repository.
 
     Returns:
-        ``True`` si el historial está truncado.
+        ``True`` if the history is truncated.
 
     Raises:
-        RuntimeError: Si git no está disponible o no es un repositorio.
+        RuntimeError: If git is not available or this is not a repository.
     """
     return _run_git(["git", "rev-parse", "--is-shallow-repository"], project_root).strip() == "true"
 
 
 def list_authors(project_root: str | Path) -> set[str]:
-    """Devuelve los autores distintos del historial de todo el repositorio.
+    """Return the distinct authors in the history of the whole repository.
 
-    Usa ``git log`` (no ``git blame``): no cuenta líneas sin commitear ni
-    depende de qué líneas sobreviven. Respeta ``.mailmap``. Ignora cuentas bot (nombres acabados
-    en ``[bot]``, p.ej. ``github-actions[bot]``). Cuenta todo el
-    repositorio, no solo el subdirectorio indexado: quien contribuye fuera
-    de él sigue siendo un autor más del equipo.
+    Uses ``git log`` (not ``git blame``): it does not count uncommitted lines
+    nor depend on which lines survive. Respects ``.mailmap``. Ignores bot
+    accounts (names ending in ``[bot]``, e.g. ``github-actions[bot]``).
+    Counts the whole repository, not just the indexed subdirectory: someone
+    who contributes outside it is still a member of the team.
 
     Args:
-        project_root: Directorio dentro del repositorio git (puede ser un
-            subdirectorio; se resuelve la raíz del repositorio).
+        project_root: Directory inside the git repository (may be a
+            subdirectory; the repository root is resolved).
 
     Returns:
-        Conjunto de nombres de autor. Vacío si no hay historial.
+        Set of author names. Empty if there is no history.
 
     Raises:
-        RuntimeError: Si git no está disponible o no es un repositorio.
+        RuntimeError: If git is not available or this is not a repository.
     """
     top = _run_git(["git", "rev-parse", "--show-toplevel"], project_root).strip()
     output = _run_git(["git", "log", "--format=%aN"], top)
@@ -448,20 +447,20 @@ def compute_bus_factor(
     store: GraphStore,  # type: ignore[name-defined]  # noqa: F821
     project_root: str | Path,
 ) -> list[BusFactorMetrics]:
-    """Calcula el bus factor por archivo usando ``git blame``.
+    """Compute the bus factor per file using ``git blame``.
 
-    Solo procesa archivos presentes en el índice del grafo. Los archivos
-    en los que ``git blame`` falla (p.ej. archivos nuevos sin commits)
-    se omiten con un aviso en el log.
+    Only processes files present in the graph index. Files for which
+    ``git blame`` fails (e.g. new files without commits) are skipped
+    with a warning in the log.
 
     Args:
-        store: :class:`~debtector.graph_store.GraphStore` con el índice.
-        project_root: Directorio raíz del repositorio git.
+        store: :class:`~debtector.graph_store.GraphStore` holding the index.
+        project_root: Root directory of the git repository.
 
     Returns:
-        Lista de :class:`BusFactorMetrics` ordenada por bus factor
-        ascendente (los más en riesgo primero) y luego por porcentaje
-        del autor dominante descendente.
+        List of :class:`BusFactorMetrics` sorted by bus factor,
+        ascending (most at-risk first), then by the dominant author's
+        percentage, descending.
     """
     indexed_files = store.get_all_files()
     results: list[BusFactorMetrics] = []
@@ -491,7 +490,7 @@ def compute_bus_factor(
         top_author, top_count = sorted_authors[0]
         top_pct = top_count / total * 100
 
-        # Bus factor: mínimo de autores para cubrir >= 80% de las líneas
+        # Bus factor: minimum authors needed to cover >= 80% of the lines
         cumulative = 0
         bus_factor = 0
         for _, count in sorted_authors:

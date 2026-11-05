@@ -1,4 +1,4 @@
-"""Debtector — Grafo de código sobre SQLite para reducir consumo de tokens en IA."""
+"""Debtector — Code graph on SQLite to reduce AI token usage."""
 
 from debtector.graph_store import GraphStore
 from debtector.indexer import Indexer
