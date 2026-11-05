@@ -280,7 +280,11 @@ class Indexer:
             stats["removed"] += 1
 
         self.store.set_metadata(_TEST_PATHS_KEY, test_sig)
-        self.store.set_metadata(_PARSER_VERSION_KEY, str(PARSER_VERSION))
+        # Only mark the migration done if every file was (re)parsed: a file that failed
+        # keeps its old hash and would otherwise be skipped forever with stale data.
+        # The cost is that a permanently unparseable file keeps forcing full re-parses.
+        if stats["errors"] == 0:
+            self.store.set_metadata(_PARSER_VERSION_KEY, str(PARSER_VERSION))
 
         # Rebuild COVERS edges from unresolved CALLS in test files (non-fatal)
         try:

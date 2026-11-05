@@ -287,6 +287,9 @@ def parse_churn(
 def _file_complexities(store: GraphStore) -> dict[str, int]:  # type: ignore[name-defined]  # noqa: F821
     """Sum the cyclomatic complexity of the functions and methods of each file.
 
+    Each node contributes its ``complexity`` plus ``nested_complexity`` (closures,
+    which are not graph nodes of their own).
+
     Args:
         store: :class:`~debtector.graph_store.GraphStore` holding the index.
 
@@ -299,7 +302,9 @@ def _file_complexities(store: GraphStore) -> dict[str, int]:  # type: ignore[nam
     totals: dict[str, int] = defaultdict(int)
     for kind in (NodeKind.FUNCTION, NodeKind.METHOD):
         for node in store.get_nodes_by_kind(kind):
-            totals[node.file_path] += int(node.extra.get("complexity", 0))
+            totals[node.file_path] += int(node.extra.get("complexity", 0)) + int(
+                node.extra.get("nested_complexity", 0)
+            )
     return dict(totals)
 
 

@@ -18,7 +18,9 @@ Python (mirrors ``radon cc``, so values can be cross-checked with it)
       (but its body is counted).
     * Only the function body counts: decorators, default values and annotations do not.
     * Nested functions and classes are separate scopes and are not added to the
-      enclosing function.
+      enclosing function's ``complexity`` (so it stays comparable with radon). Since
+      they are not graph nodes, :func:`nested_complexity` sums them (recursively) so
+      the parser can store it as ``nested_complexity`` and file totals do not lose it.
 
 JavaScript / TypeScript
     * +1 for each ``if`` (so ``else if`` too), ``for``, ``for...in``, ``for...of``,
@@ -45,11 +47,14 @@ class ComplexityRules:
         decision_nodes: Node types that add 1 each.
         boundary_nodes: Node types that start a separate scope: neither the node nor
             its subtree is counted.
+        function_nodes: Boundary node types that are functions, whose own complexity is
+            reported by :func:`nested_complexity`.
         weigh: Optional hook returning the extra complexity of a node (``0`` if none).
     """
 
     decision_nodes: frozenset[str]
     boundary_nodes: frozenset[str] = frozenset()
+    function_nodes: frozenset[str] = frozenset()
     weigh: Callable[[Node], int] | None = None
 
 
@@ -77,6 +82,34 @@ def cyclomatic_complexity(body: Node | None, rules: ComplexityRules) -> int:
         if rules.weigh is not None:
             total += rules.weigh(node)
         stack.extend(node.children)
+    return total
+
+
+def nested_complexity(body: Node | None, rules: ComplexityRules) -> int:
+    """Sum the complexity of the functions nested inside *body*, recursively.
+
+    Functions defined inside nested classes are included; decorators and class bodies
+    themselves are not counted.
+
+    Args:
+        body: The enclosing function's body node (``None`` means no body).
+        rules: The language rules.
+
+    Returns:
+        The summed complexity of every nested function (each including its own
+        nested functions), ``0`` if there are none or the language has no boundaries.
+    """
+    if body is None:
+        return 0
+    total = 0
+    stack = list(body.children)
+    while stack:
+        node = stack.pop()
+        if node.type in rules.function_nodes:
+            inner = node.child_by_field_name("body")
+            total += cyclomatic_complexity(inner, rules) + nested_complexity(inner, rules)
+        elif node.type in rules.boundary_nodes:
+            stack.extend(node.children)
     return total
 
 
@@ -123,6 +156,7 @@ PYTHON_RULES = ComplexityRules(
         }
     ),
     boundary_nodes=frozenset({"function_definition", "class_definition", "decorated_definition"}),
+    function_nodes=frozenset({"function_definition"}),
     weigh=_python_weigh,
 )
 

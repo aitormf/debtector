@@ -107,7 +107,7 @@ a `../`-prefixed path and are excluded from `coupling` and `summary` metrics.
 
 Array of churn × complexity hotspots with score > 0. `score = churn × complexity`, where
 `complexity` is the file's cyclomatic complexity: the sum of the McCabe complexities of its
-functions and methods (see `debtector complexity`). Files without functions have complexity
+functions and methods, including their nested functions (see `debtector complexity`). Files without functions have complexity
 `0`, score `0`, and are not listed.
 
 | field       | type   | meaning                                          |
