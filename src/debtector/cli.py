@@ -44,7 +44,13 @@ from .git_history import (
 from .graph_store import GraphStore
 from .indexer import Indexer
 from .logging import configure_logging
-from .metrics import compute_metrics, find_cycles, god_modules, inheritance_metrics
+from .metrics import (
+    compute_metrics,
+    find_cycles,
+    god_modules,
+    inheritance_metrics,
+    sdp_violations,
+)
 from .models import NodeKind, node_to_dict
 
 log = structlog.get_logger()
@@ -108,6 +114,27 @@ def _auto_index(project: str) -> None:
     except Exception:  # noqa: BLE001
         # Never let a failed auto-index abort the analysis command that called it.
         log.warning("auto_index_failed", project=project, exc_info=True)
+
+
+def _configured_god_modules(store: GraphStore, cfg) -> list:
+    """God modules using the percentile and minimum Ca from ``debtector.toml``."""
+    thr = cfg.metrics.thresholds
+    return god_modules(store, percentile=thr.god_module_percentile, min_ca=thr.god_module_min_ca)
+
+
+def _configured_sdp_violations(store: GraphStore, cfg) -> list:
+    """SDP violations using ``sdp_margin`` from ``debtector.toml``."""
+    return sdp_violations(store, margin=cfg.metrics.thresholds.sdp_margin)
+
+
+def _sdp_dict(v) -> dict:
+    """JSON-friendly form of an :class:`~debtector.metrics.SdpViolation`."""
+    return {
+        "source": v.source,
+        "target": v.target,
+        "source_instability": round(v.source_instability, 3),
+        "target_instability": round(v.target_instability, 3),
+    }
 
 
 def _get_store(project: str) -> GraphStore:
@@ -506,7 +533,8 @@ def cmd_audit(args) -> None:
     _auto_index(args.project)
     root = _index_root(args.project)
     store = _get_store(args.project)
-    thr = load_config(args.project).audit
+    cfg = load_config(args.project)
+    thr = cfg.audit
 
     # Compute core metrics
     module_metrics = compute_metrics(store)
@@ -573,7 +601,7 @@ def cmd_audit(args) -> None:
 
     # Prioritize cycles and detect god modules before closing store
     prioritized_cycles = prioritize_cycles(store)
-    god_modules_set = god_modules(store)
+    god_modules_set = _configured_god_modules(store, cfg)
 
     # Close store after all reads
     store.close()
@@ -742,7 +770,8 @@ def _baseline_save(args) -> None:
     store = _get_store(args.project)
     modules = compute_metrics(store)
     cycles = find_cycles(store)
-    gods = god_modules(store, percentile=cfg.metrics.thresholds.god_module_percentile)
+    gods = _configured_god_modules(store, cfg)
+    sdp = _configured_sdp_violations(store, cfg)
     store.close()
 
     snapshot = {
@@ -758,6 +787,7 @@ def _baseline_save(args) -> None:
         ],
         "cycles": cycles,
         "god_modules": [m.file_path for m in gods],
+        "sdp_violations": [{"source": v.source, "target": v.target} for v in sdp],
     }
 
     path = _baseline_path(args.project)
@@ -798,12 +828,20 @@ def _baseline_status(args) -> None:
     store = _get_store(args.project)
     current_modules = compute_metrics(store)
     current_cycles = find_cycles(store)
-    current_gods = god_modules(store, percentile=cfg.metrics.thresholds.god_module_percentile)
+    current_gods = _configured_god_modules(store, cfg)
+    current_sdp = _configured_sdp_violations(store, cfg)
     store.close()
 
     # Detectar regresiones por tipo
     new_cycles = [c for c in current_cycles if frozenset(c) not in baseline_cycles]
     new_gods = [m.file_path for m in current_gods if m.file_path not in baseline_gods]
+
+    # Violaciones SDP: un baseline anterior a esta métrica no las guarda; sin dato
+    # previo no se puede afirmar que hayan empeorado, así que no se comparan.
+    new_sdp: list[dict] = []
+    if "sdp_violations" in baseline:
+        known = {(v["source"], v["target"]) for v in baseline["sdp_violations"]}
+        new_sdp = [_sdp_dict(v) for v in current_sdp if (v.source, v.target) not in known]
 
     regressions: list[dict] = []
     baseline_map = {m["file_path"]: m for m in baseline.get("modules", [])}
@@ -826,6 +864,7 @@ def _baseline_status(args) -> None:
         _blocks(new_cycles, sev.cycles)
         or _blocks(new_gods, sev.god_modules)
         or _blocks(regressions, sev.instability)
+        or _blocks(new_sdp, sev.instability)
     )
 
     if args.json:
@@ -834,6 +873,7 @@ def _baseline_status(args) -> None:
                 "regressions": regressions,
                 "new_cycles": new_cycles,
                 "new_god_modules": new_gods,
+                "new_sdp_violations": new_sdp,
             }
         )
         if has_blocking:
@@ -844,6 +884,7 @@ def _baseline_status(args) -> None:
         _warns(new_cycles, sev.cycles)
         or _warns(new_gods, sev.god_modules)
         or _warns(regressions, sev.instability)
+        or _warns(new_sdp, sev.instability)
     )
 
     reporter = getattr(args, "reporter", None)
@@ -853,9 +894,9 @@ def _baseline_status(args) -> None:
         return
 
     if reporter == "github":
-        _emit_github_annotations(new_cycles, new_gods, regressions, sev)
+        _emit_github_annotations(new_cycles, new_gods, regressions, sev, new_sdp)
     elif reporter == "gitlab":
-        _emit_gitlab_report(new_cycles, new_gods, regressions, sev)
+        _emit_gitlab_report(new_cycles, new_gods, regressions, sev, new_sdp)
     else:
         if _warns(new_cycles, sev.cycles):
             label = "⛔" if sev.cycles == Severity.ERROR else "⚠"
@@ -875,8 +916,22 @@ def _baseline_status(args) -> None:
             for r in regressions:
                 print(f"   {r['file_path']}  I: {r['before']:.3f} → {r['after']:.3f}")
 
+        if _warns(new_sdp, sev.instability):
+            label = "⛔" if sev.instability == Severity.ERROR else "⚠"
+            print(f"\n{label}  Nuevas violaciones SDP ({len(new_sdp)}):")
+            for v in new_sdp:
+                print(f"   {_sdp_text(v)}")
+
     if has_blocking:
         sys.exit(1)
+
+
+def _sdp_text(v: dict) -> str:
+    """One-line description of an SDP violation dict (see :func:`_sdp_dict`)."""
+    return (
+        f"{v['source']} (I={v['source_instability']:.3f}) → "
+        f"{v['target']} (I={v['target_instability']:.3f})"
+    )
 
 
 def _annotation_level(severity: Severity) -> str:
@@ -905,6 +960,7 @@ def _emit_github_annotations(
     new_gods: list,
     regressions: list,
     sev,
+    new_sdp: list | None = None,
 ) -> None:
     """Print GitHub Actions workflow commands for each regression.
 
@@ -915,6 +971,7 @@ def _emit_github_annotations(
         new_gods: List of god module file paths.
         regressions: List of instability regression dicts.
         sev: :class:`~debtector.config.MetricsSeverity` instance.
+        new_sdp: List of new SDP violation dicts (see :func:`_sdp_dict`).
     """
     if _warns(new_cycles, sev.cycles):
         level = _annotation_level(sev.cycles)
@@ -938,12 +995,20 @@ def _emit_github_annotations(
             msg = f"Inestabilidad: {r['before']:.3f} → {r['after']:.3f}"
             print(f"::{level} file={safe_path},line=1::{msg}")
 
+    new_sdp = new_sdp or []
+    if _warns(new_sdp, sev.instability):
+        level = _annotation_level(sev.instability)
+        for v in new_sdp:
+            safe_path = _safe_annotation_path(v["source"])
+            print(f"::{level} file={safe_path},line=1::Violación SDP: {_sdp_text(v)}")
+
 
 def _emit_gitlab_report(
     new_cycles: list,
     new_gods: list,
     regressions: list,
     sev,
+    new_sdp: list | None = None,
 ) -> None:
     """Print a GitLab CI–friendly report for each regression.
 
@@ -955,6 +1020,7 @@ def _emit_gitlab_report(
         new_gods: List of god module file paths.
         regressions: List of instability regression dicts.
         sev: :class:`~debtector.config.MetricsSeverity` instance.
+        new_sdp: List of new SDP violation dicts (see :func:`_sdp_dict`).
     """
     ts = int(time.time())
 
@@ -987,6 +1053,17 @@ def _emit_gitlab_report(
             print(f"  {r['file_path']}  I: {r['before']:.3f} → {r['after']:.3f}")
         print(f"\x1b[0Ksection_end:{ts}:instability\r\x1b[0K")
 
+    new_sdp = new_sdp or []
+    if _warns(new_sdp, sev.instability):
+        label = "ERROR" if sev.instability == Severity.ERROR else "WARNING"
+        print(
+            f"\x1b[0Ksection_start:{ts}:sdp\r\x1b[0K"
+            f"[{label}] Nuevas violaciones SDP ({len(new_sdp)})"
+        )
+        for v in new_sdp:
+            print(f"  {_sdp_text(v)}")
+        print(f"\x1b[0Ksection_end:{ts}:sdp\r\x1b[0K")
+
 
 # ──────────────────────────────────────────────
 # Acoplamiento estructural (ex-metrics)
@@ -1014,10 +1091,12 @@ def cmd_coupling(args) -> None:
     store = _get_store(args.project)
     modules = compute_metrics(store)
     cycles = find_cycles(store)
-    gods = god_modules(store, percentile=cfg.metrics.thresholds.god_module_percentile)
+    gods = _configured_god_modules(store, cfg)
+    sdp = _configured_sdp_violations(store, cfg)
     store.close()
 
     god_paths = {m.file_path for m in gods}
+    unstable_paths = {v.target for v in sdp}
 
     if args.json:
         _json_out(
@@ -1029,11 +1108,13 @@ def cmd_coupling(args) -> None:
                         "fan_out": round(m.fan_out, 2),
                         "instability": round(m.instability, 3),
                         "god_module": m.file_path in god_paths,
+                        "unstable": m.file_path in unstable_paths,
                     }
                     for m in modules
                 ],
                 "cycles": cycles,
                 "god_modules": [m.file_path for m in gods],
+                "sdp_violations": [_sdp_dict(v) for v in sdp],
             }
         )
         return
@@ -1056,12 +1137,11 @@ def cmd_coupling(args) -> None:
     print(header)
     print("─" * len(header))
 
-    instability_warn = cfg.metrics.thresholds.instability_threshold
     for m in modules_sorted:
         flags = ""
         if m.file_path in god_paths:
             flags += " ● god"
-        if m.fan_in > 0 and m.instability >= instability_warn:
+        if m.file_path in unstable_paths:
             flags += " ⚠ inestable"
         print(
             f"{m.file_path:<{col_w}}  {m.fan_in:>6.1f}  {m.fan_out:>6.1f}"
@@ -1081,9 +1161,19 @@ def cmd_coupling(args) -> None:
 
     # God modules
     if gods:
-        print(f"\n● God modules (Ca > p{int(cfg.metrics.thresholds.god_module_percentile)}):")
+        thr = cfg.metrics.thresholds
+        print(
+            f"\n● God modules (Ca > p{int(thr.god_module_percentile)} "
+            f"y Ca >= {thr.god_module_min_ca:g}):"
+        )
         for m in gods:
             print(f"   {m.file_path}  Ca={m.fan_in:.1f}")
+
+    # Violaciones SDP: un módulo más estable depende de uno más inestable
+    if sdp:
+        print(f"\n⚠  Violaciones SDP ({len(sdp)}):")
+        for v in sdp:
+            print(f"   {_sdp_text(_sdp_dict(v))}")
 
 
 # Backward-compat alias — keeps existing imports and tests working
@@ -1393,8 +1483,9 @@ def cmd_report(args) -> None:
     store = _get_store(args.project)
     modules = compute_metrics(store)
     cycles = find_cycles(store)
-    gods = god_modules(store, percentile=cfg.metrics.thresholds.god_module_percentile)
+    gods = _configured_god_modules(store, cfg)
     god_paths = {m.file_path for m in gods}
+    unstable_paths = {v.target for v in _configured_sdp_violations(store, cfg)}
 
     # ── Behavioral coupling ──
     hotspots = compute_hotspots(
@@ -1412,14 +1503,9 @@ def cmd_report(args) -> None:
     bus = compute_bus_factor(store, root)
     store.close()
 
-    # Shared filter threshold used by both JSON and human output
-    instability_warn = cfg.metrics.thresholds.instability_threshold
-
     if args.json:
         flagged_modules = [
-            m
-            for m in modules
-            if m.file_path in god_paths or (m.fan_in > 0 and m.instability >= instability_warn)
+            m for m in modules if m.file_path in god_paths or m.file_path in unstable_paths
         ]
         _json_out(
             {
@@ -1430,7 +1516,7 @@ def cmd_report(args) -> None:
                         "fan_out": round(m.fan_out, 2),
                         "instability": round(m.instability, 3),
                         "god_module": m.file_path in god_paths,
-                        "instability_flag": m.fan_in > 0 and m.instability >= instability_warn,
+                        "instability_flag": m.file_path in unstable_paths,
                     }
                     for m in flagged_modules
                 ],
@@ -1478,7 +1564,7 @@ def cmd_report(args) -> None:
         flags = []
         if m.file_path in god_paths:
             flags.append("● god")
-        if m.fan_in > 0 and m.instability >= instability_warn:
+        if m.file_path in unstable_paths:
             flags.append("⚠ inestable")
         if flags:
             flagged.append((m, "  ".join(flags)))

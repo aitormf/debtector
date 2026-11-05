@@ -9,7 +9,8 @@ Calcula métricas estructurales a nivel de módulo (archivo):
 - Ciclos: componentes fuertemente conectados de tamaño > 1 sobre
   aristas IMPORTS_FROM y CALLS.
 - God modules: outliers estadísticos de Ca por encima del percentil 90
-  del proyecto (umbral relativo, no absoluto).
+  del proyecto y con un Ca mínimo absoluto (``god_module_min_ca``).
+- Violaciones SDP: dependencias de un módulo estable hacia uno más inestable.
 
 Las métricas se calculan sobre aristas IMPORTS_FROM del grafo.
 Los imports a paquetes externos (sin nodo File en el índice) también
@@ -469,12 +470,75 @@ def percentile_threshold(values: list[float], percentile: float) -> float:
     return statistics.quantiles(values, n=100, method="inclusive")[int(percentile) - 1]
 
 
-def god_modules(store: GraphStore, percentile: float = 90) -> list[ModuleMetrics]:
+@dataclass
+class SdpViolation:
+    """Dependencia ``source → target`` que viola el Stable Dependencies Principle.
+
+    Args:
+        source: Módulo que importa (el "más estable").
+        target: Módulo importado, más inestable que ``source``.
+        source_instability: I del módulo importador.
+        target_instability: I del módulo importado.
+    """
+
+    source: str
+    target: str
+    source_instability: float
+    target_instability: float
+
+
+def sdp_violations(store: GraphStore, margin: float = 0.0) -> list[SdpViolation]:
+    """Detecta violaciones del Stable Dependencies Principle (SDP).
+
+    Una violación es una arista ``IMPORTS_FROM`` entre dos módulos de
+    producción indexados ``A → B`` con ``I(B) > I(A) + margin``: un módulo más
+    estable depende de uno menos estable. Se usan las mismas aristas
+    resueltas que :func:`compute_metrics` para Ca/Ce. Las aristas
+    ``USES_TYPE`` no se consideran: su target es un nombre de tipo, no un
+    módulo resoluble.
+
+    Args:
+        store: GraphStore con el índice del proyecto.
+        margin: Diferencia mínima (estricta) de I para considerar violación.
+
+    Returns:
+        Violaciones únicas ordenadas por ``(source, target)``.
+    """
+    metrics = compute_metrics(store)
+    if not metrics:
+        return []
+    instability = {m.file_path: m.instability for m in metrics}
+    module_map = _build_module_map(set(instability))
+
+    rows = store._conn.execute(
+        "SELECT source_qualified, target_qualified, file_path FROM edges"
+        " WHERE kind = ? AND file_path NOT LIKE '../%'",
+        (EdgeKind.IMPORTS_FROM,),
+    ).fetchall()
+
+    pairs: set[tuple[str, str]] = set()
+    for r in rows:
+        src = r["source_qualified"]
+        tgt = _resolve_import_target(r["target_qualified"], r["file_path"], module_map)
+        if src != tgt and src in instability and tgt in instability:
+            pairs.add((src, tgt))
+
+    return [
+        SdpViolation(src, tgt, instability[src], instability[tgt])
+        for src, tgt in sorted(pairs)
+        if instability[tgt] > instability[src] + margin
+    ]
+
+
+def god_modules(
+    store: GraphStore, percentile: float = 90, min_ca: float = 0
+) -> list[ModuleMetrics]:
     """Detecta módulos dios: outliers estadísticos de fan-in (Ca).
 
     Un módulo es "dios" si su Ca supera el percentil ``percentile`` del
-    proyecto. El umbral es relativo al proyecto, no absoluto, para
-    adaptarse a bases de código de cualquier tamaño.
+    proyecto **y** alcanza el mínimo absoluto ``min_ca``. El percentil solo
+    marcaría siempre al 10% superior, incluso en un proyecto sano; el mínimo
+    absoluto evita marcar módulos con poco fan-in.
 
     Requiere al menos 2 módulos para que el cálculo tenga sentido;
     con menos módulos devuelve siempre una lista vacía.
@@ -482,6 +546,8 @@ def god_modules(store: GraphStore, percentile: float = 90) -> list[ModuleMetrics
     Args:
         store: GraphStore con el índice del proyecto.
         percentile: Percentil de Ca usado como umbral (por defecto 90).
+        min_ca: Ca mínimo (inclusivo) para ser módulo dios. 0 desactiva el
+            filtro; la CLI pasa el valor de ``god_module_min_ca``.
 
     Returns:
         Lista de :class:`ModuleMetrics` cuyos fan-in superan el umbral.
@@ -498,4 +564,4 @@ def god_modules(store: GraphStore, percentile: float = 90) -> list[ModuleMetrics
     threshold = percentile_threshold(fan_ins, percentile)
 
     # Solo son outliers los que estén estrictamente por encima del umbral
-    return [m for m in metrics if m.fan_in > threshold]
+    return [m for m in metrics if m.fan_in > threshold and m.fan_in >= min_ca]

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -102,7 +103,12 @@ class TestCouplingOutput:
     def test_report_json_flags_follow_sdp(self, tmp_path: Path, capsys) -> None:
         _seed(str(tmp_path), _VIOLATING)
         args = argparse.Namespace(project=str(tmp_path), json=True, limit=None)
-        cmd_report(args)
+        with (
+            patch("debtector.cli.compute_hotspots", return_value=[]),
+            patch("debtector.cli.compute_temporal_coupling", return_value=[]),
+            patch("debtector.cli.compute_bus_factor", return_value=[]),
+        ):
+            cmd_report(args)
         data = json.loads(capsys.readouterr().out)
         flagged = {m["file_path"]: m["instability_flag"] for m in data["modules"]}
         assert flagged == {"src/b.py": True}
