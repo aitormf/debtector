@@ -404,6 +404,25 @@ def compute_temporal_coupling(
     return results
 
 
+def list_authors(project_root: str | Path) -> set[str]:
+    """Devuelve los autores distintos del historial de git bajo *project_root*.
+
+    Usa ``git log`` (no ``git blame``): no cuenta líneas sin commitear ni
+    depende de qué líneas sobreviven. Respeta ``.mailmap``.
+
+    Args:
+        project_root: Directorio raíz del repositorio git (o subdirectorio).
+
+    Returns:
+        Conjunto de nombres de autor. Vacío si no hay historial.
+
+    Raises:
+        RuntimeError: Si git no está disponible o no es un repositorio.
+    """
+    output = _run_git(["git", "log", "--format=%aN", "--", "."], project_root)
+    return {line.strip() for line in output.splitlines() if line.strip()}
+
+
 def compute_bus_factor(
     store: GraphStore,  # type: ignore[name-defined]  # noqa: F821
     project_root: str | Path,

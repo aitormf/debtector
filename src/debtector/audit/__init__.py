@@ -6,7 +6,12 @@ See ``docs/decisions/003-audit-as-second-surface.md`` for the design rationale.
 from __future__ import annotations
 
 from .cycle_priority import PrioritizedCycle, prioritize_cycles
-from .health_score import HealthScore, SeverityCounts, compute_health_score
+from .health_score import (
+    HealthScore,
+    SeverityCounts,
+    compute_health_score,
+    select_actionable_hotspots,
+)
 from .lcom4 import compute_lcom4
 from .testrisk import (
     CohesionFinding,
@@ -23,6 +28,7 @@ __all__ = [
     "SeverityCounts",
     "TestRiskFinding",
     "compute_health_score",
+    "select_actionable_hotspots",
     "compute_lcom4",
     "critical_knowledge_concentration",
     "prioritize_cycles",

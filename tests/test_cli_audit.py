@@ -282,10 +282,10 @@ def test_cmd_audit_cohesion_does_not_affect_health_score(cohesion_project: Path,
 
     seen: list = []
 
-    def spy(findings):
+    def spy(findings, modules):
         findings = list(findings)
         seen.extend(findings)
-        return compute_health_score(findings)
+        return compute_health_score(findings, modules)
 
     with mock.patch("debtector.cli.compute_health_score", side_effect=spy):
         _run_audit_json(cohesion_project, capsys)

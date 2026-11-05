@@ -443,6 +443,31 @@ def inheritance_metrics(store: GraphStore) -> list[InheritanceMetrics]:
     return results
 
 
+def percentile_threshold(values: list[float], percentile: float) -> float:
+    """Return the ``percentile``-th percentile of *values*.
+
+    Shared by god-module detection and the audit hotspot filter so both use
+    the same project-relative cut.
+
+    Args:
+        values: Sample; at least 2 points are needed for a real percentile.
+        percentile: Percentile in ``[1, 99]``.
+
+    Returns:
+        The percentile value; with a single point, that point.
+
+    Raises:
+        ValueError: If *percentile* is outside ``[1, 99]`` or *values* is empty.
+    """
+    if not (1 <= percentile <= 99):
+        raise ValueError(f"percentile must be in [1, 99], got {percentile}")
+    if not values:
+        raise ValueError("values must not be empty")
+    if len(values) < 2:
+        return values[0]
+    return statistics.quantiles(values, n=100)[int(percentile) - 1]
+
+
 def god_modules(store: GraphStore, percentile: float = 90) -> list[ModuleMetrics]:
     """Detecta módulos dios: outliers estadísticos de fan-in (Ca).
 
@@ -469,7 +494,7 @@ def god_modules(store: GraphStore, percentile: float = 90) -> list[ModuleMetrics
         return []
 
     fan_ins = [m.fan_in for m in metrics]
-    threshold = statistics.quantiles(fan_ins, n=100)[int(percentile) - 1]
+    threshold = percentile_threshold(fan_ins, percentile)
 
     # Solo son outliers los que estén estrictamente por encima del umbral
     return [m for m in metrics if m.fan_in > threshold]

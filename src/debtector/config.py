@@ -24,6 +24,14 @@ Ejemplo de ``debtector.toml``:
     god_modules = "warning"
     instability = "warning"
     inheritance = "info"
+
+    # Calibración de ``debtector audit`` (todo opcional; valores por defecto).
+    [audit.thresholds]
+    testrisk_high_ce    = 10   # Ce a partir del cual un módulo sin tests es "alto acoplamiento"
+    testrisk_high_churn = 5    # commits a partir de los cuales un módulo sin tests es hotspot
+    testrisk_high_ca    = 10   # Ca a partir del cual bus factor 1 es "conocimiento crítico"
+    hotspot_percentile  = 90   # percentil de hotspot_score que debe alcanzar un hotspot
+    hotspot_min_score   = 20   # hotspot_score mínimo absoluto (commits x (Ca + Ce))
 """
 
 from __future__ import annotations
@@ -32,6 +40,9 @@ import tomllib
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+
+from .audit.health_score import DEFAULT_HOTSPOT_MIN_SCORE, DEFAULT_HOTSPOT_PERCENTILE
+from .audit.testrisk import DEFAULT_HIGH_CA, DEFAULT_HIGH_CE, DEFAULT_HIGH_CHURN
 
 
 class Severity(StrEnum):
@@ -94,6 +105,31 @@ class MetricsConfig:
 
 
 @dataclass
+class AuditThresholds:
+    """Umbrales de calibración de ``debtector audit`` (``[audit.thresholds]``).
+
+    Args:
+        testrisk_high_ce: Ce a partir del cual un módulo sin tests se marca
+            como «alto acoplamiento». Default: 10.
+        testrisk_high_churn: Commits a partir de los cuales un módulo sin
+            tests se marca como hotspot. Default: 5.
+        testrisk_high_ca: Ca a partir del cual un módulo con bus factor 1 es
+            «conocimiento crítico». Default: 10.
+        hotspot_percentile: Percentil (1-99) del ``hotspot_score`` del proyecto
+            que debe alcanzar un hotspot para puntuar en el health score.
+            Default: 90.
+        hotspot_min_score: ``hotspot_score`` mínimo absoluto (commits x
+            (Ca + Ce)) para puntuar en el health score. Default: 20.
+    """
+
+    testrisk_high_ce: float = DEFAULT_HIGH_CE
+    testrisk_high_churn: int = DEFAULT_HIGH_CHURN
+    testrisk_high_ca: float = DEFAULT_HIGH_CA
+    hotspot_percentile: float = DEFAULT_HOTSPOT_PERCENTILE
+    hotspot_min_score: float = DEFAULT_HOTSPOT_MIN_SCORE
+
+
+@dataclass
 class DebtectorConfig:
     """Configuración raíz de Debtector.
 
@@ -105,9 +141,11 @@ class DebtectorConfig:
             Si apuntan fuera del directorio indexado, el indexador también
             las parsea para construir las aristas COVERS. Por defecto vacío:
             solo se usan las convenciones. Ejemplo: ``test_paths = ["tests"]``.
+        audit: Umbrales de calibración de ``debtector audit``.
     """
 
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
+    audit: AuditThresholds = field(default_factory=AuditThresholds)
     test_paths: list[str] = field(default_factory=list)
 
 
@@ -177,5 +215,37 @@ def load_config(project_root: str | Path) -> DebtectorConfig:
 
     return DebtectorConfig(
         metrics=MetricsConfig(thresholds=thresholds, severity=severity),
+        audit=_load_audit_thresholds(data.get("audit", {}).get("thresholds", {})),
         test_paths=list(test_paths),
     )
+
+
+def _load_audit_thresholds(data: dict) -> AuditThresholds:
+    """Valida y construye :class:`AuditThresholds` desde ``[audit.thresholds]``.
+
+    Args:
+        data: Tabla ``[audit.thresholds]`` ya parseada (vacía si no existe).
+
+    Returns:
+        Umbrales con los valores del toml fusionados con los por defecto.
+
+    Raises:
+        ValueError: Si un valor no es numérico, es negativo o el percentil
+            queda fuera de ``[1, 99]``.
+    """
+    defaults = AuditThresholds()
+    values: dict[str, float] = {}
+    for key in AuditThresholds.__dataclass_fields__:
+        value = data.get(key, getattr(defaults, key))
+        if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
+            raise ValueError(
+                f"`audit.thresholds.{key}` en debtector.toml debe ser un número >= 0, "
+                f"recibido {value!r}."
+            )
+        values[key] = value
+    if not 1 <= values["hotspot_percentile"] <= 99:
+        raise ValueError(
+            "`audit.thresholds.hotspot_percentile` en debtector.toml debe estar en [1, 99], "
+            f"recibido {values['hotspot_percentile']!r}."
+        )
+    return AuditThresholds(**values)
