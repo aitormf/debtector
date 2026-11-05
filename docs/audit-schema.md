@@ -37,7 +37,7 @@ Object. Aggregate counts and the health score for the whole index.
 
 | field          | type | meaning                                                 |
 |----------------|------|---------------------------------------------------------|
-| `modules`      | int  | Number of indexed files.                                |
+| `modules`      | int  | Indexed files, excluding `test_paths` files outside the index. |
 | `cycles`       | int  | Number of strongly-connected components of size > 1.    |
 | `classes`      | int  | Number of indexed `Class` nodes.                        |
 | `health_score` | int  | Aggregate score in `[0, 100]` (see Health score below). |
@@ -162,7 +162,7 @@ hotspots with `score` at or above **both** the project's `hotspot_percentile` (d
 the hotspot scores **and** `hotspot_min_score` (default 20, i.e. commits × (Ca + Ce), for
 example 5 commits on a module with coupling 4) count towards the score.
 
-**Single author.** If the whole commit history has exactly one author, bus factor 1 is
+**Single author.** If the whole repository's commit history (not just the indexed directory) has exactly one author, bus factor 1 is
 meaningless: `critical_knowledge_concentration` entries are still listed in `testRisk` (and
 `busFactor` is unchanged) but do not count towards the score.
 

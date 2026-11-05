@@ -131,7 +131,7 @@ def test_hotspot_config_reaches_the_score(
 ) -> None:
     repo = _make_repo(tmp_path, second_author=False)
     (repo / "debtector.toml").write_text(
-        "[audit.thresholds]\nhotspot_percentile = 90\nhotspot_min_score = 1\n", encoding="utf-8"
+        "[audit.thresholds]\nhotspot_percentile = 90\nhotspot_min_score = 5\n", encoding="utf-8"
     )
 
     out = _audit(repo, capsys)

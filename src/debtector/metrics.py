@@ -465,7 +465,8 @@ def percentile_threshold(values: list[float], percentile: float) -> float:
         raise ValueError("values must not be empty")
     if len(values) < 2:
         return values[0]
-    return statistics.quantiles(values, n=100)[int(percentile) - 1]
+    # "inclusive" keeps the result within [min, max]; "exclusive" extrapolates on small samples.
+    return statistics.quantiles(values, n=100, method="inclusive")[int(percentile) - 1]
 
 
 def god_modules(store: GraphStore, percentile: float = 90) -> list[ModuleMetrics]:
