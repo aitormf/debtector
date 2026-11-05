@@ -204,6 +204,15 @@ class TestAuditTestRisk:
         assert tr["status"] == "ok"
         assert tr["untested_high_coupling"] == ["risky.py"]
 
+    def test_summary_excludes_external_tests(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _make_project(tmp_path, with_tests=True, toml='test_paths = ["tests"]\n')
+        _index(tmp_path, "src")
+        out = _audit_json(tmp_path, capsys)
+        assert out["summary"]["modules"] == 2
+        assert {c["file_path"] for c in out["coupling"]} == {"service.py", "risky.py"}
+
     def test_no_warning_when_tests_exist(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:

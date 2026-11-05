@@ -483,7 +483,7 @@ def cmd_audit(args) -> None:
     cycles = find_cycles(store)
     hotspots = compute_hotspots(store, root)
     bus_factor = compute_bus_factor(store, root)
-    inheritance = inheritance_metrics(store)
+    inheritance = [i for i in inheritance_metrics(store) if not i.qualified_name.startswith("../")]
     churn = parse_churn(root)
 
     # testRisk: without tests every file looks "uncovered", so the untested
@@ -503,6 +503,8 @@ def cmd_audit(args) -> None:
     # Compute LCOM4 for each class
     cohesion = []
     for c in store.get_nodes_by_kind(NodeKind.CLASS):
+        if c.file_path.startswith("../"):  # tests added via test_paths
+            continue
         lcom4 = compute_lcom4(store, c.qualified_name)
         cohesion.append(
             CohesionFinding(
@@ -520,6 +522,11 @@ def cmd_audit(args) -> None:
     # Health score and stats before closing store
     health = compute_health_score(tr_findings + hotspots)
     stats = store.get_stats()
+    # Tests added via test_paths (outside the index root) are not modules/classes.
+    n_modules = stats.files_count - store.count_external_nodes(NodeKind.FILE)
+    n_classes = stats.nodes_by_kind.get(NodeKind.CLASS, 0) - store.count_external_nodes(
+        NodeKind.CLASS
+    )
 
     # Prioritize cycles and detect god modules before closing store
     prioritized_cycles = prioritize_cycles(store)
@@ -548,9 +555,9 @@ def cmd_audit(args) -> None:
         output = {
             "schema_version": 1,
             "summary": {
-                "modules": stats.files_count,
+                "modules": n_modules,
                 "cycles": len(cycles),
-                "classes": stats.nodes_by_kind.get(NodeKind.CLASS, 0),
+                "classes": n_classes,
                 "health_score": health.score,
             },
             "coupling": limit(
@@ -625,7 +632,7 @@ def cmd_audit(args) -> None:
         _json_out(output)
     else:
         print(f"\n┌─ Audit Summary (health: {health.score}/100)")
-        print(f"│  modules={stats.files_count}  cycles={len(cycles)}")
+        print(f"│  modules={n_modules}  cycles={len(cycles)}")
         print(f"│  critical={health.counts.critical}  high={health.counts.high}")
         print("└─\n")
         if not tests_found:

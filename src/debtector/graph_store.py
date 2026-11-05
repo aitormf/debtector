@@ -997,6 +997,22 @@ class GraphStore:
 
     # ══════════════════════════════════════════
 
+    def count_external_nodes(self, kind: str) -> int:
+        """Count nodes of *kind* stored outside the index root (``../`` paths).
+
+        These come only from ``test_paths`` that lie outside the indexed directory.
+
+        Args:
+            kind: Node kind, e.g. ``"File"`` or ``"Class"``.
+
+        Returns:
+            Number of matching nodes.
+        """
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM nodes WHERE kind = ? AND file_path LIKE '../%'", (kind,)
+        ).fetchone()
+        return int(row[0])
+
     def get_stats(self) -> GraphStats:
         """Return aggregate statistics for the current index.
 
