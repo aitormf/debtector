@@ -80,13 +80,27 @@ Array of per-class LCOM4 cohesion entries.
 ## `testRisk`
 
 Object with three buckets cross-joining coverage, coupling, churn and bus
-factor.
+factor, plus a `status` flag.
 
 | field                              | type            | meaning                                          |
 |------------------------------------|-----------------|--------------------------------------------------|
+| `status`                           | string          | `"ok"`, or `"skipped"` when no test files were found (see below). |
+| `reason`                           | string          | Only present when `status` is `"skipped"`: `"no_tests_found"`. |
 | `untested_high_coupling`           | array of string | Files with no `COVERS` and Ce above threshold.   |
 | `untested_hotspots`                | array of string | Files with no `COVERS` and churn above threshold.|
 | `critical_knowledge_concentration` | array of string | Bus factor 1 files with Ca above threshold.      |
+
+When no test file is indexed (neither files matching the test conventions nor
+files under `test_paths` in `debtector.toml`), every file would look
+"uncovered". In that case the `untested_*` joins are not computed: `status` is
+`"skipped"`, `reason` is `"no_tests_found"`, `untested_high_coupling` and
+`untested_hotspots` are empty and they do not affect `health_score`.
+`critical_knowledge_concentration` does not depend on tests and is still
+computed. Consumers that predate `status` can ignore it: the three buckets keep
+their shape. In human output the same condition prints a warning on stderr.
+
+Files under `test_paths` that lie outside the indexed directory are stored with
+a `../`-prefixed path and are excluded from `coupling` and `summary` metrics.
 
 ## `hotspots`
 
@@ -148,7 +162,7 @@ methods through `CALLS`, not through shared attributes, so cohesive classes can 
   "cohesion": [
     {"qualified_name": "src/app.py::Service", "lcom4": 1, "methods_count": 4, "candidate_to_split": false}
   ],
-  "testRisk": {"untested_high_coupling": [], "untested_hotspots": [], "critical_knowledge_concentration": []},
+  "testRisk": {"status": "ok", "untested_high_coupling": [], "untested_hotspots": [], "critical_knowledge_concentration": []},
   "hotspots": [],
   "busFactor": [],
   "inheritance": []

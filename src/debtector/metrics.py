@@ -174,9 +174,11 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     """
     conn = store._conn
 
-    # Obtener todos los nodos File
+    # Obtener todos los nodos File. Los archivos fuera de la raíz indexada
+    # (``../...``) son los tests añadidos vía ``test_paths``: no son módulos
+    # de producción y sus aristas no cuentan para Ca/Ce.
     file_rows = conn.execute(
-        "SELECT qualified_name FROM nodes WHERE kind = ?",
+        "SELECT qualified_name FROM nodes WHERE kind = ? AND file_path NOT LIKE '../%'",
         (NodeKind.FILE,),
     ).fetchall()
 
@@ -192,7 +194,8 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     ca_map: dict[str, float] = {}
 
     import_rows = conn.execute(
-        "SELECT source_qualified, target_qualified, file_path FROM edges WHERE kind = ?",
+        "SELECT source_qualified, target_qualified, file_path FROM edges"
+        " WHERE kind = ? AND file_path NOT LIKE '../%'",
         (EdgeKind.IMPORTS_FROM,),
     ).fetchall()
 
@@ -208,7 +211,7 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     # Ce adicional: aristas USES_TYPE salientes (peso USES_TYPE_WEIGHT)
     ut_ce_rows = conn.execute(
         "SELECT source_qualified, COUNT(*) AS cnt FROM edges"
-        " WHERE kind = ? GROUP BY source_qualified",
+        " WHERE kind = ? AND file_path NOT LIKE '../%' GROUP BY source_qualified",
         (EdgeKind.USES_TYPE,),
     ).fetchall()
     for r in ut_ce_rows:
@@ -220,7 +223,7 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     # Solo cuentan si el target es un nodo File indexado (resolución interna).
     ut_ca_rows = conn.execute(
         "SELECT target_qualified, COUNT(*) AS cnt FROM edges"
-        " WHERE kind = ? GROUP BY target_qualified",
+        " WHERE kind = ? AND file_path NOT LIKE '../%' GROUP BY target_qualified",
         (EdgeKind.USES_TYPE,),
     ).fetchall()
     for r in ut_ca_rows:

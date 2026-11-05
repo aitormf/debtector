@@ -39,11 +39,14 @@ class ParserRegistry:
                 return parser
         return None
 
-    def parse(self, file_path: str) -> tuple[list[NodeInfo], list[EdgeInfo]] | None:
+    def parse(
+        self, file_path: str, is_test: bool | None = None
+    ) -> tuple[list[NodeInfo], list[EdgeInfo]] | None:
         """Parse *file_path* using the appropriate registered parser.
 
         Args:
             file_path: Absolute path to the source file.
+            is_test: Test classification forced by the caller (``None`` = by filename).
 
         Returns:
             ``(nodes, edges)`` tuple on success, or ``None`` if no parser
@@ -51,7 +54,7 @@ class ParserRegistry:
         """
         parser = self.get_parser(file_path)
         if parser:
-            return parser.parse(file_path)
+            return parser.parse(file_path, is_test)
         return None
 
     @property

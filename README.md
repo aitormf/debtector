@@ -264,6 +264,23 @@ inheritance = "info"     # info only
 
 Severities: `error` (exit 1) · `warning` (prints, exit 0) · `info` (silent, exit 0).
 
+### Test paths (`debtector.toml`)
+
+`audit` reports `testRisk` findings for files with no incoming `COVERS` edges. Test
+files are detected by convention (`test_*`, `*_test.py`, `*.spec.ts`, `tests/`...). If your
+tests live elsewhere, or outside the directory you index (`debtector index ./src` with tests
+in `./tests`), list them, relative to the project root:
+
+```toml
+test_paths = ["tests"]
+```
+
+Files under `test_paths` are test files in addition to the conventions, and are indexed even
+when outside the indexed directory (they are not counted as modules in coupling metrics).
+If no tests are found at all, `audit` skips the `untested *` findings (they do not affect the
+health score), prints a warning on stderr and reports `"testRisk": {"status": "skipped", ...}`
+in JSON.
+
 ---
 
 ## Supported languages
