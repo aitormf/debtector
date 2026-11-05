@@ -275,10 +275,8 @@ def test_cmd_audit_cohesion_lists_every_class(cohesion_project: Path, capsys) ->
     assert by_name["mod.py::Splittable"]["candidate_to_split"] is True
 
 
-def test_cmd_audit_only_split_candidates_affect_health_score(
-    cohesion_project: Path, capsys
-) -> None:
-    """Cohesive classes must not be passed to the health score."""
+def test_cmd_audit_cohesion_does_not_affect_health_score(cohesion_project: Path, capsys) -> None:
+    """Cohesion is informational: LCOM4 ignores shared attributes, so no class is scored."""
     from debtector.audit.health_score import compute_health_score
     from debtector.audit.testrisk import CohesionFinding
 
@@ -293,7 +291,7 @@ def test_cmd_audit_only_split_candidates_affect_health_score(
         _run_audit_json(cohesion_project, capsys)
 
     scored = [f.qualified_name for f in seen if isinstance(f, CohesionFinding)]
-    assert scored == ["mod.py::Splittable"]
+    assert scored == []
 
 
 def test_cmd_audit_computes_lcom4_once_per_class(cohesion_project: Path, capsys) -> None:
