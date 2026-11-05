@@ -7,13 +7,14 @@ rule set mirrors radon. JS/TS expectations follow the documented McCabe rules.
 from __future__ import annotations
 
 import pytest
+from tree_sitter_language_pack import get_parser
+
 from debtector.parser.complexity import (
     JS_RULES,
     PYTHON_RULES,
     ComplexityRules,
     cyclomatic_complexity,
 )
-from tree_sitter_language_pack import get_parser
 
 
 def _first(node, types: set[str]):
