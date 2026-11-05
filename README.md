@@ -281,6 +281,29 @@ If no tests are found at all, `audit` skips the `untested *` findings (they do n
 health score), prints a warning on stderr and reports `"testRisk": {"status": "skipped", ...}`
 in JSON.
 
+### Audit calibration (`debtector.toml`)
+
+The `audit` health score is normalised by project size (one `high` finding per module on
+average scores 0) and only counts *actionable* hotspots: those at or above the project's
+`hotspot_percentile` of the hotspot score and above `hotspot_min_score`. In a single-author
+repository `critical_knowledge_concentration` is listed but not scored. Thresholds (defaults
+shown):
+
+```toml
+[audit.thresholds]
+testrisk_high_ce    = 10   # untested_high_coupling: Ce >=
+testrisk_high_churn = 5    # untested_hotspots: commits >=
+testrisk_high_ca    = 10   # critical_knowledge_concentration: Ca >=
+hotspot_percentile  = 90   # percentile [1, 99] of the project's hotspot scores
+hotspot_min_score   = 20   # absolute minimum: commits x (Ca + Ce)
+```
+
+Authors are counted from the whole repository history by name (honouring `.mailmap`); bot
+accounts (names ending in `[bot]`) are ignored. If one person commits under several name
+variants, add a `.mailmap` so they count once; otherwise the repository looks multi-author.
+
+See [`docs/audit-schema.md`](docs/audit-schema.md#health-score) for the full formula.
+
 ---
 
 ## Supported languages

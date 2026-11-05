@@ -28,6 +28,7 @@ from .audit import (
     compute_lcom4,
     critical_knowledge_concentration,
     prioritize_cycles,
+    select_actionable_hotspots,
     untested_high_coupling,
     untested_hotspots,
 )
@@ -36,6 +37,8 @@ from .git_history import (
     compute_bus_factor,
     compute_hotspots,
     compute_temporal_coupling,
+    is_shallow_repository,
+    list_authors,
     parse_churn,
 )
 from .graph_store import GraphStore
@@ -466,6 +469,30 @@ def _get_uncovered_files(store: GraphStore) -> set[str]:
     return {s.file_path for s in symbols}
 
 
+# Meaning of summary.health_score: 2 = normalised by size, actionable hotspots only.
+_HEALTH_SCORE_VERSION = 2
+
+
+def _single_author(root: str | Path) -> bool:
+    """Return True when the whole commit history has exactly one author.
+
+    Args:
+        root: Directory the audit's history commands run in.
+
+    Returns:
+        ``False`` when there are several authors or the history is unavailable.
+    """
+    try:
+        if is_shallow_repository(root):
+            # A shallow clone (CI default) shows only recent commits: unknown, not single.
+            log.warning("authors_unknown_shallow_clone", root=str(root))
+            return False
+        return len(list_authors(root)) == 1
+    except RuntimeError:
+        log.warning("authors_unavailable", root=str(root), exc_info=True)
+        return False
+
+
 def cmd_audit(args) -> None:
     """Audit surface: second presenter for tech lead review.
 
@@ -479,6 +506,7 @@ def cmd_audit(args) -> None:
     _auto_index(args.project)
     root = _index_root(args.project)
     store = _get_store(args.project)
+    thr = load_config(args.project).audit
 
     # Compute core metrics
     module_metrics = compute_metrics(store)
@@ -491,12 +519,16 @@ def cmd_audit(args) -> None:
     # testRisk: without tests every file looks "uncovered", so the untested
     # joins would be noise; skip them (and keep the knowledge join).
     tests_found = store.count_test_files() > 0
-    tr_findings = critical_knowledge_concentration(bus_factor, module_metrics)
+    tr_findings = critical_knowledge_concentration(
+        bus_factor, module_metrics, ca_threshold=thr.testrisk_high_ca
+    )
     if tests_found:
         uncovered_files = _get_uncovered_files(store)
         tr_findings = (
-            untested_high_coupling(uncovered_files, module_metrics)
-            + untested_hotspots(uncovered_files, churn)
+            untested_high_coupling(
+                uncovered_files, module_metrics, ce_threshold=thr.testrisk_high_ce
+            )
+            + untested_hotspots(uncovered_files, churn, churn_threshold=thr.testrisk_high_churn)
             + tr_findings
         )
     else:
@@ -522,10 +554,19 @@ def cmd_audit(args) -> None:
     # not shared attributes, so most cohesive classes look like split candidates.
 
     # Health score and stats before closing store
-    health = compute_health_score(tr_findings + hotspots)
     stats = store.get_stats()
     # Tests added via test_paths (outside the index root) are not modules/classes.
     n_modules = stats.files_count - store.count_external_nodes(NodeKind.FILE)
+    # With a single author in the whole history, bus factor 1 says nothing.
+    scored_findings = list(tr_findings)
+    if _single_author(root):
+        scored_findings = [
+            f for f in scored_findings if f.label != "critical knowledge concentration"
+        ]
+    scored_findings += select_actionable_hotspots(
+        hotspots, percentile=thr.hotspot_percentile, min_score=thr.hotspot_min_score
+    )
+    health = compute_health_score(scored_findings, modules=n_modules)
     n_classes = stats.nodes_by_kind.get(NodeKind.CLASS, 0) - store.count_external_nodes(
         NodeKind.CLASS
     )
@@ -561,6 +602,7 @@ def cmd_audit(args) -> None:
                 "cycles": len(cycles),
                 "classes": n_classes,
                 "health_score": health.score,
+                "health_score_version": _HEALTH_SCORE_VERSION,
             },
             "coupling": limit(
                 [

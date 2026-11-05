@@ -37,10 +37,11 @@ Object. Aggregate counts and the health score for the whole index.
 
 | field          | type | meaning                                                 |
 |----------------|------|---------------------------------------------------------|
-| `modules`      | int  | Number of indexed files.                                |
+| `modules`      | int  | Indexed files, excluding `test_paths` files outside the index. |
 | `cycles`       | int  | Number of strongly-connected components of size > 1.    |
 | `classes`      | int  | Number of indexed `Class` nodes.                        |
 | `health_score` | int  | Aggregate score in `[0, 100]` (see Health score below). |
+| `health_score_version` | int | Meaning of `health_score`; currently `2`. Absent in version 1. |
 
 ## `coupling`
 
@@ -134,27 +135,63 @@ Array of class-level inheritance metrics.
 
 ## Health score
 
-Severity buckets and 0-100 score. A clean graph scores `100`.
+Severity buckets and 0-100 score. A project with no scored findings scores `100`.
+This is **health score version 2** (`summary.health_score_version`).
 
-| severity   | source signals                                                            | penalty |
+| severity   | source signals (scored)                                                   | penalty |
 |------------|---------------------------------------------------------------------------|---------|
-| `critical` | cycles, `critical_knowledge_concentration`                                | 15      |
+| `critical` | `critical_knowledge_concentration` (not in single-author repos, see below) | 15      |
 | `high`     | `untested_high_coupling`, `untested_hotspots`                             | 5       |
-| `medium`   | `god_module` entries, hotspots                                            | 2       |
-| `low`      | single-author files (`busFactor` rows)                                    | 0.5     |
+| `medium`   | actionable hotspots (see below)                                           | 2       |
+| `low`      | none                                                                      | 0.5     |
 
-`score = max(0, 100 − Σ penalty × count)` (rounded to int).
+Not scored: `cycles`, `god_module` entries, `busFactor` rows (single-author files) and
+`cohesion`. They are reported in their sections only. `cohesion` is informational because
+`lcom4` only links methods through `CALLS`, not through shared attributes, so cohesive
+classes can show `lcom4 > 1`.
 
-`cohesion` entries are informational and do not affect the score: `lcom4` only links
-methods through `CALLS`, not through shared attributes, so cohesive classes can show
-`lcom4 > 1`.
+**Formula.** The penalty is normalised by project size:
+
+`score = max(0, 100 − 100 · Σ penalty × count / (5 · modules))` (rounded to int),
+
+where `modules` is `summary.modules`. On average one `high` finding per module scores `0`.
+With `modules == 0` the score is `100`.
+
+**Actionable hotspots.** The `hotspots` section keeps listing the top-N as before, but only
+hotspots with `score` at or above **both** the project's `hotspot_percentile` (default 90) of
+the hotspot scores **and** `hotspot_min_score` (default 20, i.e. commits × (Ca + Ce), for
+example 5 commits on a module with coupling 4) count towards the score.
+
+**Single author.** If the whole repository's commit history (not just the indexed directory) has exactly one author, bus factor 1 is
+meaningless. Shallow clones (e.g. `fetch-depth: 1` in CI) never get this exemption, since
+their history is truncated and authorship is unknown. Bot accounts (names ending in `[bot]`,
+e.g. `github-actions[bot]`) are ignored when counting authors. Authors are counted by name as
+`git log` reports it (honouring `.mailmap`): a person with several name variants should add a
+`.mailmap` so they count once. In the exempt case, `critical_knowledge_concentration` entries are still listed in `testRisk` (and
+`busFactor` is unchanged) but do not count towards the score.
+
+**Configuration** (`debtector.toml`, all optional):
+
+```toml
+[audit.thresholds]
+testrisk_high_ce    = 10   # untested_high_coupling: Ce >=
+testrisk_high_churn = 5    # untested_hotspots: commits >=
+testrisk_high_ca    = 10   # critical_knowledge_concentration: Ca >=
+hotspot_percentile  = 90   # in [1, 99]
+hotspot_min_score   = 20
+```
+
+**Versioning.** Version 2 changes what `health_score` means (scores are not comparable with
+version 1). Rather than bump `schema_version` (the shape of the payload is unchanged), the
+additive field `summary.health_score_version` (`2`) lets consumers detect it; its absence
+means version 1.
 
 ## Example payload
 
 ```json
 {
   "schema_version": 1,
-  "summary": {"modules": 12, "cycles": 0, "classes": 4, "health_score": 92},
+  "summary": {"modules": 12, "cycles": 0, "classes": 4, "health_score": 92, "health_score_version": 2},
   "coupling": [
     {"file_path": "src/app.py", "fan_in": 5, "fan_out": 3, "instability": 0.375, "god_module": false}
   ],

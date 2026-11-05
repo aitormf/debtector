@@ -115,3 +115,45 @@ class TestConfigDataclasses:
     def test_severity_dataclass(self) -> None:
         s = MetricsSeverity()
         assert hasattr(s, "cycles")
+
+
+class TestAuditThresholds:
+    """``[audit.thresholds]`` in debtector.toml feeds the audit calibration."""
+
+    def test_defaults(self, tmp_path: Path) -> None:
+        thr = load_config(tmp_path).audit
+
+        assert thr.testrisk_high_ce == 10.0
+        assert thr.testrisk_high_churn == 5
+        assert thr.testrisk_high_ca == 10.0
+        assert thr.hotspot_percentile == 90
+        assert thr.hotspot_min_score == 20
+
+    def test_overrides_and_partial_defaults(self, tmp_path: Path) -> None:
+        (tmp_path / "debtector.toml").write_text(
+            "[audit.thresholds]\ntestrisk_high_churn = 8\nhotspot_percentile = 75\n"
+            "hotspot_min_score = 40\n",
+            encoding="utf-8",
+        )
+
+        thr = load_config(tmp_path).audit
+
+        assert thr.testrisk_high_churn == 8
+        assert thr.hotspot_percentile == 75
+        assert thr.hotspot_min_score == 40
+        assert thr.testrisk_high_ce == 10.0  # untouched keys keep their default
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "hotspot_percentile = 0",
+            "hotspot_percentile = 100",
+            "hotspot_min_score = -1",
+            'testrisk_high_ce = "ten"',
+        ],
+    )
+    def test_invalid_values_raise(self, tmp_path: Path, body: str) -> None:
+        (tmp_path / "debtector.toml").write_text(f"[audit.thresholds]\n{body}\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="audit.thresholds"):
+            load_config(tmp_path)

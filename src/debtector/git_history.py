@@ -404,6 +404,46 @@ def compute_temporal_coupling(
     return results
 
 
+def is_shallow_repository(project_root: str | Path) -> bool:
+    """Indica si el repositorio es un clon superficial (``--depth``).
+
+    Args:
+        project_root: Directorio dentro del repositorio git.
+
+    Returns:
+        ``True`` si el historial está truncado.
+
+    Raises:
+        RuntimeError: Si git no está disponible o no es un repositorio.
+    """
+    return _run_git(["git", "rev-parse", "--is-shallow-repository"], project_root).strip() == "true"
+
+
+def list_authors(project_root: str | Path) -> set[str]:
+    """Devuelve los autores distintos del historial de todo el repositorio.
+
+    Usa ``git log`` (no ``git blame``): no cuenta líneas sin commitear ni
+    depende de qué líneas sobreviven. Respeta ``.mailmap``. Ignora cuentas bot (nombres acabados
+    en ``[bot]``, p.ej. ``github-actions[bot]``). Cuenta todo el
+    repositorio, no solo el subdirectorio indexado: quien contribuye fuera
+    de él sigue siendo un autor más del equipo.
+
+    Args:
+        project_root: Directorio dentro del repositorio git (puede ser un
+            subdirectorio; se resuelve la raíz del repositorio).
+
+    Returns:
+        Conjunto de nombres de autor. Vacío si no hay historial.
+
+    Raises:
+        RuntimeError: Si git no está disponible o no es un repositorio.
+    """
+    top = _run_git(["git", "rev-parse", "--show-toplevel"], project_root).strip()
+    output = _run_git(["git", "log", "--format=%aN"], top)
+    names = {line.strip() for line in output.splitlines() if line.strip()}
+    return {n for n in names if not n.endswith("[bot]")}
+
+
 def compute_bus_factor(
     store: GraphStore,  # type: ignore[name-defined]  # noqa: F821
     project_root: str | Path,
