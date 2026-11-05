@@ -66,3 +66,10 @@ def test_example_payload_is_valid_json_with_health_score(schema_doc_text: str) -
         score = payload["summary"]["health_score"]
         assert isinstance(score, int), f"health_score must be int, got {type(score)}"
         assert 0 <= score <= 100, f"health_score {score} out of [0, 100]"
+
+
+def test_documents_complexity_based_hotspots(schema_doc_text: str) -> None:
+    """Health score version 3: hotspots are churn x cyclomatic complexity."""
+    assert re.search(r"currently\s+`3`", schema_doc_text)
+    assert re.search(r"churn\s*(x|×)\s*(file\s+)?complexity", schema_doc_text, re.IGNORECASE)
+    assert "**health score version 3**" in schema_doc_text

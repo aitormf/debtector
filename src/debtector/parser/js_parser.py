@@ -13,6 +13,7 @@ from tree_sitter_language_pack import get_parser
 from ..models import EdgeInfo, EdgeKind, NodeInfo, NodeKind, make_qualified_name
 from ..utils import is_test_file
 from .base import LanguageParser
+from .complexity import JS_RULES, cyclomatic_complexity
 
 log = structlog.get_logger()
 
@@ -300,6 +301,11 @@ class JavaScriptParser(LanguageParser):
                                     language=lang,
                                     parent_name=name,
                                     signature=msig,
+                                    extra={
+                                        "complexity": cyclomatic_complexity(
+                                            member.child_by_field_name("body"), JS_RULES
+                                        )
+                                    },
                                 )
                             )
                             edges.append(
@@ -339,6 +345,11 @@ class JavaScriptParser(LanguageParser):
                         language=lang,
                         parent_name=parent,
                         signature=sig,
+                        extra={
+                            "complexity": cyclomatic_complexity(
+                                actual.child_by_field_name("body"), JS_RULES
+                            )
+                        },
                     )
                 )
                 edges.append(
@@ -396,13 +407,13 @@ class JavaScriptParser(LanguageParser):
         for child in node.children:
             if child.type == "variable_declarator":
                 name = None
-                has_arrow = False
+                arrow = None
                 for sub in child.children:
                     if sub.type == "identifier":
                         name = self._text(sub, source)
                     elif sub.type == "arrow_function":
-                        has_arrow = True
-                if name and has_arrow:
+                        arrow = sub
+                if name and arrow is not None:
                     qn = make_qualified_name(file_path, name, NodeKind.FUNCTION)
                     sig = self._first_line(node, source).strip()
                     nodes.append(
@@ -415,6 +426,11 @@ class JavaScriptParser(LanguageParser):
                             line_end=node.end_point[0] + 1,
                             language=lang,
                             signature=sig,
+                            extra={
+                                "complexity": cyclomatic_complexity(
+                                    arrow.child_by_field_name("body"), JS_RULES
+                                )
+                            },
                         )
                     )
                     edges.append(

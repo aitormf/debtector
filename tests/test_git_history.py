@@ -34,6 +34,19 @@ def _file(path: str) -> NodeInfo:
     )
 
 
+def _func(path: str, name: str, complexity: int) -> NodeInfo:
+    return NodeInfo(
+        kind=NodeKind.FUNCTION,
+        name=name,
+        qualified_name=f"{path}::{name}",
+        file_path=path,
+        line_start=1,
+        line_end=5,
+        language="python",
+        extra={"complexity": complexity},
+    )
+
+
 def _import(source: str, target: str) -> EdgeInfo:
     return EdgeInfo(
         kind=EdgeKind.IMPORTS_FROM,
@@ -251,13 +264,20 @@ class TestParseChurn:
 class TestComputeHotspots:
     """Unit tests for compute_hotspots()."""
 
-    def test_hotspot_score_is_churn_times_coupling(
+    def test_hotspot_score_is_churn_times_complexity(
         self, tmp_db: GraphStore, tmp_path: Path
     ) -> None:
-        """score = churn × (fan_in + fan_out)."""
-        # auth.py imports models.py → models has fan_in=1
+        """score = churn x file complexity (sum over the file's functions/methods)."""
         auth_edge = _import("src/auth.py", "src/models.py")
-        tmp_db.store_file("src/auth.py", [_file("src/auth.py")], [auth_edge])
+        tmp_db.store_file(
+            "src/auth.py",
+            [
+                _file("src/auth.py"),
+                _func("src/auth.py", "login", 4),
+                _func("src/auth.py", "out", 3),
+            ],
+            [auth_edge],
+        )
         tmp_db.store_file("src/models.py", [_file("src/models.py")], [])
 
         # auth.py: 2 commits; models.py: 1 commit
@@ -266,10 +286,53 @@ class TestComputeHotspots:
 
         auth = next((h for h in results if h.file_path == "src/auth.py"), None)
         assert auth is not None
-        # auth fan_out=1 (imports models), fan_in=0 → coupling=1; churn=2 → score=2
         assert auth.churn == 2
-        assert auth.coupling == pytest.approx(1.0)
-        assert auth.hotspot_score == pytest.approx(2.0)
+        assert auth.complexity == 7
+        assert auth.hotspot_score == pytest.approx(14.0)
+
+    def test_coupling_is_kept_but_does_not_drive_the_score(
+        self, tmp_db: GraphStore, tmp_path: Path
+    ) -> None:
+        auth_edge = _import("src/auth.py", "src/models.py")
+        tmp_db.store_file(
+            "src/auth.py", [_file("src/auth.py"), _func("src/auth.py", "login", 2)], [auth_edge]
+        )
+        tmp_db.store_file("src/models.py", [_file("src/models.py")], [])
+
+        with patch("subprocess.run", return_value=_mock_run(NUMSTAT_OUTPUT)):
+            results = compute_hotspots(tmp_db, tmp_path)
+
+        auth = next(h for h in results if h.file_path == "src/auth.py")
+        assert auth.coupling == pytest.approx(1.0)  # fan_out=1, fan_in=0
+        assert auth.hotspot_score == pytest.approx(4.0)  # 2 commits x complexity 2
+
+    def test_file_without_functions_has_zero_score_and_sorts_last(
+        self, tmp_db: GraphStore, tmp_path: Path
+    ) -> None:
+        """Kept in the ranking (churn and coupling stay visible) but never a hotspot."""
+        tmp_db.store_file("src/auth.py", [_file("src/auth.py")], [])
+        tmp_db.store_file(
+            "src/models.py", [_file("src/models.py"), _func("src/models.py", "m", 1)], []
+        )
+
+        with patch("subprocess.run", return_value=_mock_run(NUMSTAT_OUTPUT)):
+            results = compute_hotspots(tmp_db, tmp_path)
+
+        assert [h.file_path for h in results] == ["src/models.py", "src/auth.py"]
+        assert results[-1].complexity == 0
+        assert results[-1].hotspot_score == 0
+
+    def test_nodes_without_complexity_value_count_as_zero(
+        self, tmp_db: GraphStore, tmp_path: Path
+    ) -> None:
+        legacy = _func("src/auth.py", "old", 1)
+        legacy.extra = {}
+        tmp_db.store_file("src/auth.py", [_file("src/auth.py"), legacy], [])
+
+        with patch("subprocess.run", return_value=_mock_run(NUMSTAT_OUTPUT)):
+            results = compute_hotspots(tmp_db, tmp_path)
+
+        assert results[0].complexity == 0
 
     def test_sorted_by_score_desc(self, tmp_db: GraphStore, tmp_path: Path) -> None:
         auth_edge = _import("src/auth.py", "src/models.py")

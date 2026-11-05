@@ -14,6 +14,7 @@ from tree_sitter_language_pack import get_parser
 from ..models import EdgeInfo, EdgeKind, NodeInfo, NodeKind, make_qualified_name
 from ..utils import is_test_file
 from .base import LanguageParser
+from .complexity import PYTHON_RULES, cyclomatic_complexity, nested_complexity
 
 log = structlog.get_logger()
 
@@ -317,6 +318,7 @@ class PythonParser(LanguageParser):
                         signature=signature,
                         docstring=docstring,
                         decorators=decorators,
+                        extra=self._complexity_extra(child),
                     )
                 )
 
@@ -353,6 +355,26 @@ class PythonParser(LanguageParser):
                     edges,
                     uses_type_seen,
                 )
+
+    @staticmethod
+    def _complexity_extra(func_node) -> dict:
+        """Build the ``extra`` payload with the complexity of a function definition.
+
+        ``complexity`` excludes nested scopes (radon-compatible); ``nested_complexity``
+        (only present when non-zero) sums them so file totals keep their branches.
+
+        Args:
+            func_node: A tree-sitter ``function_definition`` node.
+
+        Returns:
+            Dict with ``complexity`` and, if there are nested functions, ``nested_complexity``.
+        """
+        body = func_node.child_by_field_name("body")
+        extra = {"complexity": cyclomatic_complexity(body, PYTHON_RULES)}
+        nested = nested_complexity(body, PYTHON_RULES)
+        if nested:
+            extra["nested_complexity"] = nested
+        return extra
 
     # ──────────────────────────────────────────────
     # USES_TYPE edge extraction

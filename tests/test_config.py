@@ -151,7 +151,7 @@ class TestAuditThresholds:
         assert thr.testrisk_high_churn == 5
         assert thr.testrisk_high_ca == 10.0
         assert thr.hotspot_percentile == 90
-        assert thr.hotspot_min_score == 20
+        assert thr.hotspot_min_score == 50
 
     def test_overrides_and_partial_defaults(self, tmp_path: Path) -> None:
         (tmp_path / "debtector.toml").write_text(

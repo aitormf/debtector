@@ -33,7 +33,7 @@ Example of ``debtector.toml``:
     testrisk_high_churn = 5    # commits from which a module without tests is a hotspot
     testrisk_high_ca    = 10   # Ca from which bus factor 1 is "critical knowledge"
     hotspot_percentile  = 90   # hotspot_score percentile a hotspot must reach
-    hotspot_min_score   = 20   # minimum absolute hotspot_score (commits x (Ca + Ce))
+    hotspot_min_score   = 50   # minimum absolute hotspot_score (commits x complexity)
 """
 
 from __future__ import annotations
@@ -131,7 +131,8 @@ class AuditThresholds:
             that a hotspot must reach to count toward the health score.
             Default: 90.
         hotspot_min_score: Minimum absolute ``hotspot_score`` (commits x
-            (Ca + Ce)) to count toward the health score. Default: 20.
+            file cyclomatic complexity) to count toward the health score.
+            Default: 50.
     """
 
     testrisk_high_ce: float = DEFAULT_HIGH_CE

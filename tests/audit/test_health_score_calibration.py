@@ -1,4 +1,4 @@
-"""End-to-end tests of the calibrated health score (version 2) on real repos.
+"""End-to-end tests of the calibrated health score (version 3) on real repos.
 
 Gherkin contract:
 
@@ -108,7 +108,7 @@ def test_summary_carries_health_score_version(
 ) -> None:
     out = _audit(_make_repo(tmp_path, second_author=False), capsys)
 
-    assert out["summary"]["health_score_version"] == 2
+    assert out["summary"]["health_score_version"] == 3
     assert out["schema_version"] == 1
 
 
@@ -130,13 +130,16 @@ def test_hotspot_config_reaches_the_score(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     repo = _make_repo(tmp_path, second_author=False)
+    for i in range(3):  # hub.py becomes branchy and changes often: churn 4 x complexity 3
+        body = f"def f(a, b):\n    if a and b:\n        return {i}\n    return 0\n"
+        _commit(repo, {"src/hub.py": body})
     (repo / "debtector.toml").write_text(
         "[audit.thresholds]\nhotspot_percentile = 90\nhotspot_min_score = 5\n", encoding="utf-8"
     )
 
     out = _audit(repo, capsys)
 
-    # The hub (churn 1 x coupling 10) is now actionable: 1 medium over 11 modules
+    # The hub (churn 4 x complexity 3 = 12) is now actionable: 1 medium over 11 modules
     # -> 100 - 100 * 2 / 55 = 96.4 -> 96
     assert out["summary"]["health_score"] == 96
 
