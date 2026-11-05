@@ -143,11 +143,11 @@ class TestGitLabCI:
             cmd_baseline(_args(str(tmp_path), "status", reporter="gitlab"))
         out = capsys.readouterr().out
         # GitLab uses ANSI or section markers
-        assert "ciclo" in out.lower() or "cycle" in out.lower()
+        assert "cycle" in out.lower()
 
     def test_no_regression_gitlab_clean(self, tmp_path: Path, capsys) -> None:
         _seed(str(tmp_path), {"src/a.py": []})
         cmd_baseline(_args(str(tmp_path), "save"))
         cmd_baseline(_args(str(tmp_path), "status", reporter="gitlab"))
         out = capsys.readouterr().out
-        assert "sin cambios" in out.lower() or "✓" in out
+        assert "no changes" in out.lower()

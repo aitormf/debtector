@@ -107,7 +107,7 @@ class TestSeverityWarning:
         )
         cmd_baseline(_args(str(tmp_path), "status"))
         out = capsys.readouterr().out
-        assert "ciclo" in out.lower() or "cycle" in out.lower()
+        assert "cycle" in out.lower()
 
     def test_instability_warning_exits_zero(self, tmp_path: Path) -> None:
         _write_toml(str(tmp_path), '[metrics.severity]\ninstability = "warning"\n')
