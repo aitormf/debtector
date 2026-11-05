@@ -76,3 +76,17 @@ def test_percentile_is_configurable() -> None:
     loose = select_actionable_hotspots(hs, percentile=50, min_score=0)
 
     assert len(loose) > len(strict) >= 1
+
+
+def test_percentile_threshold_is_bounded_by_the_data() -> None:
+    """Small samples must not extrapolate beyond [min, max]."""
+    from debtector.metrics import percentile_threshold
+
+    assert 20 <= percentile_threshold([20, 100], 90) <= 100
+    assert 5 <= percentile_threshold([5, 5, 5, 100], 90) <= 100
+
+
+def test_two_hotspots_score_the_top_one() -> None:
+    result = select_actionable_hotspots(_hotspots([20.0, 100.0]), percentile=90, min_score=20)
+
+    assert [h.hotspot_score for h in result] == [100.0]

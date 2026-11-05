@@ -52,7 +52,7 @@ def _commit(repo: Path, files: dict[str, str], author: str = "Alice") -> None:
     _git(repo, "commit", "-q", "-m", "change", author=author)
 
 
-def _make_repo(base: Path, second_author: bool) -> Path:
+def _make_repo(base: Path, second_author: bool, other_path_author: bool = False) -> Path:
     repo = base / "repo"
     repo.mkdir(parents=True)
     _git(repo, "init", "-q")
@@ -63,6 +63,8 @@ def _make_repo(base: Path, second_author: bool) -> Path:
     if second_author:
         touched = "# touched\nfrom hub import f\n\n\ndef g0():\n    return f()\n"
         _commit(repo, {"src/m0.py": touched}, "Bob")
+    if other_path_author:
+        _commit(repo, {"docs/notes.txt": "notes\n"}, "Bob")
     return repo
 
 
@@ -137,3 +139,15 @@ def test_hotspot_config_reaches_the_score(
     # The hub (churn 1 x coupling 10) is now actionable: 1 medium over 11 modules
     # -> 100 - 100 * 2 / 55 = 96.4 -> 96
     assert out["summary"]["health_score"] == 96
+
+
+def test_author_elsewhere_in_the_repo_counts_as_multi_author(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Alice wrote all of src/, Bob only touched docs/: the repo has two authors."""
+    repo = _make_repo(tmp_path, second_author=False, other_path_author=True)
+
+    assert list_authors(repo / "src") == {"Alice", "Bob"}
+    out = _audit(repo, capsys)
+    assert "hub.py" in out["testRisk"]["critical_knowledge_concentration"]
+    assert out["summary"]["health_score"] == 73
