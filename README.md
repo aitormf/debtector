@@ -28,24 +28,17 @@ Debtector is a **command-line tool**, not a library. Install it globally to use 
 ### With uv (recommended)
 
 ```bash
-uv tool install /path/to/codeIndex
-```
-
-`uv tool install` does not support editable mode. To reflect code changes, reinstall with `--force` (it's fast):
-
-```bash
-uv tool install /path/to/codeIndex --force
+uv tool install debtector
+uv tool upgrade debtector   # later, to update
 ```
 
 ### With pip
 
 ```bash
-# Standard installation
-pip install /path/to/codeIndex
-
-# Editable — code changes are reflected immediately without reinstalling
-pip install -e /path/to/codeIndex
+pip install debtector
 ```
+
+To work on debtector itself, see [Development](#development).
 
 Verify it is available globally:
 
@@ -347,8 +340,8 @@ The `.debtector/.gitignore` is managed by Debtector: ignores everything except `
 ## Development
 
 ```bash
-git clone https://github.com/aitormf/codeIndex
-cd codeIndex
+git clone https://github.com/aitormf/debtector
+cd debtector
 uv sync --dev
 
 uv run pytest                     # tests
@@ -395,6 +388,8 @@ Logs always go to `.debtector/debtector.log`, never to stdout.
 - [x] **Temporal coupling** — files that co-change without a direct import
 - [x] **Bus factor** — knowledge concentration risk per file
 - [x] **`debtector git-coupling` / `report`** — aggregated behavioral and full views
+- [x] **`debtector audit`** — tech-lead view: health score, cohesion (LCOM4), testRisk, cycle priority ([schema](docs/audit-schema.md))
+- [ ] Cyclomatic/cognitive complexity per function — complexity × churn hotspots
 - [ ] Graph diff — metric delta between base branch and PR
 - [ ] GitHub Action — automatic comment on PRs
 - [ ] More languages — Go, Rust, Java

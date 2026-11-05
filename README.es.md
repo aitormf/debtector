@@ -28,24 +28,17 @@ Debtector es una **herramienta de línea de comandos**, no una librería. Instá
 ### Con uv (recomendado)
 
 ```bash
-uv tool install /ruta/a/codeIndex
-```
-
-`uv tool install` no soporta modo editable. Para reflejar cambios en el código, reinstala con `--force` (es rápido):
-
-```bash
-uv tool install /ruta/a/codeIndex --force
+uv tool install debtector
+uv tool upgrade debtector   # más adelante, para actualizar
 ```
 
 ### Con pip
 
 ```bash
-# Instalación normal
-pip install /ruta/a/codeIndex
-
-# Editable — los cambios en el código se reflejan inmediatamente sin reinstalar
-pip install -e /ruta/a/codeIndex
+pip install debtector
 ```
+
+Para trabajar en el propio debtector, ver [Desarrollo](#desarrollo).
 
 Verificar que está disponible globalmente:
 
@@ -305,8 +298,8 @@ El `.gitignore` de `.debtector/` está gestionado por Debtector: ignora todo exc
 ## Desarrollo
 
 ```bash
-git clone https://github.com/aitormf/codeIndex
-cd codeIndex
+git clone https://github.com/aitormf/debtector
+cd debtector
 uv sync --dev
 
 uv run pytest                     # tests
@@ -353,6 +346,8 @@ Los logs siempre van a `.debtector/debtector.log`, nunca a stdout.
 - [x] **Temporal coupling** — archivos que co-cambian sin import directo
 - [x] **Bus factor** — riesgo de concentración de conocimiento por archivo
 - [x] **`debtector git-coupling` / `report`** — vistas agregadas behavioral y completa
+- [x] **`debtector audit`** — vista para tech lead: health score, cohesión (LCOM4), testRisk, prioridad de ciclos ([schema](docs/audit-schema.md))
+- [ ] Complejidad ciclomática/cognitiva por función — hotspots complejidad × churn
 - [ ] Graph diff — delta de métricas entre rama base y PR
 - [ ] GitHub Action — comentario automático en PRs
 - [ ] Más lenguajes — Go, Rust, Java
