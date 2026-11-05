@@ -76,6 +76,11 @@ ICP: dev/tech lead que usa agentes de código.
 - [ ] **Rutas en Windows** — el indexer guarda rutas con el separador del sistema (`os.path.relpath`) pero la clasificación de tests y los patrones SQL esperan `/`; normalizar a POSIX al guardar
 - [ ] **Tests como módulos al indexar `.`** — si el usuario indexa la raíz, los ficheros de test cuentan en Ca/Ce, hotspots y god modules; solo se excluyen los que llegan vía `test_paths`
 - [ ] **`debtector status` cuenta los ficheros de `test_paths`** — `get_stats` los incluye en `files_count` y en los conteos por tipo
+- [ ] **Clones superficiales en CI** — con `fetch-depth: 1` (el defecto de `actions/checkout`) el historial solo tiene un commit: churn, hotspots y temporal coupling salen a cero. Avisar sin bloquear al detectarlo (`git rev-parse --is-shallow-repository`) y documentar `fetch-depth: 0`; el exento de autor único ya no se aplica en ese caso
+- [ ] **Gramáticas de tree-sitter descargadas en runtime** — `tree-sitter-language-pack` las baja de GitHub en el primer uso; sin red o con un 5xx de GitHub el índice falla. Empaquetarlas o documentar cómo descargarlas antes (el CI propio ya las cachea)
+- [ ] **Texto de `busFactor` en `docs/audit-schema.md`** — dice «≥50% del churn» pero el código usa el 80% de las líneas de `git blame`
+- [ ] **Salida humana de `audit`** — solo muestra critical y high; los hotspots puntúan como medium y no se ven
+- [ ] **Cobertura real** — leer `coverage.xml` / `lcov.info` si existen; la heurística `COVERS` no ve llamadas a métodos de objetos (`service.validate()`) y deja ficheros probados como «sin cubrir»
 - [ ] **Más lenguajes** — Go, Rust, Java (Tree-sitter los soporta; solo falta escribir el parser siguiendo `base.py`)
 
 ---
