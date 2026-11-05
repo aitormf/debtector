@@ -37,6 +37,7 @@ from .git_history import (
     compute_bus_factor,
     compute_hotspots,
     compute_temporal_coupling,
+    is_shallow_repository,
     list_authors,
     parse_churn,
 )
@@ -482,6 +483,10 @@ def _single_author(root: str | Path) -> bool:
         ``False`` when there are several authors or the history is unavailable.
     """
     try:
+        if is_shallow_repository(root):
+            # A shallow clone (CI default) shows only recent commits: unknown, not single.
+            log.warning("authors_unknown_shallow_clone", root=str(root))
+            return False
         return len(list_authors(root)) == 1
     except RuntimeError:
         log.warning("authors_unavailable", root=str(root), exc_info=True)

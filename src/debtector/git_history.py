@@ -404,6 +404,21 @@ def compute_temporal_coupling(
     return results
 
 
+def is_shallow_repository(project_root: str | Path) -> bool:
+    """Indica si el repositorio es un clon superficial (``--depth``).
+
+    Args:
+        project_root: Directorio dentro del repositorio git.
+
+    Returns:
+        ``True`` si el historial está truncado.
+
+    Raises:
+        RuntimeError: Si git no está disponible o no es un repositorio.
+    """
+    return _run_git(["git", "rev-parse", "--is-shallow-repository"], project_root).strip() == "true"
+
+
 def list_authors(project_root: str | Path) -> set[str]:
     """Devuelve los autores distintos del historial de todo el repositorio.
 
