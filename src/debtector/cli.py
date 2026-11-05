@@ -464,11 +464,11 @@ def cmd_audit(args) -> None:
                 candidate_to_split=lcom4 > 1,
             )
         )
-    # Only split candidates count towards the score; cohesive classes stay in the output
-    split_candidates = [f for f in cohesion if f.candidate_to_split]
+    # Cohesion is informational for now: LCOM4 only links methods through CALLS,
+    # not shared attributes, so most cohesive classes look like split candidates.
 
     # Health score and stats before closing store
-    health = compute_health_score(tr_findings + split_candidates + hotspots)
+    health = compute_health_score(tr_findings + hotspots)
     stats = store.get_stats()
 
     # Prioritize cycles and detect god modules before closing store
