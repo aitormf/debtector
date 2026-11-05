@@ -125,11 +125,15 @@ Severity buckets and 0-100 score. A clean graph scores `100`.
 | severity   | source signals                                                            | penalty |
 |------------|---------------------------------------------------------------------------|---------|
 | `critical` | cycles, `critical_knowledge_concentration`                                | 15      |
-| `high`     | `candidate_to_split` classes, `untested_high_coupling`, `untested_hotspots`| 5       |
+| `high`     | `untested_high_coupling`, `untested_hotspots`                             | 5       |
 | `medium`   | `god_module` entries, hotspots                                            | 2       |
 | `low`      | single-author files (`busFactor` rows)                                    | 0.5     |
 
 `score = max(0, 100 − Σ penalty × count)` (rounded to int).
+
+`cohesion` entries are informational and do not affect the score: `lcom4` only links
+methods through `CALLS`, not through shared attributes, so cohesive classes can show
+`lcom4 > 1`.
 
 ## Example payload
 

@@ -288,3 +288,27 @@ class TestSchemaMigrations:
 
         with pytest.raises(SchemaTooNewError):
             GraphStore(db_path)
+
+
+class TestGetNodesByKind:
+    """Tests for GraphStore.get_nodes_by_kind()."""
+
+    def test_returns_only_nodes_of_kind_across_files(self, tmp_db: GraphStore) -> None:
+        def cls(name: str, path: str) -> NodeInfo:
+            return NodeInfo(
+                kind=NodeKind.CLASS,
+                name=name,
+                qualified_name=f"{path}::{name}",
+                file_path=path,
+                line_start=1,
+                line_end=2,
+                language="python",
+            )
+
+        tmp_db.store_file("a.py", [cls("A", "a.py")], [], "h1")
+        tmp_db.store_file("b.py", [cls("B", "b.py")], [], "h2")
+
+        names = [n.name for n in tmp_db.get_nodes_by_kind(NodeKind.CLASS)]
+
+        assert sorted(names) == ["A", "B"]
+        assert tmp_db.get_nodes_by_kind(NodeKind.FUNCTION) == []

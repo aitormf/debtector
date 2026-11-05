@@ -217,3 +217,88 @@ def test_cmd_audit_calls_god_modules_before_close(sample_project: Path) -> None:
         # It should be called with store as first argument
         call_args = mock_god_modules.call_args
         assert len(call_args.args) >= 1
+
+
+COHESION_SOURCE = """\
+class Cohesive:
+    def a(self):
+        return self.b()
+
+    def b(self):
+        return 1
+
+
+class Splittable:
+    def x(self):
+        return 1
+
+    def y(self):
+        return 2
+"""
+
+
+@pytest.fixture
+def cohesion_project(tmp_path: Path) -> Path:
+    """Project with one cohesive class (LCOM4 = 1) and one splittable (LCOM4 = 2)."""
+    (tmp_path / ".debtector").mkdir()
+    (tmp_path / "mod.py").write_text(COHESION_SOURCE)
+    import subprocess
+
+    for cmd in (
+        ["git", "init"],
+        ["git", "config", "user.email", "test@test.com"],
+        ["git", "config", "user.name", "Test User"],
+        ["git", "add", "mod.py"],
+        ["git", "commit", "-m", "initial"],
+    ):
+        subprocess.run(cmd, cwd=tmp_path, capture_output=True, check=True)
+    store = _get_store(str(tmp_path))
+    Indexer(store).index(str(tmp_path))
+    store.close()
+    return tmp_path
+
+
+def _run_audit_json(project: Path, capsys) -> dict:
+    with mock.patch("debtector.cli._auto_index"):
+        cmd_audit(Args(str(project), json_out=True))
+    return json.loads(capsys.readouterr().out.strip().split("\n")[-1])
+
+
+def test_cmd_audit_cohesion_lists_every_class(cohesion_project: Path, capsys) -> None:
+    """The cohesion section is populated with the real LCOM4 of every class."""
+    output = _run_audit_json(cohesion_project, capsys)
+
+    by_name = {e["qualified_name"]: e for e in output["cohesion"]}
+    assert by_name["mod.py::Cohesive"]["lcom4"] == 1
+    assert by_name["mod.py::Cohesive"]["candidate_to_split"] is False
+    assert by_name["mod.py::Splittable"]["lcom4"] == 2
+    assert by_name["mod.py::Splittable"]["candidate_to_split"] is True
+
+
+def test_cmd_audit_cohesion_does_not_affect_health_score(cohesion_project: Path, capsys) -> None:
+    """Cohesion is informational: LCOM4 ignores shared attributes, so no class is scored."""
+    from debtector.audit.health_score import compute_health_score
+    from debtector.audit.testrisk import CohesionFinding
+
+    seen: list = []
+
+    def spy(findings):
+        findings = list(findings)
+        seen.extend(findings)
+        return compute_health_score(findings)
+
+    with mock.patch("debtector.cli.compute_health_score", side_effect=spy):
+        _run_audit_json(cohesion_project, capsys)
+
+    scored = [f.qualified_name for f in seen if isinstance(f, CohesionFinding)]
+    assert scored == []
+
+
+def test_cmd_audit_computes_lcom4_once_per_class(cohesion_project: Path, capsys) -> None:
+    """compute_lcom4 runs exactly once for each class."""
+    from debtector.audit.lcom4 import compute_lcom4
+
+    with mock.patch("debtector.cli.compute_lcom4", side_effect=compute_lcom4) as spy:
+        _run_audit_json(cohesion_project, capsys)
+
+    assert spy.call_count == 2
