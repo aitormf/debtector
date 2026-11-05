@@ -67,3 +67,32 @@ def test_index_without_version_key_reparses_and_backfills_complexity(
     node = store.get_node("a.py::f")
     assert node is not None
     assert node.extra["complexity"] == 2
+
+
+def test_parser_version_is_3() -> None:
+    assert PARSER_VERSION == 3
+
+
+def test_failed_reparse_does_not_advance_parser_version(project: Path, store: GraphStore) -> None:
+    Indexer(store).index(str(project))
+    store.set_metadata("parser_version", "0")
+    indexer = Indexer(store)
+    real_parse = indexer.registry.parse
+
+    def flaky(file_path: str, is_test: bool | None = None):
+        if file_path.endswith("b.py"):
+            raise RuntimeError("boom")
+        return real_parse(file_path, is_test)
+
+    indexer.registry.parse = flaky  # type: ignore[method-assign]
+
+    stats = indexer.index(str(project))
+
+    assert stats["errors"] == 1
+    assert store.get_metadata("parser_version") == "0"
+
+    # next run (parser healthy again) reparses everything and completes the migration
+    stats = Indexer(store).index(str(project))
+    assert stats["indexed"] == 2
+    assert stats["errors"] == 0
+    assert store.get_metadata("parser_version") == str(PARSER_VERSION)

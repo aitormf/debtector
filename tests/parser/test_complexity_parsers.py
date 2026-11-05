@@ -118,3 +118,51 @@ def test_sample_fixture_functions_all_have_complexity(
         symbols = [n for n in nodes if n.kind in (NodeKind.FUNCTION, NodeKind.METHOD)]
         assert symbols
         assert all(n.extra["complexity"] >= 1 for n in symbols)
+
+
+NESTED_SRC = """\
+def factory(a):
+    if a:
+        pass
+
+    def inner(b):
+        if b and a:
+            pass
+
+        def deep(c):
+            if c:
+                pass
+
+    return inner
+
+
+def flat():
+    pass
+"""
+
+
+def test_nested_scopes_keep_outer_complexity_radon_compatible(tmp_path: Path) -> None:
+    path = tmp_path / "mod.py"
+    path.write_text(NESTED_SRC, encoding="utf-8")
+
+    nodes, _ = PythonParser().parse(str(path))
+
+    by_name = {n.name: n for n in nodes if n.kind == NodeKind.FUNCTION}
+    assert set(by_name) == {"factory", "flat"}  # closures are not graph nodes
+    assert by_name["factory"].extra["complexity"] == 2  # radon: factory (2)
+    # radon closures: inner (3) + deep (2), recursively
+    assert by_name["factory"].extra["nested_complexity"] == 5
+    assert "nested_complexity" not in by_name["flat"].extra
+
+
+def test_file_complexity_includes_nested_scopes(tmp_path: Path) -> None:
+    from debtector.git_history import _file_complexities
+    from debtector.graph_store import GraphStore
+    from debtector.indexer import Indexer
+
+    (tmp_path / "mod.py").write_text(NESTED_SRC, encoding="utf-8")
+    store = GraphStore(tmp_path / "idx.db")
+    Indexer(store).index(str(tmp_path))
+
+    assert _file_complexities(store) == {"mod.py": 2 + 5 + 1}
+    store.close()
