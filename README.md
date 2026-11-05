@@ -151,7 +151,8 @@ debtector --json search "AuthService"
 |--------|-------------|
 | **Ca (fan-in)** | How many modules depend on this one. Weight 1.0 per `IMPORTS_FROM` and `USES_TYPE` |
 | **Ce (fan-out)** | How many modules this one imports. Same weight scheme |
-| **I (instability)** | `Ce / (Ca + Ce)`. 0 = very stable, 1 = very unstable |
+| **I (instability)** | `Ce / (Ca + Ce)`. 0 = very stable, 1 = very unstable. Reported for every module, but only flagged `⚠ unstable` when it is the target of a Stable Dependencies Principle (SDP) violation: a module imports another one whose I is higher by more than `sdp_margin`. A leaf with I = 1 is normal and not flagged |
+| **God module** | Ca above the project's `god_module_percentile` **and** at least `god_module_min_ca` |
 
 Example output:
 
@@ -246,14 +247,17 @@ The typical CI flow is:
 
 - If `baseline.json` does not exist → exit 0 (silent mode, does not block)
 - If it exists and metrics are equal or improve → exit 0
-- If there are new cycles, new god modules, or instability worsens → exit 1
+- If there are new cycles, new god modules, new SDP violations, or instability worsens → exit 1
+- A baseline saved by an older version has no SDP data: SDP violations are not compared until you run `debtector baseline save` again
 
 ### Severity configuration (`debtector.toml`)
 
 ```toml
 [metrics.thresholds]
 god_module_percentile = 90    # percentile for god module
-instability_threshold = 0.8   # I >= threshold → warning in table
+god_module_min_ca     = 10    # a god module also needs Ca >= this (absolute minimum)
+sdp_margin            = 0.1   # I(B) - I(A) above this flags A -> B as an SDP violation
+# instability_threshold is deprecated: still accepted, ignored (a warning is logged)
 
 [metrics.severity]
 cycles      = "error"    # blocks CI

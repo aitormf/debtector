@@ -53,7 +53,7 @@ Array of module-level coupling entries, sorted by `fan_in` descending.
 | `fan_in`      | number  | Ca: weighted incoming imports.                         |
 | `fan_out`     | number  | Ce: weighted outgoing imports.                         |
 | `instability` | number  | `Ce / (Ca + Ce)` in `[0.0, 1.0]`.                      |
-| `god_module`  | boolean | `true` when `fan_in` is above the project's percentile. |
+| `god_module`  | boolean | `true` when `fan_in` is above the project's percentile and at least `god_module_min_ca` (default 10). |
 
 ## `cycles`
 
