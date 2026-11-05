@@ -80,8 +80,12 @@ def _seed(project: str, files: dict[str, list[EdgeInfo]]) -> None:
 
 # Canned return values for mocking git_history functions
 _HOTSPOTS = [
-    HotspotMetrics(file_path="src/auth.py", churn=10, coupling=4.0, hotspot_score=40.0),
-    HotspotMetrics(file_path="src/models.py", churn=3, coupling=2.0, hotspot_score=6.0),
+    HotspotMetrics(
+        file_path="src/auth.py", churn=10, coupling=4.0, hotspot_score=120.0, complexity=12
+    ),
+    HotspotMetrics(
+        file_path="src/models.py", churn=3, coupling=2.0, hotspot_score=15.0, complexity=5
+    ),
 ]
 _TEMPORAL = [
     TemporalCoupling(
@@ -130,7 +134,17 @@ class TestCmdHotspots:
         assert "file_path" in keys
         assert "churn" in keys
         assert "coupling" in keys
+        assert "complexity" in keys
         assert "hotspot_score" in keys
+        assert data["hotspots"][0]["complexity"] == 12
+        assert data["hotspots"][0]["hotspot_score"] == 120.0
+
+    def test_human_output_shows_complexity_column(self, tmp_path: Path, capsys) -> None:
+        with patch("debtector.cli.compute_hotspots", return_value=_HOTSPOTS):
+            cmd_hotspots(_args(str(tmp_path)))
+        out = capsys.readouterr().out
+        assert "Complexity" in out
+        assert "12" in out
 
     def test_json_empty_when_no_data(self, tmp_path: Path, capsys) -> None:
         with patch("debtector.cli.compute_hotspots", return_value=[]):

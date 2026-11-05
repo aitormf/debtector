@@ -1,4 +1,4 @@
-"""End-to-end tests of the calibrated health score (version 2) on real repos.
+"""End-to-end tests of the calibrated health score (version 3) on real repos.
 
 Gherkin contract:
 
@@ -108,7 +108,7 @@ def test_summary_carries_health_score_version(
 ) -> None:
     out = _audit(_make_repo(tmp_path, second_author=False), capsys)
 
-    assert out["summary"]["health_score_version"] == 2
+    assert out["summary"]["health_score_version"] == 3
     assert out["schema_version"] == 1
 
 
