@@ -63,8 +63,8 @@ skips = []
 # ---------------------------------------------------------------------------
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.5.1"
-version_files = ["pyproject.toml:version", "src/debtector/__init__.py"]
+version_provider = "uv"  # actualiza [project].version y uv.lock
+version_files = ["src/debtector/__init__.py"]
 tag_format = "v$version"
 annotated_tag = true  # git push --follow-tags solo sube tags anotados
 
