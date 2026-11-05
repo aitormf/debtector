@@ -151,3 +151,22 @@ def test_author_elsewhere_in_the_repo_counts_as_multi_author(
     out = _audit(repo, capsys)
     assert "hub.py" in out["testRisk"]["critical_knowledge_concentration"]
     assert out["summary"]["health_score"] == 73
+
+
+def test_shallow_clone_never_gets_the_single_author_exemption(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A depth-1 clone only sees the last commit: authorship is unknown, findings are scored."""
+    origin = _make_repo(tmp_path / "origin", second_author=True)
+    clone = tmp_path / "clone"
+    subprocess.run(  # nosec B603 B607 — fixed arguments, throwaway repo
+        ["git", "clone", "-q", "--depth", "1", f"file://{origin}", str(clone)],
+        check=True,
+        capture_output=True,
+    )
+
+    assert list_authors(clone) == {"Bob"}  # all a shallow history shows
+    out = _audit(clone, capsys)
+
+    assert "hub.py" in out["testRisk"]["critical_knowledge_concentration"]
+    assert out["summary"]["health_score"] == 73
