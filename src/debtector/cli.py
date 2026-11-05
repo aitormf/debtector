@@ -1,8 +1,8 @@
 """
-CLI para Debtector.
+Debtector CLI.
 
-Uso:
-    debtector index ./mi-proyecto
+Usage:
+    debtector index ./my-project
     debtector --json search "UserService"
     debtector summary src/auth/service.py
     debtector impact src/auth/service.py
@@ -223,7 +223,7 @@ def _json_out(data) -> None:
 
 
 # ──────────────────────────────────────────────
-# Subcomandos
+# Subcommands
 # ──────────────────────────────────────────────
 
 
@@ -241,7 +241,7 @@ def cmd_index(args) -> None:
     indexer = Indexer(store)
 
     if not args.json:
-        print(f"Indexando {args.path}...")
+        print(f"Indexing {args.path}...")
 
     # Prefixes must be relative to the directory being indexed now, not the stored root.
     store.test_prefixes = _test_prefixes(args.project, args.path)
@@ -253,11 +253,11 @@ def cmd_index(args) -> None:
     if args.json:
         _json_out(stats)
     else:
-        print(f"\n  Archivos escaneados:  {stats['scanned']}")
-        print(f"  Indexados:            {stats['indexed']}")
-        print(f"  Sin cambios:          {stats['skipped']}")
-        print(f"  Errores:              {stats['errors']}")
-        print(f"  Eliminados:           {stats['removed']}")
+        print(f"\n  Files scanned:      {stats['scanned']}")
+        print(f"  Indexed:            {stats['indexed']}")
+        print(f"  Unchanged:          {stats['skipped']}")
+        print(f"  Errors:             {stats['errors']}")
+        print(f"  Deleted:            {stats['removed']}")
 
 
 def cmd_search(args) -> None:
@@ -278,7 +278,7 @@ def cmd_search(args) -> None:
     if args.json:
         _json_out([node_to_dict(n) for n in results])
     else:
-        print(f"\nResultados para: '{args.query}'")
+        print(f"\nResults for: '{args.query}'")
         print("─" * 60)
         for n in results:
             print(f"  {n.kind:10s} {n.qualified_name}")
@@ -309,7 +309,7 @@ def cmd_summary(args) -> None:
         if args.json:
             _json_out({"error": f"file not found: {args.file}"})
         else:
-            print(f"Archivo no encontrado: {args.file}")
+            print(f"File not found: {args.file}")
         sys.exit(1)
 
     if args.json:
@@ -318,12 +318,12 @@ def cmd_summary(args) -> None:
         print(f"\n{summary['path']} ({summary['language']})")
         print("─" * 60)
         if summary["nodes"]:
-            print("\n  Símbolos:")
+            print("\n  Symbols:")
             for s in summary["nodes"]:
                 parent = "  └─ " if s["parent"] else "  "
                 print(f"    {parent}{s['kind']:10s} {s.get('signature') or s['name']}")
         if summary["edges"]:
-            print("\n  Relaciones:")
+            print("\n  Relationships:")
             for e in summary["edges"]:
                 print(f"    {e['kind']:15s} {e['source']} → {e['target']}")
 
@@ -353,21 +353,21 @@ def cmd_impact(args) -> None:
             }
         )
     else:
-        print(f"\nAnálisis de impacto (profundidad {args.depth}):")
+        print(f"\nImpact analysis (depth {args.depth}):")
         print("─" * 60)
-        print(f"\n  Nodos cambiados:    {len(result['changed_nodes'])}")
-        print(f"  Nodos impactados:   {len(result['impacted_nodes'])}")
-        print(f"  Archivos afectados: {len(result['impacted_files'])}")
+        print(f"\n  Changed nodes:    {len(result['changed_nodes'])}")
+        print(f"  Impacted nodes:   {len(result['impacted_nodes'])}")
+        print(f"  Affected files:   {len(result['impacted_files'])}")
         if result["impacted_files"]:
-            print("\n  Archivos impactados:")
+            print("\n  Impacted files:")
             for f in sorted(result["impacted_files"]):
                 print(f"    {f}")
         if result["impacted_nodes"]:
-            print("\n  Nodos impactados:")
+            print("\n  Impacted nodes:")
             for n in result["impacted_nodes"][:20]:
                 print(f"    {n.kind:10s} {n.qualified_name}")
             if len(result["impacted_nodes"]) > 20:
-                print(f"    ... y {len(result['impacted_nodes']) - 20} más")
+                print(f"    ... and {len(result['impacted_nodes']) - 20} more")
 
 
 def cmd_imports(args) -> None:
@@ -388,10 +388,10 @@ def cmd_imports(args) -> None:
     if args.json:
         _json_out(results)
     else:
-        print(f"\nArchivos que importan '{args.module}':")
+        print(f"\nFiles importing '{args.module}':")
         print("─" * 60)
         for r in results:
-            print(f"  {r['file_path']}  (línea {r['line']})")
+            print(f"  {r['file_path']}  (line {r['line']})")
         print(f"\nTotal: {len(results)}")
 
 
@@ -420,18 +420,18 @@ def cmd_status(args) -> None:
             }
         )
     else:
-        print("\nEstado del índice:")
+        print("\nIndex status:")
         print("─" * 40)
-        print(f"  Archivos:    {stats.files_count}")
-        print(f"  Nodos:       {stats.total_nodes}")
-        print(f"  Aristas:     {stats.total_edges}")
-        print(f"  Lenguajes:   {', '.join(stats.languages)}")
+        print(f"  Files:       {stats.files_count}")
+        print(f"  Nodes:       {stats.total_nodes}")
+        print(f"  Edges:       {stats.total_edges}")
+        print(f"  Languages:   {', '.join(stats.languages)}")
         if stats.nodes_by_kind:
-            print("\n  Nodos por tipo:")
+            print("\n  Nodes by kind:")
             for k, v in stats.nodes_by_kind.items():
                 print(f"    {k:12s} {v}")
         if stats.edges_by_kind:
-            print("\n  Aristas por tipo:")
+            print("\n  Edges by kind:")
             for k, v in stats.edges_by_kind.items():
                 print(f"    {k:15s} {v}")
 
@@ -454,7 +454,7 @@ def cmd_callers(args) -> None:
     if args.json:
         _json_out([node_to_dict(n) for n in callers])
     else:
-        print(f"\n¿Quién llama a {args.qualified_name}?")
+        print(f"\nWho calls {args.qualified_name}?")
         print("─" * 60)
         for n in callers:
             print(f"  {n.kind:10s} {n.qualified_name}")
@@ -483,7 +483,7 @@ def cmd_untested(args) -> None:
         if not symbols:
             print("✓ All symbols are covered.")
             return
-        print(f"\nSímbolos sin test ({len(symbols)}):")
+        print(f"\nUntested symbols ({len(symbols)}):")
         print("─" * 60)
         for n in symbols:
             print(f"  {n.kind:10s} {n.name}")
@@ -709,8 +709,7 @@ def cmd_audit(args) -> None:
         print("└─\n")
         if not tests_found:
             print(
-                "No se han encontrado tests; testRisk desactivado. "
-                "Configura `test_paths` en `debtector.toml`.",
+                "No tests found; testRisk disabled. Configure `test_paths` in `debtector.toml`.",
                 file=sys.stderr,
             )
 
@@ -721,8 +720,8 @@ def cmd_audit(args) -> None:
 # ──────────────────────────────────────────────
 
 _BASELINE_FILE = ".debtector/baseline.json"
-# Tolerancia de inestabilidad: diferencia mínima para considerar una regresión.
-# Un delta < 5% se trata como ruido de redondeo, no como degradación real.
+# Instability tolerance: minimum difference to count as a regression.
+# A delta < 5% is treated as rounding noise, not real degradation.
 _INSTABILITY_TOLERANCE = 0.05
 
 
@@ -760,7 +759,7 @@ def cmd_baseline(args) -> None:
     elif args.baseline_cmd == "status":
         _baseline_status(args)
     else:
-        print("Uso: debtector baseline <save|status>", file=sys.stderr)
+        print("Usage: debtector baseline <save|status>", file=sys.stderr)
         sys.exit(1)
 
 
@@ -797,7 +796,7 @@ def _baseline_save(args) -> None:
     if args.json:
         _json_out({"status": "saved", "path": str(path), "modules": len(modules)})
     else:
-        print(f"Baseline guardado: {path}  ({len(modules)} módulos)")
+        print(f"Baseline saved: {path}  ({len(modules)} modules)")
 
 
 def _baseline_status(args) -> None:
@@ -814,9 +813,9 @@ def _baseline_status(args) -> None:
 
     if not path.exists():
         if args.json:
-            _json_out({"error": "no baseline — ejecuta: debtector baseline save"})
+            _json_out({"error": "no baseline — run: debtector baseline save"})
         else:
-            print("Sin baseline. Ejecuta primero: debtector baseline save")
+            print("No baseline. Run first: debtector baseline save")
         return
 
     baseline = json.loads(path.read_text(encoding="utf-8"))
@@ -832,12 +831,12 @@ def _baseline_status(args) -> None:
     current_sdp = _configured_sdp_violations(store, cfg)
     store.close()
 
-    # Detectar regresiones por tipo
+    # Detect regressions by type
     new_cycles = [c for c in current_cycles if frozenset(c) not in baseline_cycles]
     new_gods = [m.file_path for m in current_gods if m.file_path not in baseline_gods]
 
-    # Violaciones SDP: un baseline anterior a esta métrica no las guarda; sin dato
-    # previo no se puede afirmar que hayan empeorado, así que no se comparan.
+    # SDP violations: a baseline predating this metric does not store them; without
+    # prior data we cannot claim they got worse, so they are not compared.
     new_sdp: list[dict] = []
     if "sdp_violations" in baseline:
         known = {(v["source"], v["target"]) for v in baseline["sdp_violations"]}
@@ -859,7 +858,7 @@ def _baseline_status(args) -> None:
                 }
             )
 
-    # Determinar si cada tipo de regresión bloquea el CI según su severidad
+    # Decide whether each regression type blocks CI according to its severity
     has_blocking = (
         _blocks(new_cycles, sev.cycles)
         or _blocks(new_gods, sev.god_modules)
@@ -890,7 +889,7 @@ def _baseline_status(args) -> None:
     reporter = getattr(args, "reporter", None)
 
     if not has_any_warning:
-        print("✓  Sin cambios respecto al baseline")
+        print("✓  No changes from baseline")
         return
 
     if reporter == "github":
@@ -900,25 +899,25 @@ def _baseline_status(args) -> None:
     else:
         if _warns(new_cycles, sev.cycles):
             label = "⛔" if sev.cycles == Severity.ERROR else "⚠"
-            print(f"\n{label}  Nuevos ciclos ({len(new_cycles)}):")
+            print(f"\n{label}  New cycles ({len(new_cycles)}):")
             for cycle in new_cycles:
                 print("   " + " → ".join(cycle) + " → ...")
 
         if _warns(new_gods, sev.god_modules):
             label = "⛔" if sev.god_modules == Severity.ERROR else "⚠"
-            print(f"\n{label}  Nuevos god modules ({len(new_gods)}):")
+            print(f"\n{label}  New god modules ({len(new_gods)}):")
             for path_str in new_gods:
                 print(f"   {path_str}")
 
         if _warns(regressions, sev.instability):
             label = "⛔" if sev.instability == Severity.ERROR else "⚠"
-            print(f"\n{label}  Regresiones de inestabilidad ({len(regressions)}):")
+            print(f"\n{label}  Instability regressions ({len(regressions)}):")
             for r in regressions:
                 print(f"   {r['file_path']}  I: {r['before']:.3f} → {r['after']:.3f}")
 
         if _warns(new_sdp, sev.instability):
             label = "⛔" if sev.instability == Severity.ERROR else "⚠"
-            print(f"\n{label}  Nuevas violaciones SDP ({len(new_sdp)}):")
+            print(f"\n{label}  New SDP violations ({len(new_sdp)}):")
             for v in new_sdp:
                 print(f"   {_sdp_text(v)}")
 
@@ -977,7 +976,7 @@ def _emit_github_annotations(
         level = _annotation_level(sev.cycles)
         for cycle in new_cycles:
             safe_path = _safe_annotation_path(cycle[0])
-            msg = f"Ciclo de importación: {' → '.join(cycle)}"
+            msg = f"Import cycle: {' → '.join(cycle)}"
             print(f"::{level} file={safe_path},line=1::{msg}")
 
     if _warns(new_gods, sev.god_modules):
@@ -985,14 +984,15 @@ def _emit_github_annotations(
         for path_str in new_gods:
             safe_path = _safe_annotation_path(path_str)
             print(
-                f"::{level} file={safe_path},line=1::God module: Ca excede el percentil configurado"
+                f"::{level} file={safe_path},line=1::"
+                "God module: Ca exceeds the configured percentile"
             )
 
     if _warns(regressions, sev.instability):
         level = _annotation_level(sev.instability)
         for r in regressions:
             safe_path = _safe_annotation_path(r["file_path"])
-            msg = f"Inestabilidad: {r['before']:.3f} → {r['after']:.3f}"
+            msg = f"Instability: {r['before']:.3f} → {r['after']:.3f}"
             print(f"::{level} file={safe_path},line=1::{msg}")
 
     new_sdp = new_sdp or []
@@ -1000,7 +1000,7 @@ def _emit_github_annotations(
         level = _annotation_level(sev.instability)
         for v in new_sdp:
             safe_path = _safe_annotation_path(v["source"])
-            print(f"::{level} file={safe_path},line=1::Violación SDP: {_sdp_text(v)}")
+            print(f"::{level} file={safe_path},line=1::SDP violation: {_sdp_text(v)}")
 
 
 def _emit_gitlab_report(
@@ -1026,9 +1026,7 @@ def _emit_gitlab_report(
 
     if _warns(new_cycles, sev.cycles):
         label = "ERROR" if sev.cycles == Severity.ERROR else "WARNING"
-        print(
-            f"\x1b[0Ksection_start:{ts}:cycles\r\x1b[0K[{label}] Nuevos ciclos ({len(new_cycles)})"
-        )
+        print(f"\x1b[0Ksection_start:{ts}:cycles\r\x1b[0K[{label}] New cycles ({len(new_cycles)})")
         for cycle in new_cycles:
             print("  " + " → ".join(cycle) + " → ...")
         print(f"\x1b[0Ksection_end:{ts}:cycles\r\x1b[0K")
@@ -1037,7 +1035,7 @@ def _emit_gitlab_report(
         label = "ERROR" if sev.god_modules == Severity.ERROR else "WARNING"
         print(
             f"\x1b[0Ksection_start:{ts}:god_modules\r\x1b[0K"
-            f"[{label}] Nuevos god modules ({len(new_gods)})"
+            f"[{label}] New god modules ({len(new_gods)})"
         )
         for path_str in new_gods:
             print(f"  {path_str}")
@@ -1047,7 +1045,7 @@ def _emit_gitlab_report(
         label = "ERROR" if sev.instability == Severity.ERROR else "WARNING"
         print(
             f"\x1b[0Ksection_start:{ts}:instability\r\x1b[0K"
-            f"[{label}] Regresiones de inestabilidad ({len(regressions)})"
+            f"[{label}] Instability regressions ({len(regressions)})"
         )
         for r in regressions:
             print(f"  {r['file_path']}  I: {r['before']:.3f} → {r['after']:.3f}")
@@ -1057,8 +1055,7 @@ def _emit_gitlab_report(
     if _warns(new_sdp, sev.instability):
         label = "ERROR" if sev.instability == Severity.ERROR else "WARNING"
         print(
-            f"\x1b[0Ksection_start:{ts}:sdp\r\x1b[0K"
-            f"[{label}] Nuevas violaciones SDP ({len(new_sdp)})"
+            f"\x1b[0Ksection_start:{ts}:sdp\r\x1b[0K[{label}] New SDP violations ({len(new_sdp)})"
         )
         for v in new_sdp:
             print(f"  {_sdp_text(v)}")
@@ -1066,7 +1063,7 @@ def _emit_gitlab_report(
 
 
 # ──────────────────────────────────────────────
-# Acoplamiento estructural (ex-metrics)
+# Structural coupling (ex-metrics)
 # ──────────────────────────────────────────────
 
 
@@ -1120,19 +1117,19 @@ def cmd_coupling(args) -> None:
         return
 
     if not modules:
-        print("Sin datos — ejecuta primero: debtector index <directorio>")
+        print("No data — run first: debtector index <directory>")
         return
 
-    # Ordenar
+    # Sort
     sort_key = getattr(args, "sort", "fan_in")
     modules_sorted = sorted(modules, key=lambda m: getattr(m, sort_key, 0), reverse=True)
     if args.limit:
         modules_sorted = modules_sorted[: args.limit]
 
-    # Cabecera
+    # Header
     col_w = max((len(m.file_path) for m in modules_sorted), default=30)
     col_w = max(col_w, 30)
-    header = f"{'Módulo':<{col_w}}  {'Ca':>6}  {'Ce':>6}  {'I':>6}  {'Flags'}"
+    header = f"{'Module':<{col_w}}  {'Ca':>6}  {'Ce':>6}  {'I':>6}  {'Flags'}"
     print()
     print(header)
     print("─" * len(header))
@@ -1142,36 +1139,36 @@ def cmd_coupling(args) -> None:
         if m.file_path in god_paths:
             flags += " ● god"
         if m.file_path in unstable_paths:
-            flags += " ⚠ inestable"
+            flags += " ⚠ unstable"
         print(
             f"{m.file_path:<{col_w}}  {m.fan_in:>6.1f}  {m.fan_out:>6.1f}"
             f"  {m.instability:>6.3f}  {flags}"
         )
 
     print("─" * len(header))
-    print(f"Total: {len(modules)} módulos")
+    print(f"Total: {len(modules)} modules")
 
-    # Ciclos
+    # Cycles
     if cycles:
-        print(f"\n⚠  Ciclos detectados ({len(cycles)}):")
+        print(f"\n⚠  Cycles detected ({len(cycles)}):")
         for cycle in cycles:
             print("   " + " → ".join(cycle) + " → ...")
     else:
-        print("\n✓  Sin ciclos")
+        print("\n✓  No cycles")
 
     # God modules
     if gods:
         thr = cfg.metrics.thresholds
         print(
             f"\n● God modules (Ca > p{int(thr.god_module_percentile)} "
-            f"y Ca >= {thr.god_module_min_ca:g}):"
+            f"and Ca >= {thr.god_module_min_ca:g}):"
         )
         for m in gods:
             print(f"   {m.file_path}  Ca={m.fan_in:.1f}")
 
-    # Violaciones SDP: un módulo más estable depende de uno más inestable
+    # SDP violations: a more stable module depends on a less stable one
     if sdp:
-        print(f"\n⚠  Violaciones SDP ({len(sdp)}):")
+        print(f"\n⚠  SDP violations ({len(sdp)}):")
         for v in sdp:
             print(f"   {_sdp_text(_sdp_dict(v))}")
 
@@ -1225,12 +1222,12 @@ def cmd_hotspots(args) -> None:
         return
 
     if not hotspots:
-        print("Sin hotspots — ejecuta primero: debtector index <directorio>")
+        print("No hotspots — run first: debtector index <directory>")
         return
 
     col_w = max((len(h.file_path) for h in hotspots), default=30)
     col_w = max(col_w, 30)
-    header = f"{'Módulo':<{col_w}}  {'Churn':>7}  {'Coupling':>9}  {'Score':>8}"
+    header = f"{'Module':<{col_w}}  {'Churn':>7}  {'Coupling':>9}  {'Score':>8}"
     print()
     print(header)
     print("─" * len(header))
@@ -1278,7 +1275,7 @@ def cmd_temporal_coupling(args) -> None:
         return
 
     if not pairs:
-        print("Sin acoplamiento temporal detectado")
+        print("No temporal coupling detected")
         return
 
     col_w = max(
@@ -1286,7 +1283,7 @@ def cmd_temporal_coupling(args) -> None:
         default=30,
     )
     col_w = max(col_w, 25)
-    header = f"{'Archivo A':<{col_w}}  {'Archivo B':<{col_w}}  {'Commits':>7}  {'Ratio':>6}"
+    header = f"{'File A':<{col_w}}  {'File B':<{col_w}}  {'Commits':>7}  {'Ratio':>6}"
     print()
     print(header)
     print("─" * len(header))
@@ -1338,14 +1335,14 @@ def cmd_bus_factor(args) -> None:
         return
 
     if not results:
-        print("Sin datos — ejecuta primero: debtector index <directorio>")
+        print("No data — run first: debtector index <directory>")
         return
 
     col_w = max((len(b.file_path) for b in results), default=30)
     col_w = max(col_w, 30)
     aut_w = max((len(b.top_author) for b in results), default=15)
     aut_w = max(aut_w, 15)
-    header = f"{'Módulo':<{col_w}}  {'Top autor':<{aut_w}}  {'% líneas':>9}  {'Bus factor':>10}"
+    header = f"{'Module':<{col_w}}  {'Top author':<{aut_w}}  {'% lines':>9}  {'Bus factor':>10}"
     print()
     print(header)
     print("─" * len(header))
@@ -1356,7 +1353,7 @@ def cmd_bus_factor(args) -> None:
             f"  {b.top_author_pct:>8.1f}%  {b.bus_factor:>10}{risk}"
         )
     print("─" * len(header))
-    print(f"Total: {len(results)} archivos analizados")
+    print(f"Total: {len(results)} files analyzed")
 
 
 def cmd_git_coupling(args) -> None:
@@ -1439,9 +1436,9 @@ def cmd_git_coupling(args) -> None:
                 f"  score={h.hotspot_score:.2f}"
             )
     else:
-        print("  (sin datos)")
+        print("  (no data)")
 
-    _print_section("Acoplamiento temporal", "─")
+    _print_section("Temporal coupling", "─")
     if temporal:
         for t in temporal:
             print(
@@ -1449,7 +1446,7 @@ def cmd_git_coupling(args) -> None:
                 f"  ({t.shared_commits} commits, ratio={t.coupling_ratio:.3f})"
             )
     else:
-        print("  (sin datos)")
+        print("  (no data)")
 
     _print_section("Bus factor", "─")
     if bus:
@@ -1460,7 +1457,7 @@ def cmd_git_coupling(args) -> None:
                 f" ({b.top_author_pct:.1f}%)  bf={b.bus_factor}{risk}"
             )
     else:
-        print("  (sin datos)")
+        print("  (no data)")
 
 
 def _print_section(title: str, sep: str = "─") -> None:
@@ -1558,19 +1555,19 @@ def cmd_report(args) -> None:
     # Human output — only show items that signal a problem in each section
 
     # ── Structural coupling: only flagged modules ──
-    _print_section("Acoplamiento estructural")
+    _print_section("Structural coupling")
     flagged: list[tuple] = []
     for m in sorted(modules, key=lambda x: x.fan_in, reverse=True):
         flags = []
         if m.file_path in god_paths:
             flags.append("● god")
         if m.file_path in unstable_paths:
-            flags.append("⚠ inestable")
+            flags.append("⚠ unstable")
         if flags:
             flagged.append((m, "  ".join(flags)))
 
     if cycles:
-        print(f"  ✗ Ciclos ({len(cycles)}):")
+        print(f"  ✗ Cycles ({len(cycles)}):")
         for cycle in cycles:
             print("    " + " → ".join(cycle))
     if flagged:
@@ -1582,7 +1579,7 @@ def cmd_report(args) -> None:
                 f"  I={m.instability:.3f}  {flags_str}"
             )
     if not cycles and not flagged:
-        print("  ✓ Sin problemas")
+        print("  ✓ No issues")
 
     # ── Hotspots: files with score > 0 ──
     _print_section("Hotspots")
@@ -1596,10 +1593,10 @@ def cmd_report(args) -> None:
                 f"  coupling={h.coupling:>6.1f}  score={h.hotspot_score:>8.1f}"
             )
     else:
-        print("  ✓ Sin hotspots relevantes")
+        print("  ✓ No relevant hotspots")
 
     # ── Temporal coupling: all results already filtered by min_shared/min_ratio ──
-    _print_section("Acoplamiento temporal")
+    _print_section("Temporal coupling")
     if temporal:
         for t in temporal[:10]:
             print(
@@ -1607,7 +1604,7 @@ def cmd_report(args) -> None:
                 f"  ({t.shared_commits} commits, ratio={t.coupling_ratio:.2f})"
             )
     else:
-        print("  ✓ Sin acoplamiento temporal implícito")
+        print("  ✓ No implicit temporal coupling")
 
     # ── Bus factor: only single-author files (bf == 1) ──
     _print_section("Bus factor")
@@ -1618,7 +1615,7 @@ def cmd_report(args) -> None:
         for b in silos:
             print(f"  {b.file_path:<{col_w}}  {b.top_author} ({b.top_author_pct:.1f}%)  ⚠ bf=1")
     else:
-        print("  ✓ Sin archivos con autor único")
+        print("  ✓ No single-author files")
 
 
 # Entry point
@@ -1635,64 +1632,62 @@ def main() -> None:
     """
     parser = argparse.ArgumentParser(
         prog="debtector",
-        description="Debtector - Guardarraíl de acoplamiento para CI/PR",
+        description="Debtector - Coupling guardrail for CI/PR",
     )
-    parser.add_argument("--project", "-p", default=".", help="Ruta al proyecto")
+    parser.add_argument("--project", "-p", default=".", help="Path to the project")
     parser.add_argument(
         "--json",
         action="store_true",
         default=False,
-        help="Emitir JSON compacto en stdout (para consumo por IA)",
+        help="Emit compact JSON on stdout (for AI consumption)",
     )
 
     # Shared by every sub-parser so the options also work after the sub-command.
     # SUPPRESS keeps a value given before the sub-command from being overwritten.
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--project", "-p", default=argparse.SUPPRESS, help="Ruta al proyecto")
+    common.add_argument("--project", "-p", default=argparse.SUPPRESS, help="Path to the project")
     common.add_argument(
         "--json",
         action="store_true",
         default=argparse.SUPPRESS,
-        help="Emitir JSON compacto en stdout (para consumo por IA)",
+        help="Emit compact JSON on stdout (for AI consumption)",
     )
 
     sub = parser.add_subparsers(dest="command")
 
     # index
-    p_idx = sub.add_parser("index", parents=[common], help="Indexar un proyecto")
-    p_idx.add_argument("path", help="Ruta al directorio a indexar")
+    p_idx = sub.add_parser("index", parents=[common], help="Index a project")
+    p_idx.add_argument("path", help="Path to the directory to index")
 
     # search
-    p_search = sub.add_parser("search", parents=[common], help="Buscar símbolos")
-    p_search.add_argument("query", help="Texto a buscar")
-    p_search.add_argument("--kind", "-k", help="Filtrar: Class, Function, Method")
+    p_search = sub.add_parser("search", parents=[common], help="Search symbols")
+    p_search.add_argument("query", help="Text to search for")
+    p_search.add_argument("--kind", "-k", help="Filter: Class, Function, Method")
 
     # summary
-    p_sum = sub.add_parser("summary", parents=[common], help="Resumen de un archivo")
-    p_sum.add_argument("file", help="Ruta relativa del archivo")
+    p_sum = sub.add_parser("summary", parents=[common], help="Summarize a file")
+    p_sum.add_argument("file", help="Relative path of the file")
 
     # impact
-    p_imp = sub.add_parser("impact", parents=[common], help="Análisis de impacto")
-    p_imp.add_argument("files", nargs="+", help="Archivos modificados")
-    p_imp.add_argument("--depth", "-d", type=int, default=2, help="Profundidad máxima")
+    p_imp = sub.add_parser("impact", parents=[common], help="Impact analysis")
+    p_imp.add_argument("files", nargs="+", help="Changed files")
+    p_imp.add_argument("--depth", "-d", type=int, default=2, help="Maximum depth")
 
     # imports
-    p_imports = sub.add_parser("imports", parents=[common], help="Buscar imports de un módulo")
-    p_imports.add_argument("module", help="Módulo a buscar")
+    p_imports = sub.add_parser("imports", parents=[common], help="Find imports of a module")
+    p_imports.add_argument("module", help="Module to search for")
 
     # status
-    sub.add_parser("status", parents=[common], help="Estadísticas del índice")
+    sub.add_parser("status", parents=[common], help="Index statistics")
 
     # baseline
-    p_baseline = sub.add_parser(
-        "baseline", parents=[common], help="Gestión del baseline de métricas"
-    )
+    p_baseline = sub.add_parser("baseline", parents=[common], help="Manage the metrics baseline")
     p_baseline_sub = p_baseline.add_subparsers(dest="baseline_cmd")
     p_baseline_sub.add_parser(
-        "save", parents=[common], help="Guardar snapshot de métricas como baseline"
+        "save", parents=[common], help="Save a metrics snapshot as the baseline"
     )
     p_status = p_baseline_sub.add_parser(
-        "status", parents=[common], help="Comparar métricas actuales con el baseline"
+        "status", parents=[common], help="Compare current metrics with the baseline"
     )
     p_status.add_argument(
         "--reporter",
@@ -1705,27 +1700,27 @@ def main() -> None:
     p_coupling = sub.add_parser(
         "coupling",
         parents=[common],
-        help="Acoplamiento estructural (Ca, Ce, I, ciclos, god modules)",
+        help="Structural coupling (Ca, Ce, I, cycles, god modules)",
     )
     p_coupling.add_argument(
         "--sort",
         choices=["fan_in", "fan_out", "instability"],
         default="fan_in",
-        help="Columna de ordenación (default: fan_in)",
+        help="Sort column (default: fan_in)",
     )
     p_coupling.add_argument(
         "--limit",
         "-l",
         type=int,
         default=None,
-        help="Número máximo de filas a mostrar",
+        help="Maximum number of rows to show",
     )
 
     # metrics — deprecated alias for coupling
     p_metrics_alias = sub.add_parser(
         "metrics",
         parents=[common],
-        help="[DEPRECADO] Usa 'coupling'. Métricas de acoplamiento estructural.",
+        help="[DEPRECATED] Use 'coupling'. Structural coupling metrics.",
     )
     p_metrics_alias.add_argument(
         "--sort",
@@ -1735,49 +1730,47 @@ def main() -> None:
     p_metrics_alias.add_argument("--limit", "-l", type=int, default=None)
 
     # callers
-    p_callers = sub.add_parser("callers", parents=[common], help="¿Quién llama a un símbolo?")
-    p_callers.add_argument("qualified_name", help="qualified_name del símbolo")
+    p_callers = sub.add_parser("callers", parents=[common], help="Who calls a symbol?")
+    p_callers.add_argument("qualified_name", help="qualified_name of the symbol")
 
     # untested
     p_untested = sub.add_parser(
-        "untested", parents=[common], help="Símbolos sin tests (sin arista COVERS)"
+        "untested", parents=[common], help="Symbols without tests (no COVERS edge)"
     )
     p_untested.add_argument(
         "path",
         nargs="?",
         default=None,
-        help="Ruta o prefijo de directorio para filtrar (opcional)",
+        help="Path or directory prefix to filter by (optional)",
     )
 
     # audit
-    p_audit = sub.add_parser(
-        "audit", parents=[common], help="Vista de auditoría: Fase 3 para revisión profunda"
-    )
+    p_audit = sub.add_parser("audit", parents=[common], help="Audit view: phase 3 for deep review")
     p_audit.add_argument(
         "--top-n",
         type=int,
         default=10,
         dest="top_n",
-        help="Mostrar top N entradas por sección (default: 10)",
+        help="Show top N entries per section (default: 10)",
     )
     p_audit.add_argument(
         "--full",
         action="store_true",
         default=False,
-        help="Mostrar todas las entradas (no limitar por --top-n)",
+        help="Show all entries (do not limit by --top-n)",
     )
 
     # hotspots
     p_hotspots = sub.add_parser(
-        "hotspots", parents=[common], help="Hotspots: churn × acoplamiento estructural"
+        "hotspots", parents=[common], help="Hotspots: churn × structural coupling"
     )
     p_hotspots.add_argument("--limit", "-l", type=int, default=None)
-    p_hotspots.add_argument("--since", default=None, help="Filtro de fecha (e.g. '6 months ago')")
+    p_hotspots.add_argument("--since", default=None, help="Date filter (e.g. '6 months ago')")
     p_hotspots.add_argument("--min-coupling", type=float, default=0.0, dest="min_coupling")
 
     # temporal-coupling
     p_tc = sub.add_parser(
-        "temporal-coupling", parents=[common], help="Archivos que co-cambian frecuentemente"
+        "temporal-coupling", parents=[common], help="Files that frequently change together"
     )
     p_tc.add_argument("--limit", "-l", type=int, default=None)
     p_tc.add_argument("--since", default=None)
@@ -1785,14 +1778,14 @@ def main() -> None:
     p_tc.add_argument("--min-ratio", type=float, default=0.3, dest="min_ratio")
 
     # bus-factor
-    p_bus = sub.add_parser("bus-factor", parents=[common], help="Riesgo de autor único por archivo")
+    p_bus = sub.add_parser("bus-factor", parents=[common], help="Single-author risk per file")
     p_bus.add_argument("--limit", "-l", type=int, default=None)
 
     # git-coupling
     p_git = sub.add_parser(
         "git-coupling",
         parents=[common],
-        help="Análisis behavioral completo: hotspots + temporal + bus factor",
+        help="Full behavioral analysis: hotspots + temporal + bus factor",
     )
     p_git.add_argument("--limit", "-l", type=int, default=None)
     p_git.add_argument("--since", default=None)
@@ -1801,7 +1794,7 @@ def main() -> None:
 
     # report
     p_report = sub.add_parser(
-        "report", parents=[common], help="Informe completo: acoplamiento estructural + behavioral"
+        "report", parents=[common], help="Full report: structural + behavioral coupling"
     )
     p_report.add_argument(
         "--sort",

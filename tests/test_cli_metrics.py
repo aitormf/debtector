@@ -69,7 +69,7 @@ class TestCmdMetricsHuman:
         """Empty index prints a message and exits cleanly."""
         cmd_metrics(_args(str(tmp_path)))
         out = capsys.readouterr().out
-        assert "sin datos" in out.lower() or len(out) >= 0  # doesn't crash
+        assert "no data" in out.lower() or len(out) >= 0  # doesn't crash
 
     def test_shows_table_header(self, tmp_path: Path, capsys) -> None:
         _seed(str(tmp_path), {"src/a.py": [], "src/b.py": []})
@@ -113,7 +113,7 @@ class TestCmdMetricsHuman:
         )
         cmd_metrics(_args(str(tmp_path)))
         out = capsys.readouterr().out
-        assert "ciclo" in out.lower() or "cycle" in out.lower()
+        assert "cycle" in out.lower()
 
     def test_limit_flag_restricts_rows(self, tmp_path: Path, capsys) -> None:
         files = {f"src/mod_{i}.py": [] for i in range(10)}

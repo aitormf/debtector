@@ -79,13 +79,13 @@ class TestCmdIndexHuman:
     """cmd_index with json=False prints a human-readable summary."""
 
     def test_prints_indexing_message(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
-        """Prints 'Indexando' before scanning."""
+        """Prints 'Indexing' before scanning."""
         src = tmp_path / "src"
         src.mkdir()
         (src / "app.py").write_text("def f(): pass\n", encoding="utf-8")
         cmd_index(_args(project=str(tmp_path), json=False, path=str(src)))
         out = capsys.readouterr().out
-        assert "Indexando" in out
+        assert "Indexing" in out
 
     def test_prints_stats_labels(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
         """Prints scanned/indexed/skipped/errors/removed counters."""
@@ -94,10 +94,10 @@ class TestCmdIndexHuman:
         (src / "app.py").write_text("def f(): pass\n", encoding="utf-8")
         cmd_index(_args(project=str(tmp_path), json=False, path=str(src)))
         out = capsys.readouterr().out
-        assert "Indexados" in out
-        assert "Sin cambios" in out
-        assert "Errores" in out
-        assert "Eliminados" in out
+        assert "Indexed" in out
+        assert "Unchanged" in out
+        assert "Errors" in out
+        assert "Deleted" in out
 
 
 # ──────────────────────────────────────────────
@@ -161,11 +161,11 @@ class TestCmdSummaryHuman:
         assert "service.py" in out
 
     def test_prints_symbols_section(self, project: tuple, capsys: pytest.CaptureFixture) -> None:
-        """Prints 'Símbolos:' heading when nodes exist."""
+        """Prints 'Symbols:' heading when nodes exist."""
         proj, _ = project
         cmd_summary(_args(project=proj, json=False, file="service.py"))
         out = capsys.readouterr().out
-        assert "Símbolos" in out
+        assert "Symbols" in out
 
     def test_not_found_human_exits_1(self, project: tuple, capsys: pytest.CaptureFixture) -> None:
         """Exits with code 1 when file is absent from index."""
@@ -214,11 +214,11 @@ class TestCmdImpactHuman:
     """cmd_impact with json=False prints an impact analysis."""
 
     def test_prints_analysis_header(self, project: tuple, capsys: pytest.CaptureFixture) -> None:
-        """Prints the 'Análisis de impacto' header."""
+        """Prints the 'Impact analysis' header."""
         proj, _ = project
         cmd_impact(_args(project=proj, json=False, files=["src/service.py"], depth=2))
         out = capsys.readouterr().out
-        assert "impacto" in out.lower()
+        assert "impact" in out.lower()
 
     def test_prints_changed_nodes_count(
         self, project: tuple, capsys: pytest.CaptureFixture
@@ -227,7 +227,7 @@ class TestCmdImpactHuman:
         proj, _ = project
         cmd_impact(_args(project=proj, json=False, files=["src/service.py"], depth=2))
         out = capsys.readouterr().out
-        assert "cambiados" in out.lower()
+        assert "changed" in out.lower()
 
     def test_json_output(self, project: tuple, capsys: pytest.CaptureFixture) -> None:
         """JSON mode emits changed_nodes and impacted_files keys."""
@@ -282,32 +282,32 @@ class TestCmdStatusHuman:
     """cmd_status with json=False prints index statistics."""
 
     def test_prints_estado_header(self, project: tuple, capsys: pytest.CaptureFixture) -> None:
-        """Prints the 'Estado del índice' header."""
+        """Prints the 'Index status' header."""
         proj, _ = project
         cmd_status(_args(project=proj, json=False))
         out = capsys.readouterr().out
-        assert "Estado" in out
+        assert "status" in out.lower()
 
     def test_prints_archivos_count(self, project: tuple, capsys: pytest.CaptureFixture) -> None:
-        """Prints 'Archivos:' with a count."""
+        """Prints 'Files:' with a count."""
         proj, _ = project
         cmd_status(_args(project=proj, json=False))
         out = capsys.readouterr().out
-        assert "Archivos:" in out
+        assert "Files:" in out
 
     def test_prints_nodos_per_kind(self, project: tuple, capsys: pytest.CaptureFixture) -> None:
-        """Prints 'Nodos por tipo:' breakdown."""
+        """Prints 'Nodes by kind:' breakdown."""
         proj, _ = project
         cmd_status(_args(project=proj, json=False))
         out = capsys.readouterr().out
-        assert "tipo" in out.lower()
+        assert "kind" in out.lower()
 
     def test_prints_edges_per_kind(self, project: tuple, capsys: pytest.CaptureFixture) -> None:
         """Prints 'Aristas por tipo:' breakdown."""
         proj, _ = project
         cmd_status(_args(project=proj, json=False))
         out = capsys.readouterr().out
-        assert "Aristas" in out
+        assert "Edges" in out
 
 
 # ──────────────────────────────────────────────
@@ -319,11 +319,11 @@ class TestCmdCallersHuman:
     """cmd_callers prints callers of a symbol."""
 
     def test_human_prints_quien_llama(self, project: tuple, capsys: pytest.CaptureFixture) -> None:
-        """Prints '¿Quién llama a …?' header."""
+        """Prints 'Who calls …?' header."""
         proj, _ = project
         cmd_callers(_args(project=proj, json=False, qualified_name="src/service.py::MyService"))
         out = capsys.readouterr().out
-        assert "llama" in out.lower()
+        assert "calls" in out.lower()
 
     def test_human_prints_total(self, project: tuple, capsys: pytest.CaptureFixture) -> None:
         """Prints a Total line."""

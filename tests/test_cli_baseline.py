@@ -139,7 +139,7 @@ class TestBaselineStatus:
 
         cmd_baseline(_args(str(tmp_path), "status"))
         out = capsys.readouterr().out
-        assert "sin cambios" in out.lower() or "ok" in out.lower() or "✓" in out
+        assert "no changes" in out.lower()
 
     def test_new_cycle_detected_as_regression(self, tmp_path: Path, capsys) -> None:
         """A cycle introduced after baseline is reported and exits 1."""
@@ -159,7 +159,7 @@ class TestBaselineStatus:
             cmd_baseline(_args(str(tmp_path), "status"))
         assert exc.value.code == 1
         out = capsys.readouterr().out
-        assert "ciclo" in out.lower() or "cycle" in out.lower()
+        assert "cycle" in out.lower()
 
     def test_status_json_output(self, tmp_path: Path, capsys) -> None:
         _seed(str(tmp_path), {"src/a.py": []})

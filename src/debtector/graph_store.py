@@ -1,15 +1,15 @@
 """
-GraphStore: almacenamiento de grafos de código sobre SQLite.
+GraphStore: code graph storage on top of SQLite.
 
-Un solo archivo .db que almacena:
-- Nodos: archivos, clases, funciones, métodos
-- Aristas: imports, herencia, llamadas, containment
-- Metadatos: versión del schema, timestamps, etc.
+A single .db file that stores:
+- Nodes: files, classes, functions, methods
+- Edges: imports, inheritance, calls, containment
+- Metadata: schema version, timestamps, etc.
 
-Para traversals complejos (impacto, dependencias transitivas) usa
-NetworkX como grafo en memoria con cache invalidable.
+For complex traversals (impact, transitive dependencies) it uses
+NetworkX as an in-memory graph with an invalidatable cache.
 
-Uso:
+Usage:
     store = GraphStore(".debtector.db")
     store.store_file(file_path, nodes, edges, file_hash)
     results = store.search_nodes("UserService")
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS metadata (
     value   TEXT NOT NULL
 );
 
--- Índices para consultas frecuentes
+-- Indexes for frequent queries
 CREATE INDEX IF NOT EXISTS idx_nodes_qualified ON nodes(qualified_name);
 CREATE INDEX IF NOT EXISTS idx_nodes_file ON nodes(file_path);
 CREATE INDEX IF NOT EXISTS idx_nodes_kind ON nodes(kind);
@@ -118,7 +118,7 @@ CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_qualified);
 CREATE INDEX IF NOT EXISTS idx_edges_kind ON edges(kind);
 CREATE INDEX IF NOT EXISTS idx_edges_file ON edges(file_path);
 
--- FTS5: búsqueda léxica con ranking BM25
+-- FTS5: lexical search with BM25 ranking
 CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
     node_id    UNINDEXED,
     name,
@@ -135,11 +135,11 @@ _CAMEL_RE = re.compile(r"([a-z])([A-Z])")
 
 class GraphStore:
     """
-    Almacén de grafos de código sobre SQLite.
+    Code graph store on top of SQLite.
 
-    Combina almacenamiento relacional persistente con un grafo NetworkX
-    en memoria para traversals eficientes. El cache de NetworkX se
-    invalida automáticamente tras cada escritura.
+    Combines persistent relational storage with an in-memory NetworkX
+    graph for efficient traversals. The NetworkX cache is automatically
+    invalidated after every write.
     """
 
     def __init__(self, db_path: str | Path = ".debtector.db") -> None:
@@ -160,11 +160,11 @@ class GraphStore:
 
         self._init_schema()
 
-        # Directorios de ``test_paths`` (relativos a la raíz indexada, con "/"
-        # final) que cuentan como tests además de las convenciones.
+        # ``test_paths`` directories (relative to the indexed root, with a
+        # trailing "/") that count as tests in addition to the conventions.
         self.test_prefixes: list[str] = []
 
-        # Cache de NetworkX para traversals
+        # NetworkX cache for traversals
         self._nxg_cache = None
         self._cache_lock = threading.Lock()
 
@@ -227,7 +227,7 @@ class GraphStore:
             self._conn.close()
 
     # ══════════════════════════════════════════
-    # ESCRITURA
+    # WRITES
     # ══════════════════════════════════════════
 
     def store_file(
@@ -238,32 +238,32 @@ class GraphStore:
         file_hash: str = "",
     ) -> None:
         """
-        Almacena atómicamente todos los nodos y aristas de un archivo.
+        Atomically store all nodes and edges of a file.
 
-        Si el archivo ya estaba indexado, elimina sus datos previos y
-        los reemplaza. Todo dentro de una transacción: si algo falla,
-        no se modifica nada.
+        If the file was already indexed, its previous data is removed and
+        replaced. Everything runs inside one transaction: if anything
+        fails, nothing is modified.
 
         Args:
-            file_path: Ruta relativa del archivo.
-            nodes: Nodos extraídos por el parser.
-            edges: Aristas extraídas por el parser.
-            file_hash: SHA-256 del contenido (para detección de cambios).
+            file_path: Relative path of the file.
+            nodes: Nodes extracted by the parser.
+            edges: Edges extracted by the parser.
+            file_hash: SHA-256 of the content (for change detection).
         """
         self._conn.execute("BEGIN IMMEDIATE")
         try:
-            # Limpiar FTS antes de borrar nodos (aún necesitamos sus IDs)
+            # Clean FTS before deleting nodes (we still need their IDs)
             self._conn.execute(
                 "DELETE FROM nodes_fts WHERE node_id IN (SELECT id FROM nodes WHERE file_path = ?)",
                 (file_path,),
             )
-            # Limpiar datos previos del archivo
+            # Clean the file's previous data
             self._conn.execute("DELETE FROM edges WHERE file_path = ?", (file_path,))
             self._conn.execute("DELETE FROM nodes WHERE file_path = ?", (file_path,))
 
             now = time.time()
 
-            # Insertar nodos y poblar FTS5
+            # Insert nodes and populate FTS5
             for node in nodes:
                 cur = self._conn.execute(
                     """INSERT INTO nodes
@@ -310,7 +310,7 @@ class GraphStore:
                     ),
                 )
 
-            # Insertar aristas
+            # Insert edges
             for edge in edges:
                 self._conn.execute(
                     """INSERT INTO edges
@@ -385,7 +385,7 @@ class GraphStore:
         return row["value"] if row else None
 
     # ══════════════════════════════════════════
-    # LECTURA: Consultas directas (SQL)
+    # READS: direct queries (SQL)
     # ══════════════════════════════════════════
 
     def get_file_hash(self, file_path: str) -> str | None:
@@ -623,7 +623,7 @@ class GraphStore:
         }
 
     # ══════════════════════════════════════════
-    # LECTURA: Consultas de grafo (NetworkX)
+    # READS: graph queries (NetworkX)
     # ══════════════════════════════════════════
 
     def get_outgoing(self, qualified_name: str, edge_kind: str | None = None) -> list[GraphEdge]:
@@ -732,13 +732,13 @@ class GraphStore:
         """
         nxg = self._build_networkx_graph()
 
-        # Semillas: todos los qualified_names en archivos cambiados
+        # Seeds: all qualified_names in changed files
         seeds: set[str] = set()
         for f in changed_files:
             for node in self.get_nodes_by_file(f):
                 seeds.add(node.qualified_name)
 
-        # BFS bidireccional
+        # Bidirectional BFS
         visited: set[str] = set()
         frontier = seeds.copy()
         impacted: set[str] = set()
@@ -750,12 +750,12 @@ class GraphStore:
 
             for qn in frontier:
                 if qn in nxg:
-                    # Hacia adelante: ¿qué afecta este nodo?
+                    # Forward: what does this node affect?
                     for neighbor in nxg.neighbors(qn):
                         if neighbor not in visited:
                             next_frontier.add(neighbor)
                             impacted.add(neighbor)
-                    # Hacia atrás: ¿quién depende de este nodo?
+                    # Backward: who depends on this node?
                     for pred in nxg.predecessors(qn):
                         if pred not in visited:
                             next_frontier.add(pred)
@@ -767,7 +767,7 @@ class GraphStore:
             frontier = next_frontier
             depth += 1
 
-        # Construir resultado
+        # Build result
         changed_nodes = self._batch_get_nodes(seeds)
         impacted_nodes = self._batch_get_nodes(impacted - seeds)
         impacted_files = list({n.file_path for n in impacted_nodes})
@@ -818,7 +818,7 @@ class GraphStore:
         return chains
 
     # ══════════════════════════════════════════
-    # ESTADÍSTICAS
+    # STATISTICS
     # ══════════════════════════════════════════
     # COVERS: test coverage edges
     # ══════════════════════════════════════════

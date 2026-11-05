@@ -181,7 +181,7 @@ class TestAuditTestRisk:
         capsys.readouterr()
         cmd_audit(SimpleNamespace(project=str(tmp_path), top_n=10, full=False, json=False))
         captured = capsys.readouterr()
-        assert "No se han encontrado tests" in captured.err
+        assert "No tests found" in captured.err
         assert "test_paths" in captured.err
         assert "test_paths" not in captured.out
 
@@ -220,7 +220,7 @@ class TestAuditTestRisk:
         _index(tmp_path, "src")
         capsys.readouterr()
         cmd_audit(SimpleNamespace(project=str(tmp_path), top_n=10, full=False, json=False))
-        assert "No se han encontrado tests" not in capsys.readouterr().err
+        assert "No tests found" not in capsys.readouterr().err
 
 
 @pytest.fixture(autouse=True)

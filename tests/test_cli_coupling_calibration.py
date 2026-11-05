@@ -83,8 +83,8 @@ class TestCouplingOutput:
         _seed(str(tmp_path), _VIOLATING)
         cmd_coupling(_coupling_args(str(tmp_path)))
         lines = capsys.readouterr().out.splitlines()
-        assert any("src/b.py" in ln and "inestable" in ln for ln in lines)
-        assert not any("src/x0.py" in ln and "inestable" in ln for ln in lines)
+        assert any("src/b.py" in ln and "unstable" in ln for ln in lines)
+        assert not any("src/x0.py" in ln and "unstable" in ln for ln in lines)
 
     def test_min_ca_from_config_reaches_god_detection(self, tmp_path: Path, capsys) -> None:
         files: dict[str, list[str]] = {f"src/u{i}.py": ["src/hub.py"] for i in range(5)}
@@ -140,7 +140,7 @@ class TestBaselineSdp:
         cmd_baseline(_baseline_args(str(tmp_path), "save"))
         capsys.readouterr()
         cmd_baseline(_baseline_args(str(tmp_path), "status"))
-        assert "Sin cambios" in capsys.readouterr().out
+        assert "No changes" in capsys.readouterr().out
 
     def test_old_format_baseline_gives_no_false_regression(self, tmp_path: Path, capsys) -> None:
         """A baseline saved before SDP existed has no ``sdp_violations``: no previous data."""
@@ -156,4 +156,4 @@ class TestBaselineSdp:
         capsys.readouterr()
 
         cmd_baseline(_baseline_args(str(tmp_path), "status"))  # must not exit 1 or crash
-        assert "Sin cambios" in capsys.readouterr().out
+        assert "No changes" in capsys.readouterr().out

@@ -303,7 +303,7 @@ inheritance = "info"     # (default: info)
 
 `--reporter github` emite GitHub Actions Annotations:
 ```
-::error file=src/auth.py,line=1::Ciclo de importación: src/auth.py → src/user.py
+::error file=src/auth.py,line=1::Import cycle: src/auth.py → src/user.py
 ```
 
 `--reporter gitlab` emite GitLab CI section markers con ANSI.

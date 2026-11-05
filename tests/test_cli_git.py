@@ -156,7 +156,7 @@ class TestCmdHotspots:
         with patch("debtector.cli.compute_hotspots", return_value=[]):
             cmd_hotspots(_args(str(tmp_path)))
         out = capsys.readouterr().out
-        assert "sin hotspots" in out.lower() or "sin datos" in out.lower()
+        assert "no hotspots" in out.lower() or "no data" in out.lower()
 
 
 # ──────────────────────────────────────────────

@@ -1,8 +1,8 @@
 """
-Parser de JavaScript/TypeScript usando Tree-sitter.
+JavaScript/TypeScript parser using Tree-sitter.
 
-Produce NodeInfo y EdgeInfo con qualified_names, incluyendo aristas
-CONTAINS, IMPORTS_FROM, HAS_METHOD e INHERITS.
+Produces NodeInfo and EdgeInfo with qualified_names, including
+CONTAINS, IMPORTS_FROM, HAS_METHOD and INHERITS edges.
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ class JavaScriptParser(LanguageParser):
         nodes: list[NodeInfo] = []
         edges: list[EdgeInfo] = []
 
-        # Nodo del archivo
+        # File node
         file_qn = make_qualified_name(file_path, file_path, NodeKind.FILE)
         module_docstring = self._get_module_docstring(root, source)
         nodes.append(
@@ -96,7 +96,7 @@ class JavaScriptParser(LanguageParser):
             uses_type_seen=uses_type_seen,
         )
 
-        # Segunda pasada: aristas CALLS (requiere índice completo de símbolos)
+        # Second pass: CALLS edges (requires the complete symbol index)
         symbol_index = self._build_symbol_index(nodes)
         self._extract_file_calls(root, source, file_path, symbol_index, edges, parent=None)
 
@@ -185,7 +185,7 @@ class JavaScriptParser(LanguageParser):
         return None
 
     # ──────────────────────────────────────────────
-    # Símbolos
+    # Symbols
     # ──────────────────────────────────────────────
 
     def _extract_symbols(
@@ -221,9 +221,8 @@ class JavaScriptParser(LanguageParser):
                 objects are appended in-place.
             parent: Name of the enclosing class when processing a class body,
                 or ``None`` at module level.
-            uses_type_seen: Set compartido a nivel de archivo para dedup O(1)
-                de USES_TYPE. Se crea en ``parse()`` y se reutiliza en toda
-                la extracción del archivo.
+            uses_type_seen: File-wide set for O(1) USES_TYPE dedup. Created in
+                ``parse()`` and reused throughout the file extraction.
         """
         if uses_type_seen is None:
             uses_type_seen = set()
@@ -269,7 +268,7 @@ class JavaScriptParser(LanguageParser):
                     )
                 )
 
-                # Herencia
+                # Inheritance
                 for base in self._get_extends(actual, source):
                     edges.append(
                         EdgeInfo(
@@ -281,7 +280,7 @@ class JavaScriptParser(LanguageParser):
                         )
                     )
 
-                # Métodos
+                # Methods
                 body = self._get_class_body(actual)
                 if body:
                     for member in body.children:
@@ -313,7 +312,7 @@ class JavaScriptParser(LanguageParser):
                                 )
                             )
 
-                            # Aristas USES_TYPE desde las anotaciones de tipo del método
+                            # USES_TYPE edges from the method's type annotations
                             self._extract_uses_type_ts(
                                 member,
                                 source,
@@ -352,7 +351,7 @@ class JavaScriptParser(LanguageParser):
                     )
                 )
 
-                # Aristas USES_TYPE desde las anotaciones de tipo de la función
+                # USES_TYPE edges from the function's type annotations
                 self._extract_uses_type_ts(
                     actual,
                     source,
@@ -523,8 +522,8 @@ class JavaScriptParser(LanguageParser):
             line: Line number of the function/method definition.
             edges: Mutable list to which new :class:`~debtector.models.EdgeInfo`
                 objects are appended in-place.
-            uses_type_seen: Set de tipos ya emitidos para este archivo.
-                Se muta en-place. Permite dedup en O(1) sin escanear ``edges``.
+            uses_type_seen: Set of types already emitted for this file.
+                Mutated in place. Enables O(1) dedup without scanning ``edges``.
         """
         type_names: set[str] = set()
 
