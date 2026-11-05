@@ -88,8 +88,9 @@ def cyclomatic_complexity(body: Node | None, rules: ComplexityRules) -> int:
 def nested_complexity(body: Node | None, rules: ComplexityRules) -> int:
     """Sum the complexity of the functions nested inside *body*, recursively.
 
-    Functions defined inside nested classes are included; decorators and class bodies
-    themselves are not counted.
+    The whole subtree is searched (conditional or looped closures, methods of local
+    classes); only the nested functions' own decision points count, not those of
+    local class bodies.
 
     Args:
         body: The enclosing function's body node (``None`` means no body).
@@ -108,7 +109,10 @@ def nested_complexity(body: Node | None, rules: ComplexityRules) -> int:
         if node.type in rules.function_nodes:
             inner = node.child_by_field_name("body")
             total += cyclomatic_complexity(inner, rules) + nested_complexity(inner, rules)
-        elif node.type in rules.boundary_nodes:
+        else:
+            # Any other node (blocks of if/for/try/with/match, local classes...) may hold
+            # nested functions. A nested function is not descended into here: its own
+            # nested functions are added by the recursive call, so each counts once.
             stack.extend(node.children)
     return total
 

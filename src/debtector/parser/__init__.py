@@ -10,8 +10,9 @@ from .python_parser import PythonParser
 #: Version of what the parsers emit. Bump it whenever parser output changes (new node
 #: ``extra`` data, new edges...) so ``index`` re-parses files even if their hash is unchanged.
 #: 1 = original output; 2 = adds ``extra["complexity"]`` to Function/Method nodes;
-#: 3 = adds ``extra["nested_complexity"]`` (Python closures).
-PARSER_VERSION = 3
+#: 3 = adds ``extra["nested_complexity"]`` (Python closures); 4 = also finds closures
+#: inside blocks and methods of local classes.
+PARSER_VERSION = 4
 
 
 class ParserRegistry:
