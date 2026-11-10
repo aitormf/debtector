@@ -1,7 +1,7 @@
 ---
 id: T1
 title: Un fichero es "sin tests" solo si ningún símbolo tiene COVERS
-status: todo
+status: done
 depends_on: []
 examples: [E1, E2, E3]
 verification: uv run pytest tests/audit/test_untested_files.py -q

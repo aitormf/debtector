@@ -1,7 +1,7 @@
 ---
 id: T3
 title: La complejidad de cada función puntúa en el health score
-status: todo
+status: done
 depends_on: []
 examples: [E4, E5, E6, E7, E8, E9, E10]
 verification: uv run pytest tests/audit/test_complexity_findings.py -q
