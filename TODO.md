@@ -39,7 +39,7 @@ ICP: dev/tech lead que usa agentes de código.
 ---
 
 ## Fase 3 — Audit (vista de auditoría)
-*Segundo presenter sobre el mismo backend de Fase 1+2. Para revisión profunda por tech lead, no para PR. Mismo grafo, presentación distinta — sin nueva fuente de datos. Ver [ADR-003](docs/decisions/003-audit-as-second-surface.md).*
+*Segundo presenter sobre el mismo backend de Fase 1+2. Para revisión profunda por tech lead, no para PR. Mismo grafo, presentación distinta — sin nueva fuente de datos. Ver [D-0003](docs/decisions/0003-audit-as-second-surface.md).*
 
 - [x] **LCOM4** — cohesión interna de clases vía componentes conexas en aristas CALLS método↔método dentro de la misma clase. Cada clase recibe un valor (1 = cohesiva, >1 = candidata a partir)
 - [x] **Priorización de ciclos** — ordenar ciclos detectados por fan-in del nodo más expuesto del ciclo ("qué ciclo romper primero")
@@ -89,7 +89,7 @@ ICP: dev/tech lead que usa agentes de código.
 
 ## Hecho
 
-- [x] **Receta NL → archivos en README** — flujo `search` → `impact` → enriquecer con métricas, documentado sin acoplarse a ningún consumidor; decisión de no exponerlo como comando paraguas en [ADR-003](docs/decisions/003-audit-as-second-surface.md)
+- [x] **Receta NL → archivos en README** — flujo `search` → `impact` → enriquecer con métricas, documentado sin acoplarse a ningún consumidor; decisión de no exponerlo como comando paraguas en [D-0003](docs/decisions/0003-audit-as-second-surface.md)
 - [x] Tests unitarios — parsers Python/JS/TS, GraphStore, indexer
 - [x] Fixture JS/TS equivalente a `tests/fixtures/sample.py`
 - [x] `.debtectorignore` — soporte para ignorar rutas adicionales
@@ -99,5 +99,5 @@ ICP: dev/tech lead que usa agentes de código.
 - [x] `debtector install-hook` — pre-commit hook de git
 - [x] `debtector install-skill` — skills para Claude Code
 - [x] `debtector impact` — radio de impacto de cambios
-- [x] Búsqueda semántica (`sqlite-vec` + `fastembed`) — retirada; ver ADR-001
+- [x] Búsqueda semántica (`sqlite-vec` + `fastembed`) — retirada; ver D-0001
 - [x] **Schema migrations** — `GraphStore._apply_migrations` migra la DB al abrirla

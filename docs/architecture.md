@@ -8,7 +8,7 @@ Debtector analyzes source code repositories, extracts their structure (classes, 
 
 ICP: developer or tech lead using code agents (Claude Code, Copilot, Codex). Agents generate hidden coupling faster than any human can track; codeIndex acts as an architectural guardrail in the pipeline.
 
-See [ADR-002](decisions/002-pivot-ci-coupling.md) for the full context of the pivot.
+See [D-0002](decisions/0002-pivot-ci-coupling.md) for the full context of the pivot.
 
 ---
 
@@ -351,5 +351,5 @@ The type hint extractor maintains a `set[str]` shared per file (`uses_type_seen`
 
 | ADR | Decision |
 |---|---|
-| [001](decisions/001-semantic-search.md) | FTS5 + sqlite-vec + fastembed for semantic search (implemented, frozen, then removed; FTS5 remains) |
-| [002](decisions/002-pivot-ci-coupling.md) | Pivot: from AI navigation to coupling analysis for CI/PR |
+| [D-0001](decisions/0001-semantic-search.md) | FTS5 + sqlite-vec + fastembed for semantic search (implemented, frozen, then removed; FTS5 remains) |
+| [D-0002](decisions/0002-pivot-ci-coupling.md) | Pivot: from AI navigation to coupling analysis for CI/PR |

@@ -1,7 +1,7 @@
 # `debtector audit --json` — Schema v1
 
 Stable JSON contract for the audit surface (Fase 3, see
-[ADR-003](decisions/003-audit-as-second-surface.md)). Consumers (IDE plugins,
+[D-0003](decisions/0003-audit-as-second-surface.md)). Consumers (IDE plugins,
 AI orchestrators, dashboards) may depend on this shape.
 
 The contract evolves through `schema_version`. Breaking changes (renames,
