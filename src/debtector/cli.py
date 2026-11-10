@@ -18,6 +18,7 @@ import json
 import os
 import sys
 import time
+from dataclasses import asdict
 from pathlib import Path
 
 import structlog
@@ -32,7 +33,8 @@ from .audit import (
     untested_high_coupling,
     untested_hotspots,
 )
-from .config import Severity, load_config
+from .audit.complexity import ComplexityFinding, select_complexity_findings
+from .config import AuditThresholds, Severity, load_config
 from .git_history import (
     compute_bus_factor,
     compute_hotspots,
@@ -551,8 +553,28 @@ def _get_uncovered_files(store: GraphStore) -> set[str]:
 
 
 # Meaning of summary.health_score: 2 = normalised by size, actionable hotspots only;
-# 3 = hotspots ranked by churn x cyclomatic complexity (was churn x coupling).
-_HEALTH_SCORE_VERSION = 3
+# 3 = hotspots ranked by churn x cyclomatic complexity (was churn x coupling);
+# 4 = production functions with high cyclomatic complexity are scored findings.
+_HEALTH_SCORE_VERSION = 4
+
+
+def _complexity_findings(store: GraphStore, thr: AuditThresholds) -> list[ComplexityFinding]:
+    """Return the scored function-complexity findings of the index (D-0006).
+
+    Args:
+        store: Open graph store.
+        thr: Audit thresholds (``complexity_medium`` / ``complexity_high``).
+
+    Returns:
+        Findings for production functions and methods, most complex first.
+    """
+    nodes = store.get_nodes_by_kind(NodeKind.FUNCTION) + store.get_nodes_by_kind(NodeKind.METHOD)
+    return select_complexity_findings(
+        nodes,
+        medium=thr.complexity_medium,
+        high=thr.complexity_high,
+        is_test=store.is_test_path,
+    )
 
 
 def _single_author(root: str | Path) -> bool:
@@ -649,7 +671,8 @@ def cmd_audit(args) -> None:
     scored_findings += select_actionable_hotspots(
         hotspots, percentile=thr.hotspot_percentile, min_score=thr.hotspot_min_score
     )
-    health = compute_health_score(scored_findings, modules=n_modules)
+    complexity_findings = _complexity_findings(store, thr)
+    health = compute_health_score(scored_findings + complexity_findings, modules=n_modules)
     n_classes = stats.nodes_by_kind.get(NodeKind.CLASS, 0) - store.count_external_nodes(
         NodeKind.CLASS
     )
@@ -760,6 +783,7 @@ def cmd_audit(args) -> None:
                     if i.depth > 0 or i.children > 0
                 ]
             ),
+            "complexity": limit([asdict(f) for f in complexity_findings]),
         }
         _json_out(output)
     else:
@@ -767,6 +791,8 @@ def cmd_audit(args) -> None:
         print(f"│  modules={n_modules}  cycles={len(cycles)}")
         print(f"│  critical={health.counts.critical}  high={health.counts.high}")
         print("└─\n")
+        for f in limit(complexity_findings):
+            print(f"complexity {f.severity}: {f.qualified_name} ({f.complexity})")
         if not tests_found:
             print(
                 "No tests found; testRisk disabled. Configure `test_paths` in `debtector.toml`.",

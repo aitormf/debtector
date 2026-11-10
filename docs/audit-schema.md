@@ -41,7 +41,7 @@ Object. Aggregate counts and the health score for the whole index.
 | `cycles`       | int  | Number of strongly-connected components of size > 1.    |
 | `classes`      | int  | Number of indexed `Class` nodes.                        |
 | `health_score` | int  | Aggregate score in `[0, 100]` (see Health score below). |
-| `health_score_version` | int | Meaning of `health_score`; currently `3`. Absent in version 1. |
+| `health_score_version` | int | Meaning of `health_score`; currently `4`. Absent in version 1. |
 
 ## `coupling`
 
@@ -117,6 +117,22 @@ functions and methods, including their nested functions (see `debtector complexi
 | `complexity`| int    | Sum of cyclomatic complexity of the file's functions and methods. Additive field, added with health score version 3. |
 | `score`     | number | Hotspot score: `churn × complexity`.             |
 
+## `complexity`
+
+Array of production functions and methods whose cyclomatic complexity is at or above
+`complexity_medium` (default 21), most complex first. Each one is a scored finding (see
+Health score). Test-file functions never appear. Nested functions have no entry of their own:
+their complexity counts in their enclosing function. Additive section, added with health score
+version 4.
+
+| field            | type   | meaning                                                  |
+|------------------|--------|----------------------------------------------------------|
+| `qualified_name` | string | Function or method id.                                   |
+| `file_path`      | string | Relative file path.                                      |
+| `line`           | int    | First line of the function.                              |
+| `complexity`     | int    | Cyclomatic complexity of the function.                   |
+| `severity`       | string | `"high"` from `complexity_high` (default 31), else `"medium"`. |
+
 ## `busFactor`
 
 Array of single-author files (`bus_factor == 1`).
@@ -140,13 +156,13 @@ Array of class-level inheritance metrics.
 ## Health score
 
 Severity buckets and 0-100 score. A project with no scored findings scores `100`.
-This is **health score version 3** (`summary.health_score_version`).
+This is **health score version 4** (`summary.health_score_version`).
 
 | severity   | source signals (scored)                                                   | penalty |
 |------------|---------------------------------------------------------------------------|---------|
 | `critical` | `critical_knowledge_concentration` (not in single-author repos, see below) | 15      |
-| `high`     | `untested_high_coupling`, `untested_hotspots`                             | 5       |
-| `medium`   | actionable hotspots (see below)                                           | 2       |
+| `high`     | `untested_high_coupling`, `untested_hotspots`, `complexity` entries with `severity` `high` | 5 |
+| `medium`   | actionable hotspots (see below), `complexity` entries with `severity` `medium` | 2  |
 | `low`      | none                                                                      | 0.5     |
 
 Not scored: `cycles`, `god_module` entries, `busFactor` rows (single-author files) and
@@ -183,22 +199,26 @@ testrisk_high_churn = 5    # untested_hotspots: commits >=
 testrisk_high_ca    = 10   # critical_knowledge_concentration: Ca >=
 hotspot_percentile  = 90   # in [1, 99]
 hotspot_min_score   = 50
+complexity_medium   = 21   # complexity: function complexity >= (medium finding)
+complexity_high     = 31   # complexity: function complexity >= (high finding); >= complexity_medium
 ```
 
 **Versioning.** Each version changes what `health_score` means, so scores are not comparable
 across versions. Version 2 normalised by project size and scored only actionable hotspots.
 Version 3 ranks hotspots by churn × cyclomatic complexity instead of churn × coupling (the
 `hotspot_min_score` default moved from 20 to 50 to match the new scale; coupling is no longer
-part of the hotspot score). Rather than bump `schema_version` (the shape of the payload is
-unchanged), the additive field `summary.health_score_version` (`3`) lets consumers detect
-it; its absence means version 1.
+part of the hotspot score). Version 4 scores each production function or method with high
+cyclomatic complexity (the `complexity` section; a function counts even when its file is also
+a hotspot). Rather than bump `schema_version` (the shape of the payload only grows), the
+additive field `summary.health_score_version` (`4`) lets consumers detect it; its absence
+means version 1.
 
 ## Example payload
 
 ```json
 {
   "schema_version": 1,
-  "summary": {"modules": 12, "cycles": 0, "classes": 4, "health_score": 92, "health_score_version": 3},
+  "summary": {"modules": 12, "cycles": 0, "classes": 4, "health_score": 92, "health_score_version": 4},
   "coupling": [
     {"file_path": "src/app.py", "fan_in": 5, "fan_out": 3, "instability": 0.375, "god_module": false}
   ],
@@ -209,6 +229,9 @@ it; its absence means version 1.
   "testRisk": {"status": "ok", "untested_high_coupling": [], "untested_hotspots": [], "critical_knowledge_concentration": []},
   "hotspots": [],
   "busFactor": [],
-  "inheritance": []
+  "inheritance": [],
+  "complexity": [
+    {"qualified_name": "src/app.py::Service.run", "file_path": "src/app.py", "line": 42, "complexity": 24, "severity": "medium"}
+  ]
 }
 ```

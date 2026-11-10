@@ -293,8 +293,13 @@ testrisk_high_ce    = 10   # untested_high_coupling: Ce >=
 testrisk_high_churn = 5    # untested_hotspots: commits >=
 testrisk_high_ca    = 10   # critical_knowledge_concentration: Ca >=
 hotspot_percentile  = 90   # percentile [1, 99] of the project's hotspot scores
-hotspot_min_score   = 20   # absolute minimum: commits x (Ca + Ce)
+hotspot_min_score   = 50   # absolute minimum: commits x file complexity
+complexity_medium   = 21   # function complexity from which it is a medium finding
+complexity_high     = 31   # function complexity from which it is a high finding
 ```
+Each production function or method at or above `complexity_medium` (`medium`) or
+`complexity_high` (`high`) is also scored, and listed in the `complexity` section of
+`debtector --json audit`; test files never count.
 
 Authors are counted from the whole repository history by name (honouring `.mailmap`); bot
 accounts (names ending in `[bot]`) are ignored. If one person commits under several name
