@@ -61,8 +61,14 @@ def test_audit_hotspot_entry_reports_complexity_and_score(
     cmd_audit(argparse.Namespace(project=str(repo), top_n=10, full=False, json=True))
 
     out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
-    assert out["summary"]["health_score_version"] == 4
+    assert out["summary"]["health_score_version"] == 5
     # flat.py has no functions: complexity 0, score 0, so it is not listed
     assert out["hotspots"] == [
-        {"file_path": "hot.py", "churn": _COMMITS, "complexity": 5, "score": _COMMITS * 5.0}
+        {
+            "file_path": "hot.py",
+            "churn": _COMMITS,
+            "complexity": 5,
+            "score": _COMMITS * 5.0,
+            "severity": None,
+        }
     ]

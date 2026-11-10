@@ -116,6 +116,7 @@ functions and methods, including their nested functions (see `debtector complexi
 | `churn`     | int    | Recent commit count.                             |
 | `complexity`| int    | Sum of cyclomatic complexity of the file's functions and methods. Additive field, added with health score version 3. |
 | `score`     | number | Hotspot score: `churn × complexity`.             |
+| `severity`  | string or null | `"high"` if the hotspot is actionable and `score` is at least `hotspot_high_factor` (default 3) × the actionable cut (`max(p90, hotspot_min_score)`), `"medium"` if actionable below that, `null` if not actionable (not scored). Additive field, added with health score version 5. |
 
 ## `complexity`
 
@@ -156,13 +157,13 @@ Array of class-level inheritance metrics.
 ## Health score
 
 Severity buckets and 0-100 score. A project with no scored findings scores `100`.
-This is **health score version 4** (`summary.health_score_version`).
+This is **health score version 5** (`summary.health_score_version`).
 
 | severity   | source signals (scored)                                                   | penalty |
 |------------|---------------------------------------------------------------------------|---------|
 | `critical` | `critical_knowledge_concentration` (not in single-author repos, see below) | 15      |
-| `high`     | `untested_high_coupling`, `untested_hotspots`, `complexity` entries with `severity` `high` | 5 |
-| `medium`   | actionable hotspots (see below), `complexity` entries with `severity` `medium` | 2  |
+| `high`     | `untested_high_coupling`, `untested_hotspots`, `complexity` entries with `severity` `high`, actionable hotspots with `severity` `high` | 5 |
+| `medium`   | actionable hotspots with `severity` `medium` (see below), `complexity` entries with `severity` `medium` | 2  |
 | `low`      | none                                                                      | 0.5     |
 
 Not scored: `cycles`, `god_module` entries, `busFactor` rows (single-author files) and
@@ -180,7 +181,9 @@ With `modules == 0` the score is `100`.
 **Actionable hotspots.** The `hotspots` section keeps listing the top-N as before, but only
 hotspots with `score` at or above **both** the project's `hotspot_percentile` (default 90) of
 the hotspot scores **and** `hotspot_min_score` (default 50, i.e. commits × file complexity, for
-example 5 commits on a file with complexity 10) count towards the score.
+example 5 commits on a file with complexity 10) count towards the score. An actionable hotspot
+is `high` when its score is at least `hotspot_high_factor` (default 3) times the cut
+`max(percentile, hotspot_min_score)`, and `medium` otherwise.
 
 **Single author.** If the whole repository's commit history (not just the indexed directory) has exactly one author, bus factor 1 is
 meaningless. Shallow clones (e.g. `fetch-depth: 1` in CI) never get this exemption, since
@@ -199,6 +202,7 @@ testrisk_high_churn = 5    # untested_hotspots: commits >=
 testrisk_high_ca    = 10   # critical_knowledge_concentration: Ca >=
 hotspot_percentile  = 90   # in [1, 99]
 hotspot_min_score   = 50
+hotspot_high_factor = 3    # > 0; a hotspot is high from this multiple of the cut
 complexity_medium   = 21   # complexity: function complexity >= (medium finding)
 complexity_high     = 31   # complexity: function complexity >= (high finding); >= complexity_medium
 ```
@@ -209,8 +213,9 @@ Version 3 ranks hotspots by churn × cyclomatic complexity instead of churn × c
 `hotspot_min_score` default moved from 20 to 50 to match the new scale; coupling is no longer
 part of the hotspot score). Version 4 scores each production function or method with high
 cyclomatic complexity (the `complexity` section; a function counts even when its file is also
-a hotspot). Rather than bump `schema_version` (the shape of the payload only grows), the
-additive field `summary.health_score_version` (`4`) lets consumers detect it; its absence
+a hotspot). Version 5 splits actionable hotspots by magnitude: `high` from
+`hotspot_high_factor` × the cut, `medium` below (before, all were `medium`). Rather than bump `schema_version` (the shape of the payload only grows), the
+additive field `summary.health_score_version` (`5`) lets consumers detect it; its absence
 means version 1.
 
 ## Example payload
@@ -218,7 +223,7 @@ means version 1.
 ```json
 {
   "schema_version": 1,
-  "summary": {"modules": 12, "cycles": 0, "classes": 4, "health_score": 92, "health_score_version": 4},
+  "summary": {"modules": 12, "cycles": 0, "classes": 4, "health_score": 92, "health_score_version": 5},
   "coupling": [
     {"file_path": "src/app.py", "fan_in": 5, "fan_out": 3, "instability": 0.375, "god_module": false}
   ],

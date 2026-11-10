@@ -1,7 +1,7 @@
 ---
 id: T4
 title: Severidad del hotspot según su magnitud
-status: todo
+status: done
 depends_on: [T3]
 examples: [E11, E12, E13, E14]
 verification: uv run pytest tests/audit/test_hotspot_severity.py -q

@@ -15,7 +15,7 @@ add new dimensions without forcing a weight decision here.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from ..metrics import percentile_threshold
@@ -38,6 +38,8 @@ DEFAULT_HOTSPOT_PERCENTILE: float = 90
 #: Absolute ``hotspot_score`` (commits x file cyclomatic complexity) a hotspot must reach
 #: to be scored: e.g. 5 commits on a module with complexity 10, or 10 commits at complexity 5.
 DEFAULT_HOTSPOT_MIN_SCORE: float = 50
+#: An actionable hotspot is ``high`` from this multiple of the actionable cut (D-0007).
+DEFAULT_HOTSPOT_HIGH_FACTOR: float = 3
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,7 @@ def select_actionable_hotspots(
     hotspots: Iterable[Any],
     percentile: float = DEFAULT_HOTSPOT_PERCENTILE,
     min_score: float = DEFAULT_HOTSPOT_MIN_SCORE,
+    high_factor: float = DEFAULT_HOTSPOT_HIGH_FACTOR,
 ) -> list[Any]:
     """Keep the hotspots worth scoring: top of the project *and* not trivial.
 
@@ -83,15 +86,21 @@ def select_actionable_hotspots(
         hotspots: Objects exposing ``hotspot_score``.
         percentile: Percentile in ``[1, 99]`` of the project's scores.
         min_score: Absolute minimum ``hotspot_score``.
+        high_factor: A hotspot whose score is at least ``high_factor`` x the cut is
+            ``high``; the rest are ``medium`` (D-0007).
 
     Returns:
-        The actionable hotspots, in input order.
+        Copies of the actionable hotspots with their ``severity`` set, in input order.
     """
     items = list(hotspots)
     if not items:
         return []
     cut = max(percentile_threshold([h.hotspot_score for h in items], percentile), min_score)
-    return [h for h in items if h.hotspot_score >= cut]
+    return [
+        replace(h, severity="high" if h.hotspot_score >= high_factor * cut else "medium")
+        for h in items
+        if h.hotspot_score >= cut
+    ]
 
 
 def compute_health_score(findings: Iterable[Any], modules: int) -> HealthScore:

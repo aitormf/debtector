@@ -554,8 +554,9 @@ def _get_uncovered_files(store: GraphStore) -> set[str]:
 
 # Meaning of summary.health_score: 2 = normalised by size, actionable hotspots only;
 # 3 = hotspots ranked by churn x cyclomatic complexity (was churn x coupling);
-# 4 = production functions with high cyclomatic complexity are scored findings.
-_HEALTH_SCORE_VERSION = 4
+# 4 = production functions with high cyclomatic complexity are scored findings;
+# 5 = a hotspot is high from hotspot_high_factor x the actionable cut, medium below.
+_HEALTH_SCORE_VERSION = 5
 
 
 def _complexity_findings(store: GraphStore, thr: AuditThresholds) -> list[ComplexityFinding]:
@@ -668,9 +669,14 @@ def cmd_audit(args) -> None:
         scored_findings = [
             f for f in scored_findings if f.label != "critical knowledge concentration"
         ]
-    scored_findings += select_actionable_hotspots(
-        hotspots, percentile=thr.hotspot_percentile, min_score=thr.hotspot_min_score
+    actionable_hotspots = select_actionable_hotspots(
+        hotspots,
+        percentile=thr.hotspot_percentile,
+        min_score=thr.hotspot_min_score,
+        high_factor=thr.hotspot_high_factor,
     )
+    scored_findings += actionable_hotspots
+    hotspot_severity = {h.file_path: h.severity for h in actionable_hotspots}
     complexity_findings = _complexity_findings(store, thr)
     health = compute_health_score(scored_findings + complexity_findings, modules=n_modules)
     n_classes = stats.nodes_by_kind.get(NodeKind.CLASS, 0) - store.count_external_nodes(
@@ -760,6 +766,7 @@ def cmd_audit(args) -> None:
                         "churn": h.churn,
                         "complexity": h.complexity,
                         "score": round(h.hotspot_score, 1),
+                        "severity": hotspot_severity.get(h.file_path),
                     }
                     for h in sorted(hotspots, key=lambda x: x.hotspot_score, reverse=True)
                     if h.hotspot_score > 0
@@ -791,6 +798,8 @@ def cmd_audit(args) -> None:
         print(f"│  modules={n_modules}  cycles={len(cycles)}")
         print(f"│  critical={health.counts.critical}  high={health.counts.high}")
         print("└─\n")
+        for h in limit(sorted(actionable_hotspots, key=lambda x: x.hotspot_score, reverse=True)):
+            print(f"hotspot {h.severity}: {h.file_path} ({round(h.hotspot_score, 1)})")
         for f in limit(complexity_findings):
             print(f"complexity {f.severity}: {f.qualified_name} ({f.complexity})")
         if not tests_found:
