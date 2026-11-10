@@ -1,4 +1,16 @@
-# ADR-003: Audit como segunda superficie de presentación
+---
+id: D-0003
+title: "Audit como segunda superficie de presentación"
+type: architecture
+status: accepted
+date: 2026-05-22
+affects: [src/debtector/cli.py, src/debtector/audit/, docs/audit-schema.md]
+supersedes: null
+superseded_by: null
+issue: null
+---
+
+# D-0003: Audit como segunda superficie de presentación
 
 **Estado:** Aceptado
 **Fecha:** 2026-05-22
@@ -96,12 +108,12 @@ contexto.
 ### Embeddings — siguen congelados
 
 > **Actualización 2026-11-02:** el código congelado se ha eliminado (ver
-> [ADR-001](001-semantic-search.md)). La decisión de no ofrecer búsqueda
+> [D-0001](0001-semantic-search.md)). La decisión de no ofrecer búsqueda
 > semántica se mantiene.
 
 `embedder.py`, `sqlite-vec` y `fastembed` siguen en el grupo opcional
 `[semantic]` y `debtector semantic` sigue devolviendo error de deprecación
-(continúa lo decidido en [ADR-002](002-pivot-ci-coupling.md)).
+(continúa lo decidido en [D-0002](0002-pivot-ci-coupling.md)).
 
 **Por qué no descongelarlos ahora:** descongelarlos resolvería el salto de
 lenguaje natural a archivos semilla (caso típico de un agente de IA
@@ -149,7 +161,7 @@ correcta sería un modo daemon (`debtector serve`) o una API Python directa
 
 **Hacer Graph diff (antes Fase 3) antes que Audit**
 Descartado: graph diff sigue siendo el feature más diferencial técnicamente,
-pero necesita tracción para venderse (mantenido en [ADR-002](002-pivot-ci-coupling.md)).
+pero necesita tracción para venderse (mantenido en [D-0002](0002-pivot-ci-coupling.md)).
 Audit consolida valor ya construido y abre la segunda superficie sin
 inversión nueva en infraestructura. El orden importa: primero usar lo que
 ya hay, después construir lo que falta.

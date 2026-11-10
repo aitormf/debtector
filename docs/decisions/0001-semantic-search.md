@@ -1,6 +1,18 @@
-# ADR-001: Búsqueda semántica — FTS5 + sqlite-vec + fastembed
+---
+id: D-0001
+title: "Búsqueda semántica: FTS5 + sqlite-vec + fastembed"
+type: architecture
+status: obsolete
+date: 2026-04-07
+affects: [src/debtector/graph_store.py, src/debtector/indexer.py]
+supersedes: null
+superseded_by: null
+issue: null
+---
 
-**Estado:** Retirado (2026-11-02) — la capa de embeddings (`embedder.py`, `sqlite-vec`, `fastembed`, comando `semantic`) se ha eliminado del código; la búsqueda FTS5 se mantiene. Ver [ADR-002](002-pivot-ci-coupling.md).
+# D-0001: Búsqueda semántica: FTS5 + sqlite-vec + fastembed
+
+**Estado:** Retirado (2026-11-02) — la capa de embeddings (`embedder.py`, `sqlite-vec`, `fastembed`, comando `semantic`) se ha eliminado del código; la búsqueda FTS5 se mantiene. Ver [D-0002](0002-pivot-ci-coupling.md).
 **Fecha:** 2026-04-07
 **Contexto:** Debtector v0.2
 

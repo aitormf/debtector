@@ -1,4 +1,16 @@
-# ADR-002: Pivote — de navegación para IA a análisis de acoplamiento para CI/PR
+---
+id: D-0002
+title: "Pivote: de navegación para IA a análisis de acoplamiento para CI/PR"
+type: architecture
+status: accepted
+date: 2026-04-24
+affects: [.]
+supersedes: null
+superseded_by: null
+issue: null
+---
+
+# D-0002: Pivote: de navegación para IA a análisis de acoplamiento para CI/PR
 
 **Estado:** Aceptado
 **Fecha:** 2026-04-24
