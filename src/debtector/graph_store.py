@@ -1030,6 +1030,27 @@ class GraphStore:
 
     # ══════════════════════════════════════════
 
+    def get_untested_files(self) -> set[str]:
+        """Return production files where no Function or Method has a COVERS edge.
+
+        Files without functions or methods (e.g. only constants) are never
+        reported: there is nothing in them a test could cover.
+
+        Returns:
+            Set of ``file_path`` values.
+        """
+        clause, params = self._test_file_clause("n")
+        query = f"""
+            SELECT n.file_path FROM nodes n
+            WHERE n.kind IN ('Function', 'Method')
+              AND NOT {clause}
+            GROUP BY n.file_path
+            HAVING SUM(
+                n.qualified_name IN (SELECT target_qualified FROM edges WHERE kind = 'COVERS')
+            ) = 0
+        """  # nosec B608 — clause built from class constants and placeholders
+        return {r["file_path"] for r in self._conn.execute(query, params).fetchall()}
+
     def count_external_nodes(self, kind: str) -> int:
         """Count nodes of *kind* stored outside the index root (``../`` paths).
 

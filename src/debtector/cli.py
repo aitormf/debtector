@@ -546,9 +546,8 @@ def cmd_untested(args) -> None:
 
 
 def _get_uncovered_files(store: GraphStore) -> set[str]:
-    """Get set of file paths with no COVERS edge."""
-    symbols = store.get_uncovered_symbols()
-    return {s.file_path for s in symbols}
+    """Get production files where no function or method has a COVERS edge."""
+    return store.get_untested_files()
 
 
 # Meaning of summary.health_score: 2 = normalised by size, actionable hotspots only;
