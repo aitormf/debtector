@@ -34,6 +34,8 @@ Example of ``debtector.toml``:
     testrisk_high_ca    = 10   # Ca from which bus factor 1 is "critical knowledge"
     hotspot_percentile  = 90   # hotspot_score percentile a hotspot must reach
     hotspot_min_score   = 50   # minimum absolute hotspot_score (commits x complexity)
+    complexity_medium   = 21   # function complexity from which it is a "medium" finding
+    complexity_high     = 31   # function complexity from which it is a "high" finding
 """
 
 from __future__ import annotations
@@ -45,6 +47,7 @@ from pathlib import Path
 
 import structlog
 
+from .audit.complexity import DEFAULT_COMPLEXITY_HIGH, DEFAULT_COMPLEXITY_MEDIUM
 from .audit.health_score import DEFAULT_HOTSPOT_MIN_SCORE, DEFAULT_HOTSPOT_PERCENTILE
 from .audit.testrisk import DEFAULT_HIGH_CA, DEFAULT_HIGH_CE, DEFAULT_HIGH_CHURN
 
@@ -133,6 +136,10 @@ class AuditThresholds:
         hotspot_min_score: Minimum absolute ``hotspot_score`` (commits x
             file cyclomatic complexity) to count toward the health score.
             Default: 50.
+        complexity_medium: Cyclomatic complexity from which a production
+            function or method is a ``medium`` finding. Default: 21.
+        complexity_high: Cyclomatic complexity from which it is a ``high``
+            finding; must be >= ``complexity_medium``. Default: 31.
     """
 
     testrisk_high_ce: float = DEFAULT_HIGH_CE
@@ -140,6 +147,8 @@ class AuditThresholds:
     testrisk_high_ca: float = DEFAULT_HIGH_CA
     hotspot_percentile: float = DEFAULT_HOTSPOT_PERCENTILE
     hotspot_min_score: float = DEFAULT_HOTSPOT_MIN_SCORE
+    complexity_medium: float = DEFAULT_COMPLEXITY_MEDIUM
+    complexity_high: float = DEFAULT_COMPLEXITY_HIGH
 
 
 @dataclass
@@ -270,7 +279,7 @@ def _load_audit_thresholds(data: dict) -> AuditThresholds:
 
     Raises:
         ValueError: If a value is not numeric, is negative, or the percentile
-            falls outside ``[1, 99]``.
+            falls outside ``[1, 99]``, or ``complexity_medium`` > ``complexity_high``.
     """
     defaults = AuditThresholds()
     values: dict[str, float] = {}
@@ -285,5 +294,11 @@ def _load_audit_thresholds(data: dict) -> AuditThresholds:
         raise ValueError(
             "`audit.thresholds.hotspot_percentile` in debtector.toml must be in [1, 99], "
             f"got {values['hotspot_percentile']!r}."
+        )
+    if values["complexity_medium"] > values["complexity_high"]:
+        raise ValueError(
+            "`audit.thresholds.complexity_medium` in debtector.toml must be <= "
+            f"`complexity_high`, got {values['complexity_medium']!r} > "
+            f"{values['complexity_high']!r}."
         )
     return AuditThresholds(**values)

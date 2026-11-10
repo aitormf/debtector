@@ -17,8 +17,8 @@ import subprocess  # nosec B404 — tests drive a local throwaway repo
 from pathlib import Path
 
 import pytest
-from debtector.audit.complexity import select_complexity_findings
 
+from debtector.audit.complexity import select_complexity_findings
 from debtector.cli import cmd_audit, cmd_index
 from debtector.config import load_config
 from debtector.logging import configure_logging

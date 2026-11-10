@@ -108,7 +108,7 @@ def test_summary_carries_health_score_version(
 ) -> None:
     out = _audit(_make_repo(tmp_path, second_author=False), capsys)
 
-    assert out["summary"]["health_score_version"] == 3
+    assert out["summary"]["health_score_version"] == 4
     assert out["schema_version"] == 1
 
 
