@@ -29,7 +29,9 @@ ICP: dev/tech lead que usa agentes de código.
 *Parsear `git log` es barato. Hotspots los entiende cualquier senior en 10 segundos. Aquí está la ventaja real sobre herramientas estructurales puras.*
 
 - [x] **Parser `git log --numstat`** — churn por módulo (commits que tocan cada archivo)
-- [x] **Hotspot score** — churn × acoplamiento estructural; ranking de deuda técnica real
+- [x] **Hotspot score** — churn × complejidad ciclomática (Tornhill); el acoplamiento estructural se muestra como contexto. Antes: churn × acoplamiento
+- [x] **Complejidad ciclomática por función** — McCabe con tree-sitter en `Function`/`Method` (`extra.complexity`), comando `debtector complexity`; `PARSER_VERSION` fuerza el reindexado cuando cambia la salida de los parsers
+- [ ] **Complejidad en baseline/ratcheting** — llegará con `debtector diff`
 - [x] **Temporal coupling** — archivos que cambian juntos en commits con frecuencia > umbral, aunque no tengan import entre ellos
 - [x] **Bus factor por módulo** — porcentaje de código escrito por un único autor vía `git blame`
 - [x] **Integración Karajan** — interfaz JSON disponible en todos los comandos (`--json`); Karajan puede invocar `debtector report --json` directamente

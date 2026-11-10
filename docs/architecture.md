@@ -81,7 +81,7 @@ CLI / CI pipeline
     ├── Structural coupling  → metrics.py + graph        (debtector coupling)
     ├── Behavioral coupling  → git_history.py + git      (debtector git-coupling)
     │     ├── churn           → git log --numstat
-    │     ├── hotspots        → churn × (fan_in + fan_out)
+    │     ├── hotspots        → churn × cyclomatic complexity
     │     ├── temporal coupl. → git log --name-only, co-changing pairs
     │     └── bus factor      → git blame --line-porcelain
     ├── Full report          → coupling + git-coupling   (debtector report)
@@ -250,7 +250,7 @@ Number of distinct commits touching each file, computed with `git log --numstat`
 
 ### Hotspot score
 
-`churn × (fan_in + fan_out)` — combines historical activity with structural coupling. A heavily changed and heavily coupled file is the highest technical debt risk point. Sorted descending.
+`churn × complexity` — combines historical activity with code complexity (the sum of the cyclomatic complexity of the file's functions and methods, computed at index time). A heavily changed and complex file is the highest technical debt risk point; files without functions score 0. Structural coupling (`fan_in + fan_out`) is reported alongside but does not take part in the score. Sorted descending.
 
 ### Temporal coupling
 

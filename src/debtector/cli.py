@@ -462,6 +462,61 @@ def cmd_callers(args) -> None:
         print(f"\nTotal: {len(callers)}")
 
 
+def cmd_complexity(args) -> None:
+    """Print functions and methods sorted by cyclomatic complexity, highest first.
+
+    Args:
+        args: Parsed argument namespace.  Expected attributes:
+
+            - ``project`` (str): Path to the project root.
+            - ``json`` (bool): Emit JSON instead of human-readable text.
+            - ``limit`` (int | None): Maximum number of results.
+            - ``min`` (int): Only include complexity at or above this value.
+    """
+    _auto_index(args.project)
+    store = _get_store(args.project)
+    nodes = store.get_nodes_by_kind(NodeKind.FUNCTION) + store.get_nodes_by_kind(NodeKind.METHOD)
+    store.close()
+
+    min_value = getattr(args, "min", 0) or 0
+    rows = [
+        (n, int(n.extra["complexity"]))
+        for n in nodes
+        if "complexity" in n.extra and int(n.extra["complexity"]) >= min_value
+    ]
+    rows.sort(key=lambda r: (-r[1], r[0].qualified_name))
+    limit = getattr(args, "limit", None)
+    if limit is not None:
+        rows = rows[:limit]
+
+    if args.json:
+        _json_out(
+            {
+                "functions": [
+                    {
+                        "qualified_name": n.qualified_name,
+                        "kind": n.kind,
+                        "complexity": value,
+                        "file_path": n.file_path,
+                        "line": n.line_start,
+                    }
+                    for n, value in rows
+                ]
+            }
+        )
+        return
+
+    if not rows:
+        print("No functions with complexity data — run first: debtector index <directory>")
+        return
+    print("\nCyclomatic complexity")
+    print("─" * 60)
+    for n, value in rows:
+        print(f"  {value:>4}  {n.qualified_name}")
+        print(f"        {n.file_path}:{n.line_start}")
+    print(f"\nTotal: {len(rows)}")
+
+
 def cmd_untested(args) -> None:
     """List production symbols (Function/Method) that have no COVERS edge.
 
@@ -496,8 +551,9 @@ def _get_uncovered_files(store: GraphStore) -> set[str]:
     return {s.file_path for s in symbols}
 
 
-# Meaning of summary.health_score: 2 = normalised by size, actionable hotspots only.
-_HEALTH_SCORE_VERSION = 2
+# Meaning of summary.health_score: 2 = normalised by size, actionable hotspots only;
+# 3 = hotspots ranked by churn x cyclomatic complexity (was churn x coupling).
+_HEALTH_SCORE_VERSION = 3
 
 
 def _single_author(root: str | Path) -> bool:
@@ -677,7 +733,12 @@ def cmd_audit(args) -> None:
             },
             "hotspots": limit(
                 [
-                    {"file_path": h.file_path, "churn": h.churn, "score": round(h.hotspot_score, 1)}
+                    {
+                        "file_path": h.file_path,
+                        "churn": h.churn,
+                        "complexity": h.complexity,
+                        "score": round(h.hotspot_score, 1),
+                    }
                     for h in sorted(hotspots, key=lambda x: x.hotspot_score, reverse=True)
                     if h.hotspot_score > 0
                 ]
@@ -1183,7 +1244,7 @@ cmd_metrics = cmd_coupling
 
 
 def cmd_hotspots(args) -> None:
-    """Print hotspot ranking: files with high churn × structural coupling.
+    """Print hotspot ranking: files with high churn × cyclomatic complexity.
 
     Args:
         args: Parsed argument namespace.  Expected attributes:
@@ -1212,6 +1273,7 @@ def cmd_hotspots(args) -> None:
                     {
                         "file_path": h.file_path,
                         "churn": h.churn,
+                        "complexity": h.complexity,
                         "coupling": round(h.coupling, 2),
                         "hotspot_score": round(h.hotspot_score, 2),
                     }
@@ -1227,12 +1289,15 @@ def cmd_hotspots(args) -> None:
 
     col_w = max((len(h.file_path) for h in hotspots), default=30)
     col_w = max(col_w, 30)
-    header = f"{'Module':<{col_w}}  {'Churn':>7}  {'Coupling':>9}  {'Score':>8}"
+    header = f"{'Module':<{col_w}}  {'Churn':>7}  {'Complexity':>10}  {'Coupling':>9}  {'Score':>8}"
     print()
     print(header)
     print("─" * len(header))
     for h in hotspots:
-        print(f"{h.file_path:<{col_w}}  {h.churn:>7}  {h.coupling:>9.2f}  {h.hotspot_score:>8.2f}")
+        print(
+            f"{h.file_path:<{col_w}}  {h.churn:>7}  {h.complexity:>10}  {h.coupling:>9.2f}"
+            f"  {h.hotspot_score:>8.2f}"
+        )
     print("─" * len(header))
     print(f"Total: {len(hotspots)} hotspots")
 
@@ -1398,6 +1463,7 @@ def cmd_git_coupling(args) -> None:
                     {
                         "file_path": h.file_path,
                         "churn": h.churn,
+                        "complexity": h.complexity,
                         "coupling": round(h.coupling, 2),
                         "hotspot_score": round(h.hotspot_score, 2),
                     }
@@ -1432,8 +1498,8 @@ def cmd_git_coupling(args) -> None:
         col_w = max(col_w, 30)
         for h in hotspots:
             print(
-                f"  {h.file_path:<{col_w}}  churn={h.churn}  coupling={h.coupling:.2f}"
-                f"  score={h.hotspot_score:.2f}"
+                f"  {h.file_path:<{col_w}}  churn={h.churn}  complexity={h.complexity}"
+                f"  coupling={h.coupling:.2f}  score={h.hotspot_score:.2f}"
             )
     else:
         print("  (no data)")
@@ -1523,6 +1589,7 @@ def cmd_report(args) -> None:
                     {
                         "file_path": h.file_path,
                         "churn": h.churn,
+                        "complexity": h.complexity,
                         "coupling": round(h.coupling, 2),
                         "hotspot_score": round(h.hotspot_score, 2),
                     }
@@ -1589,7 +1656,7 @@ def cmd_report(args) -> None:
         col_w = max(col_w, 30)
         for h in active[:10]:
             print(
-                f"  {h.file_path:<{col_w}}  churn={h.churn:>4}"
+                f"  {h.file_path:<{col_w}}  churn={h.churn:>4}  complexity={h.complexity:>4}"
                 f"  coupling={h.coupling:>6.1f}  score={h.hotspot_score:>8.1f}"
             )
     else:
@@ -1733,6 +1800,13 @@ def main() -> None:
     p_callers = sub.add_parser("callers", parents=[common], help="Who calls a symbol?")
     p_callers.add_argument("qualified_name", help="qualified_name of the symbol")
 
+    # complexity
+    p_cx = sub.add_parser(
+        "complexity", parents=[common], help="Functions sorted by cyclomatic complexity"
+    )
+    p_cx.add_argument("--limit", "-l", type=int, default=None)
+    p_cx.add_argument("--min", type=int, default=0, help="Minimum complexity to include")
+
     # untested
     p_untested = sub.add_parser(
         "untested", parents=[common], help="Symbols without tests (no COVERS edge)"
@@ -1762,7 +1836,7 @@ def main() -> None:
 
     # hotspots
     p_hotspots = sub.add_parser(
-        "hotspots", parents=[common], help="Hotspots: churn × structural coupling"
+        "hotspots", parents=[common], help="Hotspots: churn × cyclomatic complexity"
     )
     p_hotspots.add_argument("--limit", "-l", type=int, default=None)
     p_hotspots.add_argument("--since", default=None, help="Date filter (e.g. '6 months ago')")
@@ -1826,6 +1900,7 @@ def main() -> None:
         "metrics": cmd_coupling,  # deprecated alias
         "baseline": cmd_baseline,
         "callers": cmd_callers,
+        "complexity": cmd_complexity,
         "untested": cmd_untested,
         "audit": cmd_audit,
         "hotspots": cmd_hotspots,

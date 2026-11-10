@@ -118,7 +118,8 @@ class TestSubdirectoryIndex:
         cmd_audit(_args(str(repo), top_n=10, full=False))
 
         audit = _json(capsys)
-        assert {h["file_path"] for h in audit["hotspots"]} == {"pkg/a.py", "pkg/b.py"}
+        # a.py has no functions (complexity 0, score 0), so only b.py is a hotspot
+        assert {h["file_path"] for h in audit["hotspots"]} == {"pkg/b.py"}
         assert {b["file_path"] for b in audit["busFactor"]} == {"pkg/a.py", "pkg/b.py"}
 
     def test_auto_index_keeps_indexed_root(

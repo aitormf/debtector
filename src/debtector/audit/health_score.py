@@ -35,9 +35,9 @@ _HIGH_WEIGHT: float = _SEVERITY_WEIGHTS["high"]
 #: Percentile of the project's ``hotspot_score`` a hotspot must reach to be scored.
 DEFAULT_HOTSPOT_PERCENTILE: float = 90
 
-#: Absolute ``hotspot_score`` (commits x (Ca + Ce)) a hotspot must reach to be
-#: scored: e.g. 5 commits on a module with coupling 4, or 10 commits at coupling 2.
-DEFAULT_HOTSPOT_MIN_SCORE: float = 20
+#: Absolute ``hotspot_score`` (commits x file cyclomatic complexity) a hotspot must reach
+#: to be scored: e.g. 5 commits on a module with complexity 10, or 10 commits at complexity 5.
+DEFAULT_HOTSPOT_MIN_SCORE: float = 50
 
 
 @dataclass(frozen=True)
