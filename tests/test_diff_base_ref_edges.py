@@ -122,3 +122,42 @@ def test_worktree_is_removed_when_checkout_hook_fails(tmp_path: Path, capsys) ->
 
     assert exc.value.code == 2
     assert _worktrees(repo) == 1
+
+
+def test_fresh_index_records_its_root(tmp_path: Path, capsys) -> None:
+    """With no index yet, --base creates it with ``index_root`` so auto-index keeps it fresh."""
+    import shutil
+
+    from debtector.graph_store import GraphStore
+
+    repo = _repo(tmp_path)
+    shutil.rmtree(repo / ".debtector")
+    capsys.readouterr()
+
+    with pytest.raises(SystemExit):
+        cmd_diff(_args(repo, base_ref="main"))
+
+    store = GraphStore(str(repo / ".debtector" / "index.db"))
+    try:
+        assert store.get_metadata("index_root") == "."
+    finally:
+        store.close()
+
+
+def test_legacy_index_without_root_is_rejected(tmp_path: Path, capsys) -> None:
+    """A populated index with no ``index_root``: its root is unknown, do not guess it."""
+    from debtector.graph_store import GraphStore
+
+    repo = _repo(tmp_path)
+    store = GraphStore(str(repo / ".debtector" / "index.db"))
+    store._conn.execute("DELETE FROM metadata WHERE key = 'index_root'")
+    store._conn.commit()
+    store.close()
+    capsys.readouterr()
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_diff(_args(repo, base_ref="main"))
+
+    assert exc.value.code == 2
+    assert "debtector index" in capsys.readouterr().err
+    assert _worktrees(repo) == 1
