@@ -107,3 +107,10 @@ def test_oversized_report_is_truncated_in_the_comment_but_whole_in_the_summary(
     assert posted.startswith(MARKER)
     assert "truncated" in posted
     assert summary.read_text(encoding="utf-8") == body
+
+
+def test_a_crash_without_report_is_never_hidden(tmp_path: Path) -> None:
+    """Exit 1 with no report is a crash (e.g. invalid config), not a severity violation."""
+    api = AuthoredApi([])
+    assert action_publish.run("", 1, False, api, tmp_path / "s.md", author=BOT) == 1
+    assert api.comments == []
