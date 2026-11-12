@@ -1,7 +1,7 @@
 ---
 id: T3
 title: diff --base <ref> con worktree temporal
-status: todo
+status: done
 depends_on: [T2]
 examples: [E11, E12, E13]
 verification: uv run pytest tests/test_diff_base_ref.py -q

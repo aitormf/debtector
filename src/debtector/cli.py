@@ -16,7 +16,9 @@ import argparse
 import datetime
 import json
 import os
+import subprocess  # nosec B404 - runs git with a fixed argv, no shell
 import sys
+import tempfile
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -879,6 +881,61 @@ def _diff_item(item) -> str:
     return str(item)
 
 
+def _git_out(cwd: str, *args: str) -> str:
+    """Run ``git`` in *cwd* and return its stdout; :class:`InvalidInputError` if it fails."""
+    try:
+        proc = subprocess.run(  # nosec B603 B607 - fixed argv, no shell
+            ["git", "-C", cwd, *args], capture_output=True, text=True, check=True
+        )
+    except (subprocess.CalledProcessError, OSError) as e:
+        detail = getattr(e, "stderr", "") or str(e)
+        raise InvalidInputError(f"git {' '.join(args)} failed: {detail.strip()}") from e
+    return proc.stdout.strip()
+
+
+def _index_base_ref(project: str, ref: str, db_path: str, worktree: Path) -> None:
+    """Index *ref* of the project's repository into *db_path* through a temporary worktree.
+
+    The worktree is always removed, also if indexing fails. The indexed directory
+    is the same one (relative to the project) as in the current index, so the
+    qualified names of both indexes match.
+
+    Args:
+        project: Path to the project root (inside a git repository).
+        ref: Git ref to compare against (branch, tag or commit).
+        db_path: Where to write the index of the ref.
+        worktree: Directory for the temporary worktree; must not exist.
+
+    Raises:
+        InvalidInputError: If *project* is not in a git repository or *ref* does not exist.
+    """
+    project = os.path.abspath(project)
+    toplevel = _git_out(project, "rev-parse", "--show-toplevel")
+    try:
+        _git_out(project, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+    except InvalidInputError as e:
+        raise InvalidInputError(f"Unknown git ref: {ref}") from e
+    rel_project = Path(os.path.relpath(project, os.path.realpath(toplevel)))
+    store = _get_store(project)
+    try:
+        rel_root = store.get_metadata(_INDEX_ROOT_KEY) or "."
+    finally:
+        store.close()
+    _git_out(project, "worktree", "add", "--detach", str(worktree), ref)
+    try:
+        wt_project = worktree / rel_project
+        store = GraphStore(db_path)
+        try:
+            store.test_prefixes = _test_prefixes(project, str(Path(project) / rel_root))
+            extra = [str(wt_project / os.path.relpath(d, project)) for d in _test_dirs(project)]
+            Indexer(store).index(str(wt_project / rel_root), extra_paths=extra)
+            store.set_metadata(_INDEX_ROOT_KEY, rel_root)
+        finally:
+            store.close()
+    finally:
+        _git_out(project, "worktree", "remove", "--force", str(worktree))
+
+
 def cmd_diff(args) -> None:
     """Compare two indexes and report the architectural changes.
 
@@ -891,16 +948,28 @@ def cmd_diff(args) -> None:
     ``error`` severity in ``[metrics.severity]`` (D-0008).
     """
     cfg = load_config(args.project)
+    base_ref = getattr(args, "base_ref", None)
     try:
-        validate_index(args.db_base)
-        validate_index(args.db_pr)
-        base, pr = _open_store(args.db_base, args.project), _open_store(args.db_pr, args.project)
-        try:
-            check_comparable(base, pr)
-            result = compute_diff(base, pr, cfg)
-        finally:
-            base.close()
-            pr.close()
+        if base_ref and (args.db_base or args.db_pr):
+            raise InvalidInputError("--base cannot be combined with index paths")
+        if not base_ref and not (args.db_base and args.db_pr):
+            raise InvalidInputError("pass --base <ref>, or the two indexes to compare")
+        with tempfile.TemporaryDirectory(prefix="debtector-diff-") as tmp:
+            db_base, db_pr = args.db_base, args.db_pr
+            if base_ref:
+                db_base = str(Path(tmp) / "base.db")
+                _index_base_ref(args.project, base_ref, db_base, Path(tmp) / "worktree")
+                _auto_index(args.project)
+                db_pr = str(_debtector_dir(args.project) / "index.db")
+            validate_index(db_base)
+            validate_index(db_pr)
+            base, pr = _open_store(db_base, args.project), _open_store(db_pr, args.project)
+            try:
+                check_comparable(base, pr)
+                result = compute_diff(base, pr, cfg)
+            finally:
+                base.close()
+                pr.close()
     except InvalidInputError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(2)
@@ -1887,8 +1956,14 @@ def main() -> None:
     p_diff = sub.add_parser(
         "diff", parents=[common], help="Architectural diff between two indexes (base vs. PR)"
     )
-    p_diff.add_argument("db_base", help="Index of the base branch")
-    p_diff.add_argument("db_pr", help="Index of the PR")
+    p_diff.add_argument("db_base", nargs="?", help="Index of the base branch")
+    p_diff.add_argument("db_pr", nargs="?", help="Index of the PR")
+    p_diff.add_argument(
+        "--base",
+        dest="base_ref",
+        metavar="REF",
+        help="Git ref to compare the current index against (indexed in a temporary worktree)",
+    )
 
     # coupling (ex-metrics)
     p_coupling = sub.add_parser(
