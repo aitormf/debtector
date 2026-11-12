@@ -1,7 +1,7 @@
 ---
 id: T2
 title: debtector.toml y .mailmap del propio repo
-status: todo
+status: done
 depends_on: [T1]
 examples: []
 verification: uv run pytest -q
