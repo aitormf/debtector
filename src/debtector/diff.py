@@ -21,7 +21,12 @@ from .metrics import (
 )
 
 _PARSER_VERSION_KEY = "parser_version"
-_INDEX_TABLES = {"nodes", "edges", "metadata"}
+# Columns of the original schema that the diff reads (later migrations only add others).
+_INDEX_COLUMNS = {
+    "nodes": {"kind", "name", "qualified_name", "file_path", "extra"},
+    "edges": {"kind", "source_qualified", "target_qualified", "file_path"},
+    "metadata": {"key", "value"},
+}
 
 
 class InvalidInputError(Exception):
@@ -42,12 +47,15 @@ def validate_index(path: str) -> None:
     try:
         conn = sqlite3.connect(f"{Path(path).resolve().as_uri()}?mode=ro", uri=True)
         try:
-            tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
+            columns = {
+                table: {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+                for table in _INDEX_COLUMNS
+            }
         finally:
             conn.close()
     except sqlite3.DatabaseError as e:
         raise InvalidInputError(f"Not a debtector index: {path}") from e
-    if not _INDEX_TABLES <= tables:
+    if any(not required <= columns[t] for t, required in _INDEX_COLUMNS.items()):
         raise InvalidInputError(f"Not a debtector index: {path}")
 
 
