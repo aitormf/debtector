@@ -63,10 +63,16 @@ _SECTIONS = (
 )
 
 
+# Markdown punctuation that can change how a name renders: emphasis, links and images
+# (escaping the brackets is enough), code spans and table pipes. The backslash goes first,
+# so an existing one cannot cancel an escape.
+_MD_SPECIAL = "\\`*_[]!|~"
+
+
 def _escape(value: object) -> str:
-    """Make *value* safe inside a table cell: no HTML, no pipes, no code spans."""
-    text = html.escape(str(value), quote=False)
-    return text.replace("|", "\\|").replace("`", "\\`").replace("\n", " ")
+    """Make *value* literal inside a table cell: no Markdown, no HTML, one line."""
+    text = "".join("\\" + c if c in _MD_SPECIAL else c for c in str(value))
+    return html.escape(text, quote=False).replace("\n", " ")
 
 
 def _row(cells: tuple) -> str:

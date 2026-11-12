@@ -115,7 +115,7 @@ def _row_for(name: str) -> str:
 def test_markdown_syntax_in_names_stays_literal() -> None:
     """``__init__.py`` must not turn bold, nor ``![x](i.png)`` into an image."""
     assert "src/\\_\\_init\\_\\_.py::f" in _row_for("src/__init__.py::f")
-    assert "\\!\\[x\\]\\(i.png\\).py::f" in _row_for("![x](i.png).py::f")
+    assert "\\!\\[x\\](i.png).py::f" in _row_for("![x](i.png).py::f")
 
 
 def test_existing_backslash_cannot_cancel_an_escape() -> None:
