@@ -840,12 +840,16 @@ _DIFF_SECTIONS = (
     ("new_sdp_violations", "New SDP violations"),
     ("resolved_sdp_violations", "Resolved SDP violations"),
     ("instability_regressions", "Instability regressions"),
+    ("worsened_functions", "Functions with worse complexity"),
+    ("improved_functions", "Functions with better complexity"),
 )
 
 
 def _diff_item(item) -> str:
     if isinstance(item, list):
         return " → ".join(item) + " → ..."
+    if isinstance(item, dict) and "qualified_name" in item:
+        return f"{item['qualified_name']}: {item['before']} → {item['after']}"
     if isinstance(item, dict) and "metric" in item:
         return f"{item['file_path']}: {item['before']} → {item['after']}"
     if isinstance(item, dict):

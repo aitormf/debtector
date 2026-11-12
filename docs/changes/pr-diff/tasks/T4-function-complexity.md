@@ -1,7 +1,7 @@
 ---
 id: T4
 title: Funciones que empeoran o mejoran su complejidad en el diff
-status: todo
+status: done
 depends_on: [T1]
 examples: [E14, E15, E16, E17, E18, E19]
 verification: uv run pytest tests/test_diff_complexity.py -q
