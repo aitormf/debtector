@@ -35,6 +35,7 @@ from .audit import (
 )
 from .audit.complexity import ComplexityFinding, select_complexity_findings
 from .config import AuditThresholds, Severity, load_config
+from .diff import compute_diff
 from .git_history import (
     compute_bus_factor,
     compute_hotspots,
@@ -832,6 +833,56 @@ def _blocks(issues: list, severity: Severity) -> bool:
 def _warns(issues: list, severity: Severity) -> bool:
     """Return True if *issues* are non-empty and *severity* is ERROR or WARNING."""
     return bool(issues) and severity in (Severity.ERROR, Severity.WARNING)
+
+
+_DIFF_SECTIONS = (
+    ("new_cycles", "New cycles"),
+    ("resolved_cycles", "Resolved cycles"),
+    ("new_god_modules", "New god modules"),
+    ("resolved_god_modules", "Resolved god modules"),
+    ("new_sdp_violations", "New SDP violations"),
+    ("resolved_sdp_violations", "Resolved SDP violations"),
+    ("instability_regressions", "Instability regressions"),
+)
+
+
+def _diff_item(item) -> str:
+    if isinstance(item, list):
+        return " → ".join(item) + " → ..."
+    if isinstance(item, dict) and "metric" in item:
+        return f"{item['file_path']}: {item['before']} → {item['after']}"
+    if isinstance(item, dict):
+        return f"{item['source']} → {item['target']}"
+    return str(item)
+
+
+def cmd_diff(args) -> None:
+    """Compare two indexes and report the architectural changes.
+
+    Args:
+        args: Parsed argument namespace. Expected attributes: ``project``
+            (str, where ``debtector.toml`` lives), ``json`` (bool), ``db_base``
+            and ``db_pr`` (str, paths to the two indexes).
+    """
+    cfg = load_config(args.project)
+    base, pr = GraphStore(args.db_base), GraphStore(args.db_pr)
+    try:
+        result = compute_diff(base, pr, cfg)
+    finally:
+        base.close()
+        pr.close()
+
+    if args.json:
+        _json_out(result)
+        return
+    if not any(result.values()):
+        print("No architectural changes")
+        return
+    for key, title in _DIFF_SECTIONS:
+        if result[key]:
+            print(f"\n{title} ({len(result[key])}):")
+            for item in result[key]:
+                print(f"   {_diff_item(item)}")
 
 
 def cmd_baseline(args) -> None:
@@ -1797,6 +1848,13 @@ def main() -> None:
         help="Formato CI: github (Annotations) o gitlab (section markers)",
     )
 
+    # diff
+    p_diff = sub.add_parser(
+        "diff", parents=[common], help="Architectural diff between two indexes (base vs. PR)"
+    )
+    p_diff.add_argument("db_base", help="Index of the base branch")
+    p_diff.add_argument("db_pr", help="Index of the PR")
+
     # coupling (ex-metrics)
     p_coupling = sub.add_parser(
         "coupling",
@@ -1933,6 +1991,7 @@ def main() -> None:
         "coupling": cmd_coupling,
         "metrics": cmd_coupling,  # deprecated alias
         "baseline": cmd_baseline,
+        "diff": cmd_diff,
         "callers": cmd_callers,
         "complexity": cmd_complexity,
         "untested": cmd_untested,
