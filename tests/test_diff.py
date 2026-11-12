@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -146,3 +147,82 @@ def test_instability_delta_just_above_tolerance_is_a_regression() -> None:
     """Ca=23, Ce=20 → Ca=16, Ce=17 grows instability by ~0.05004: above the tolerance."""
     base = [_mm("a.py", 20 / 43)]
     assert len(instability_regressions(base, [_mm("a.py", 17 / 33)])) == 1
+
+
+# ── T2: input validation and exit code ──
+
+
+def _run_diff(project: Path, base: str, pr: str) -> int:
+    """Run ``cmd_diff`` and return its exit code (0 if it returns normally)."""
+    args = argparse.Namespace(project=str(project), json=False, db_base=base, db_pr=pr, base=None)
+    try:
+        cmd_diff(args)
+    except SystemExit as e:
+        return int(e.code or 0)
+    return 0
+
+
+def _set_parser_version(db: str, version: str) -> None:
+    store = GraphStore(db)
+    store.set_metadata("parser_version", version)
+    store.close()
+
+
+def test_E8_different_parser_version_is_exit_2(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:  # D-0008
+    base = _index(tmp_path / "base.db", {"a.py": []})
+    pr = _index(tmp_path / "pr.db", {"a.py": []})
+    _set_parser_version(base, "1")
+    _set_parser_version(pr, "2")
+    assert _run_diff(tmp_path, base, pr) == 2
+    err = capsys.readouterr().err
+    assert "parser_version" in err
+    assert "debtector index" in err
+
+
+def test_E9_missing_path_is_exit_2_and_not_created(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pr = _index(tmp_path / "pr.db", {"a.py": []})
+    missing = str(tmp_path / "nope.db")
+    assert _run_diff(tmp_path, missing, pr) == 2
+    assert missing in capsys.readouterr().err
+    assert not Path(missing).exists()
+
+
+def test_E9_file_that_is_not_an_index_is_exit_2(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pr = _index(tmp_path / "pr.db", {"a.py": []})
+    junk = tmp_path / "junk.db"
+    junk.write_text("not a database", encoding="utf-8")
+    assert _run_diff(tmp_path, pr, str(junk)) == 2
+    assert str(junk) in capsys.readouterr().err
+
+    other = tmp_path / "other.db"
+    conn = sqlite3.connect(other)
+    conn.execute("CREATE TABLE t (x)")
+    conn.close()
+    assert _run_diff(tmp_path, str(other), pr) == 2
+
+
+def test_E10_new_cycle_severity_error_is_exit_1_warning_is_exit_0(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:  # D-0008
+    base = _index(tmp_path / "base.db", {"a.py": [], "b.py": []})
+    pr = _index(tmp_path / "pr.db", {"a.py": ["b.py"], "b.py": ["a.py"]})
+
+    (tmp_path / "debtector.toml").write_text('[metrics.severity]\ncycles = "error"\n', "utf-8")
+    assert _run_diff(tmp_path, base, pr) == 1
+    assert "New cycles" in capsys.readouterr().out
+
+    (tmp_path / "debtector.toml").write_text('[metrics.severity]\ncycles = "warning"\n', "utf-8")
+    assert _run_diff(tmp_path, base, pr) == 0
+    assert "New cycles" in capsys.readouterr().out
+
+
+def test_resolved_cycle_alone_does_not_fail(tmp_path: Path) -> None:
+    base = _index(tmp_path / "base.db", {"a.py": ["b.py"], "b.py": ["a.py"]})
+    pr = _index(tmp_path / "pr.db", {"a.py": [], "b.py": []})
+    assert _run_diff(tmp_path, base, pr) == 0
