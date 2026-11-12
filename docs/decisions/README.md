@@ -17,3 +17,6 @@ Por qué el sistema es como es: decisiones de arquitectura, reglas de negocio y 
 | [D-0005](0005-hotspot-churn-x-complexity.md) | El hotspot es churn × complejidad del fichero | rule | accepted | src/debtector/git_history.py, src/debtector/audit/health_score.py, docs/audit-schema.md |
 | [D-0006](0006-function-complexity-scores.md) | Las funciones con complejidad alta puntúan en el health score | rule | accepted | src/debtector/cli.py, src/debtector/audit/, src/debtector/config.py, docs/audit-schema.md |
 | [D-0007](0007-hotspot-severity-by-magnitude.md) | La severidad del hotspot depende de su magnitud respecto al corte | rule | accepted | src/debtector/audit/health_score.py, src/debtector/git_history.py, src/debtector/config.py, docs/audit-schema.md |
+| [D-0008](0008-diff-reuses-baseline-rules.md) | debtector diff compara dos índices con las reglas de baseline status | rule | accepted | src/debtector/diff.py, src/debtector/cli.py, docs/diff-schema.md |
+| [D-0009](0009-github-action-in-repo.md) | La GitHub Action vive en este repo y publica un comentario único | architecture | accepted | action.yml, .github/workflows/, scripts/ |
+| [D-0010](0010-function-complexity-in-diff.md) | Qué funciones entran en el diff por complejidad | rule | accepted | src/debtector/diff.py, docs/diff-schema.md |
