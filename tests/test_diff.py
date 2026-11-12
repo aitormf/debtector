@@ -226,3 +226,18 @@ def test_resolved_cycle_alone_does_not_fail(tmp_path: Path) -> None:
     base = _index(tmp_path / "base.db", {"a.py": ["b.py"], "b.py": ["a.py"]})
     pr = _index(tmp_path / "pr.db", {"a.py": [], "b.py": []})
     assert _run_diff(tmp_path, base, pr) == 0
+
+
+def test_tables_with_incompatible_columns_are_exit_2(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Tables named like an index but with other columns: exit 2, not a traceback."""
+    pr = _index(tmp_path / "pr.db", {"a.py": []})
+    fake = tmp_path / "fake.db"
+    conn = sqlite3.connect(fake)
+    conn.executescript(
+        "CREATE TABLE nodes (x); CREATE TABLE edges (x); CREATE TABLE metadata (key, value);"
+    )
+    conn.close()
+    assert _run_diff(tmp_path, str(fake), pr) == 2
+    assert str(fake) in capsys.readouterr().err
