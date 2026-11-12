@@ -1,0 +1,27 @@
+name: debtector
+
+# Never pull_request_target: it would run PR code with a write token (D-0009).
+on:
+  pull_request:
+    branches: [main]
+
+# One run per PR: a newer push cancels the older run, so two runs never race to
+# create the comment nor overwrite the newest report with an older one.
+concurrency:
+  group: debtector-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  diff:
+    name: Architectural diff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: ./

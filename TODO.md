@@ -57,9 +57,9 @@ ICP: dev/tech lead que usa agentes de código.
 ## Fase 4 — Graph diff para PRs
 *El más diferencial técnicamente. Construir cuando Fase 1+2+3 tengan tracción.*
 
-- [ ] **`debtector diff <db_base> <db_pr>`** — compara dos índices SQLite y reporta el delta
-- [ ] **Delta de métricas por PR** — qué módulos empeoraron, qué mejoraron, nuevos ciclos, nuevos god modules
-- [ ] **GitHub Action `debtector-action`** — indexa rama base + rama PR y publica comentario con el diff
+- [x] **`debtector diff <db_base> <db_pr>`** — compara dos índices SQLite y reporta el delta
+- [x] **Delta de métricas por PR** — qué módulos empeoraron, qué mejoraron, nuevos ciclos, nuevos god modules
+- [x] **GitHub Action** (`action.yml` en este repo, D-0009) — indexa rama base + rama PR y publica un comentario único con el diff
 
 ---
 
