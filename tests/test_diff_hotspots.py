@@ -110,3 +110,34 @@ def test_text_output_lists_hotspots_and_skipped(tmp_path: Path, capsys) -> None:
     out = capsys.readouterr().out
     assert "New hotspots (1):" in out
     assert "a.py: churn 5, complexity 12 (medium)" in out
+
+
+def test_churn_is_read_from_the_indexed_subdirectory(tmp_path: Path, capsys) -> None:
+    """``debtector index src``: graph paths are relative to ``src``, and so must the churn be."""
+    from debtector.graph_store import GraphStore
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _run(repo, "init", "-q")
+    (repo / "debtector.toml").write_text(
+        "[audit.thresholds]\nhotspot_percentile = 1\n", encoding="utf-8"
+    )
+    (repo / "src").mkdir()
+    (repo / "src" / "b.py").write_text("y = 0\n", encoding="utf-8")
+    for i in range(5):
+        (repo / "src" / "a.py").write_text(f"x = {i}\n", encoding="utf-8")
+        _run(repo, "add", ".")
+        _run(repo, "commit", "-q", "-m", f"c{i}")
+    configure_logging(project=str(repo))
+    dbs = []
+    for name, cx in (("base", 5), ("pr", 12)):
+        db = _index(tmp_path / f"{name}.db", {"a.py": {"f": cx}, "b.py": {}})
+        store = GraphStore(db)
+        store.set_metadata("index_root", "src")
+        store.close()
+        dbs.append(db)
+
+    cmd_diff(argparse.Namespace(project=str(repo), json=True, db_base=dbs[0], db_pr=dbs[1]))
+
+    result = json.loads(capsys.readouterr().out)
+    assert [h["file_path"] for h in result["new_hotspots"]] == ["a.py"]
