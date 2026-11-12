@@ -152,7 +152,22 @@ def _get_store(project: str) -> GraphStore:
         An open :class:`~debtector.graph_store.GraphStore` instance.
     """
     db_path = _debtector_dir(project) / "index.db"
-    store = GraphStore(str(db_path))
+    return _open_store(str(db_path), project)
+
+
+def _open_store(db_path: str, project: str) -> GraphStore:
+    """Open the index at *db_path* with the ``test_paths`` of *project* applied.
+
+    Args:
+        db_path: Path to the SQLite index.
+        project: Project root whose ``debtector.toml`` defines ``test_paths``; the
+            index's ``index_root`` is resolved against it.
+
+    Returns:
+        An open :class:`~debtector.graph_store.GraphStore` whose ``is_test_path``
+        knows the configured test directories.
+    """
+    store = GraphStore(db_path)
     rel = store.get_metadata(_INDEX_ROOT_KEY)
     store.test_prefixes = _test_prefixes(project, str(Path(project) / rel) if rel else project)
     return store
@@ -866,7 +881,7 @@ def cmd_diff(args) -> None:
             and ``db_pr`` (str, paths to the two indexes).
     """
     cfg = load_config(args.project)
-    base, pr = GraphStore(args.db_base), GraphStore(args.db_pr)
+    base, pr = _open_store(args.db_base, args.project), _open_store(args.db_pr, args.project)
     try:
         result = compute_diff(base, pr, cfg)
     finally:
