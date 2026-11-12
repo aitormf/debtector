@@ -18,8 +18,12 @@ from pathlib import Path
 from typing import Protocol
 
 MARKER = "<!-- debtector-diff -->"
-# Author of the comments made with the default ``GITHUB_TOKEN``.
-ACTIONS_BOT = "github-actions[bot]"
+# Publisher whose login is unknown (``GITHUB_TOKEN`` or a GitHub App token cannot read
+# ``/user``): its comments are authored by some ``<name>[bot]``, never by a person.
+ANY_BOT = "<any bot>"
+# GitHub rejects comments longer than this (HTTP 422).
+MAX_COMMENT = 65_536
+_TRUNCATED = "\n\n…report truncated: the full diff is in the job summary of this run.\n"
 
 
 class ApiError(Exception):
@@ -69,11 +73,11 @@ class GitHubComments:
             raise ApiError(0, str(e)) from e
 
     def login(self) -> str:
-        """Login of the token's owner; ``GITHUB_TOKEN`` cannot read it, so it is the bot."""
+        """Login of the token's owner (a PAT), or :data:`ANY_BOT` if the token is a bot's."""
         try:
             return self._request("GET", self._url.rsplit("/repos/", 1)[0] + "/user")["login"]
         except ApiError:
-            return ACTIONS_BOT
+            return ANY_BOT
 
     def list_comments(self) -> list[dict]:
         """Return every comment of the PR, following the pagination."""
@@ -102,19 +106,33 @@ def find_comment_id(comments: list[dict], author: str | None = None) -> int | No
 
     Args:
         comments: Comments of the PR.
-        author: Login that publishes the report. A comment with the marker written by
-            someone else (e.g. quoting it) is never picked. ``None`` accepts any author.
+        author: Login that publishes the report, or :data:`ANY_BOT` for a bot token. A
+            comment with the marker written by someone else (e.g. a person quoting it) is
+            never picked. ``None`` accepts any author.
     """
     for comment in comments:
         if not (comment.get("body") or "").startswith(MARKER):
             continue
-        if author is None or (comment.get("user") or {}).get("login") == author:
+        user = comment.get("user") or {}
+        if (
+            author is None
+            or (author == ANY_BOT and user.get("type") == "Bot")
+            or user.get("login") == author
+        ):
             return comment["id"]
     return None
 
 
+def bounded(body: str) -> str:
+    """Cut *body* to GitHub's comment limit, saying so; the marker stays at the start."""
+    if len(body) <= MAX_COMMENT:
+        return body
+    return body[: MAX_COMMENT - len(_TRUNCATED)] + _TRUNCATED
+
+
 def publish(body: str, api: CommentsApi, author: str | None = None) -> None:
     """Create the comment, or update the publisher's one that already has the marker."""
+    body = bounded(body)
     existing = find_comment_id(api.list_comments(), author)
     if existing is None:
         api.create(body)
@@ -174,10 +192,7 @@ def main() -> int:
     )
     summary = Path(os.environ.get("GITHUB_STEP_SUMMARY", os.devnull))
     body = args.body_file.read_text(encoding="utf-8")
-    try:
-        author = api.login()
-    except ApiError:
-        author = ACTIONS_BOT
+    author = api.login()
     return run(body, args.diff_exit, args.fail_on_error == "true", api, summary, author)
 
 
