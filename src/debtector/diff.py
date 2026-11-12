@@ -39,7 +39,10 @@ def instability_regressions(base: list[ModuleMetrics], pr: list[ModuleMetrics]) 
             "after": round(m.instability, 4),
         }
         for m in pr
-        if m.file_path in before and m.instability > before[m.file_path] + INSTABILITY_TOLERANCE
+        # Round the delta: 0.35 + 0.05 is 0.39999999999999997, a delta of exactly the
+        # tolerance must not count as a regression.
+        if m.file_path in before
+        and round(m.instability - before[m.file_path], 4) > INSTABILITY_TOLERANCE
     ]
 
 
