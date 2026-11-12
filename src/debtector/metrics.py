@@ -106,7 +106,8 @@ def _resolve_import_target(
 ) -> str:
     """Resolve an IMPORTS_FROM target to a file path if it is an internal module.
 
-    Handles three forms:
+    Handles three forms (since ``PARSER_VERSION`` 5 relative imports keep their dots,
+    so a bare name such as ``"json"`` is always absolute and never guessed as a sibling):
 
     1. Absolute dotted name: ``"debtector.models"``
     2. Relative import with leading dot: ``".models"`` (from ``"debtector/cli.py"``)
@@ -140,17 +141,6 @@ def _resolve_import_target(
             abs_module = rel_name
         if abs_module in module_map:
             return module_map[abs_module]
-
-    # Relative import stored without a dot (the parser extracts only the name):
-    # "from .config import X" → target="config", source="debtector/cli.py"
-    # Try to resolve it as a module of the same package.
-    if "." not in target:
-        parts = source_file.replace("\\", "/").split("/")
-        package = ".".join(parts[:-1])  # "debtector" from "debtector/cli.py"
-        if package:
-            candidate = f"{package}.{target}"
-            if candidate in module_map:
-                return module_map[candidate]
 
     return target  # unresolved → external package
 
