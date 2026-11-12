@@ -294,6 +294,7 @@ testrisk_high_churn = 5    # untested_hotspots: commits >=
 testrisk_high_ca    = 10   # critical_knowledge_concentration: Ca >=
 hotspot_percentile  = 90   # percentile [1, 99] of the project's hotspot scores
 hotspot_min_score   = 50   # absolute minimum: commits x file complexity
+hotspot_high_factor = 3    # a hotspot is high from this multiple of the cut, else medium
 complexity_medium   = 21   # function complexity from which it is a medium finding
 complexity_high     = 31   # function complexity from which it is a high finding
 ```

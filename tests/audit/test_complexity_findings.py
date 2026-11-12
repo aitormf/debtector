@@ -149,7 +149,7 @@ def test_E10_json_has_complexity_section_and_version_4(
         },
         capsys,
     )
-    assert out["summary"]["health_score_version"] == 4
+    assert out["summary"]["health_score_version"] == 5
     entries = {e["qualified_name"]: e for e in out["complexity"]}
     assert set(entries) == {"src/big.py::huge", "src/big.py::mid"}  # E9: test file excluded
     assert entries["src/big.py::huge"] == {
