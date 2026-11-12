@@ -104,3 +104,20 @@ def test_E24_cli_format_markdown(tmp_path: Path, capsys) -> None:
     out = capsys.readouterr().out
     assert out.startswith("<!-- debtector-diff -->\n")
     assert "a.py::f" in out
+
+
+def _row_for(name: str) -> str:
+    result = _empty()
+    result["worsened_functions"] = [_fn(name, 10, 30)]
+    return render_diff_markdown(result).splitlines()[-1]
+
+
+def test_markdown_syntax_in_names_stays_literal() -> None:
+    """``__init__.py`` must not turn bold, nor ``![x](i.png)`` into an image."""
+    assert "src/\\_\\_init\\_\\_.py::f" in _row_for("src/__init__.py::f")
+    assert "\\!\\[x\\]\\(i.png\\).py::f" in _row_for("![x](i.png).py::f")
+
+
+def test_existing_backslash_cannot_cancel_an_escape() -> None:
+    """``a\\`` before a backtick: the backslash itself is escaped first."""
+    assert "a\\\\\\`b" in _row_for("a\\`b")
