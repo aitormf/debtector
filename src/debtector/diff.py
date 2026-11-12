@@ -10,8 +10,12 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import structlog
+
 from .audit.complexity import select_complexity_findings
+from .audit.health_score import select_actionable_hotspots
 from .config import MetricsSeverity, Severity
+from .git_history import compute_hotspots, is_shallow_repository
 from .graph_store import GraphStore
 from .metrics import (
     ModuleMetrics,
@@ -21,6 +25,8 @@ from .metrics import (
     sdp_violations,
 )
 from .models import NodeKind
+
+log = structlog.get_logger()
 
 _PARSER_VERSION_KEY = "parser_version"
 # Columns of the original schema that the diff reads (later migrations only add others).
@@ -213,19 +219,78 @@ def _complexity_diff(base: GraphStore, pr: GraphStore, thr) -> tuple[list[dict],
     return worsened, improved
 
 
-def compute_diff(base: GraphStore, pr: GraphStore, cfg) -> dict[str, list]:
+def _hotspot_diff(
+    base: GraphStore, pr: GraphStore, thr, project_root: str
+) -> tuple[list[dict], list[dict]]:
+    """Files that became actionable hotspots, or went from ``medium`` to ``high`` (D-0007).
+
+    The churn is the one of the PR's repository on both sides, so only the complexity
+    changes between them.
+
+    Args:
+        base: Store of the base branch.
+        pr: Store of the PR.
+        thr: Audit thresholds (``hotspot_*``).
+        project_root: Git repository whose history gives the churn.
+
+    Returns:
+        ``(new, worsened)`` lists of dicts.
+    """
+
+    def actionable(store: GraphStore) -> dict[str, object]:
+        found = select_actionable_hotspots(
+            compute_hotspots(store, project_root),
+            percentile=thr.hotspot_percentile,
+            min_score=thr.hotspot_min_score,
+            high_factor=thr.hotspot_high_factor,
+        )
+        return {h.file_path: h for h in found}
+
+    before, after = actionable(base), actionable(pr)
+    new, worsened = [], []
+    for path, h in after.items():
+        if path not in before:
+            new.append(
+                {
+                    "file_path": path,
+                    "churn": h.churn,
+                    "complexity": h.complexity,
+                    "hotspot_score": h.hotspot_score,
+                    "severity": h.severity,
+                }
+            )
+        elif before[path].severity == "medium" and h.severity == "high":
+            worsened.append(
+                {
+                    "file_path": path,
+                    "churn": h.churn,
+                    "complexity_before": before[path].complexity,
+                    "complexity_after": h.complexity,
+                    "severity_before": "medium",
+                    "severity": "high",
+                }
+            )
+    return new, worsened
+
+
+def compute_diff(
+    base: GraphStore, pr: GraphStore, cfg, project_root: str | None = None
+) -> dict[str, list | dict]:
     """Compare the structure of two indexes.
 
     Args:
         base: Store of the base branch.
         pr: Store of the PR.
         cfg: Project config (thresholds of ``debtector.toml``).
+        project_root: Git repository of the PR, for the churn of the hotspots. Without it,
+            or if it is not a repository, the hotspot sections are empty.
 
     Returns:
         A dict with one key per section: ``new_cycles``, ``resolved_cycles``,
         ``new_god_modules``, ``resolved_god_modules``, ``new_sdp_violations``,
         ``resolved_sdp_violations``, ``instability_regressions``, ``worsened_functions`` and
-        ``improved_functions``.
+        ``improved_functions``, ``new_hotspots``, ``worsened_hotspots`` and ``skipped`` (a
+        list of ``{section, reason}`` for what could not be computed, e.g. a shallow clone).
     """
     thr = cfg.metrics.thresholds
     new_cycles, resolved_cycles = _cycle_diff(find_cycles(base), find_cycles(pr))
@@ -248,6 +313,26 @@ def compute_diff(base: GraphStore, pr: GraphStore, cfg) -> dict[str, list]:
     base_sdp, pr_sdp = sdp(base), sdp(pr)
 
     worsened, improved = _complexity_diff(base, pr, cfg.audit)
+    new_hotspots: list[dict] = []
+    worsened_hotspots: list[dict] = []
+    skipped: list[dict[str, str]] = []
+    if project_root is not None:
+        try:
+            if is_shallow_repository(project_root):
+                reason = (
+                    "shallow clone: the history is truncated, so the churn is not reliable "
+                    "(fetch with full depth, e.g. fetch-depth: 0)"
+                )
+                skipped.append({"section": "hotspots", "reason": reason})
+            else:
+                # Graph paths are relative to the indexed directory (``index src``):
+                # git must report the churn relative to it too.
+                rel = pr.get_metadata("index_root")
+                history_root = str(Path(project_root) / rel) if rel else project_root
+                new_hotspots, worsened_hotspots = _hotspot_diff(base, pr, cfg.audit, history_root)
+        except RuntimeError:
+            # Not a git repository (or no git): no churn, so no hotspots.
+            log.warning("diff_hotspots_unavailable", root=project_root, exc_info=True)
 
     return {
         "new_cycles": new_cycles,
@@ -261,4 +346,7 @@ def compute_diff(base: GraphStore, pr: GraphStore, cfg) -> dict[str, list]:
         ),
         "worsened_functions": worsened,
         "improved_functions": improved,
+        "new_hotspots": new_hotspots,
+        "worsened_hotspots": worsened_hotspots,
+        "skipped": skipped,
     }

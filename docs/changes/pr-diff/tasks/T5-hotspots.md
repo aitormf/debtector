@@ -1,7 +1,7 @@
 ---
 id: T5
 title: Hotspots nuevos o que empeoran en el diff
-status: todo
+status: done
 depends_on: [T1]
 examples: [E20, E21, E22]
 verification: uv run pytest tests/test_diff_hotspots.py -q
