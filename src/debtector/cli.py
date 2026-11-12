@@ -35,7 +35,14 @@ from .audit import (
 )
 from .audit.complexity import ComplexityFinding, select_complexity_findings
 from .config import AuditThresholds, Severity, load_config
-from .diff import compute_diff, instability_grew
+from .diff import (
+    InvalidInputError,
+    blocks_ci,
+    check_comparable,
+    compute_diff,
+    instability_grew,
+    validate_index,
+)
 from .git_history import (
     compute_bus_factor,
     compute_hotspots,
@@ -860,26 +867,38 @@ def cmd_diff(args) -> None:
         args: Parsed argument namespace. Expected attributes: ``project``
             (str, where ``debtector.toml`` lives), ``json`` (bool), ``db_base``
             and ``db_pr`` (str, paths to the two indexes).
+
+    Exits with 2 if the inputs are not valid, and with 1 if something new has
+    ``error`` severity in ``[metrics.severity]`` (D-0008).
     """
     cfg = load_config(args.project)
-    base, pr = GraphStore(args.db_base), GraphStore(args.db_pr)
     try:
-        result = compute_diff(base, pr, cfg)
-    finally:
-        base.close()
-        pr.close()
+        validate_index(args.db_base)
+        validate_index(args.db_pr)
+        base, pr = GraphStore(args.db_base), GraphStore(args.db_pr)
+        try:
+            check_comparable(base, pr)
+            result = compute_diff(base, pr, cfg)
+        finally:
+            base.close()
+            pr.close()
+    except InvalidInputError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(2)
+    blocking = blocks_ci(result, cfg.metrics.severity)
 
     if args.json:
         _json_out(result)
-        return
-    if not any(result.values()):
+    elif not any(result.values()):
         print("No architectural changes")
-        return
-    for key, title in _DIFF_SECTIONS:
-        if result[key]:
-            print(f"\n{title} ({len(result[key])}):")
-            for item in result[key]:
-                print(f"   {_diff_item(item)}")
+    else:
+        for key, title in _DIFF_SECTIONS:
+            if result[key]:
+                print(f"\n{title} ({len(result[key])}):")
+                for item in result[key]:
+                    print(f"   {_diff_item(item)}")
+    if blocking:
+        sys.exit(1)
 
 
 def cmd_baseline(args) -> None:

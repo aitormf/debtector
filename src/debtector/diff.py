@@ -7,6 +7,10 @@ instability regressions with a tolerance, ignoring modules that only exist in on
 
 from __future__ import annotations
 
+import sqlite3
+from pathlib import Path
+
+from .config import MetricsSeverity, Severity
 from .graph_store import GraphStore
 from .metrics import (
     ModuleMetrics,
@@ -15,6 +19,75 @@ from .metrics import (
     god_modules,
     sdp_violations,
 )
+
+_PARSER_VERSION_KEY = "parser_version"
+_INDEX_TABLES = {"nodes", "edges", "metadata"}
+
+
+class InvalidInputError(Exception):
+    """The inputs of a diff cannot be compared (bad path, not an index, parser mismatch)."""
+
+
+def validate_index(path: str) -> None:
+    """Check that *path* is an existing debtector index, without creating or modifying it.
+
+    Args:
+        path: Path to the SQLite index.
+
+    Raises:
+        InvalidInputError: If the file does not exist or is not a debtector index.
+    """
+    if not Path(path).is_file():
+        raise InvalidInputError(f"Index not found: {path}")
+    try:
+        conn = sqlite3.connect(f"{Path(path).resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError as e:
+        raise InvalidInputError(f"Not a debtector index: {path}") from e
+    if not _INDEX_TABLES <= tables:
+        raise InvalidInputError(f"Not a debtector index: {path}")
+
+
+def check_comparable(base: GraphStore, pr: GraphStore) -> None:
+    """Refuse to compare indexes built by different parser versions (D-0008).
+
+    Args:
+        base: Index of the base branch.
+        pr: Index of the PR.
+
+    Raises:
+        InvalidInputError: If their ``parser_version`` differs.
+    """
+    vb, vp = base.get_metadata(_PARSER_VERSION_KEY), pr.get_metadata(_PARSER_VERSION_KEY)
+    if vb != vp:
+        raise InvalidInputError(
+            f"The indexes have a different parser_version (base: {vb}, PR: {vp}). "
+            "Reindex both with the same debtector version: debtector index"
+        )
+
+
+def blocks_ci(result: dict, severity: MetricsSeverity) -> bool:
+    """Whether something new in *result* has ``error`` severity (D-0008).
+
+    Args:
+        result: Output of :func:`compute_diff`.
+        severity: The ``[metrics.severity]`` configuration.
+
+    Returns:
+        ``True`` if a new cycle, god module, SDP violation or instability regression
+        belongs to a type configured as ``error``.
+    """
+    pairs = (
+        ("new_cycles", severity.cycles),
+        ("new_god_modules", severity.god_modules),
+        ("new_sdp_violations", severity.instability),
+        ("instability_regressions", severity.instability),
+    )
+    return any(result[key] and sev == Severity.ERROR for key, sev in pairs)
+
 
 # A delta below 5% in instability is rounding noise, not real degradation.
 INSTABILITY_TOLERANCE = 0.05
