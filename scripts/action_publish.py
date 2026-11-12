@@ -18,13 +18,15 @@ from pathlib import Path
 from typing import Protocol
 
 MARKER = "<!-- debtector-diff -->"
+# Author of the comments made with the default ``GITHUB_TOKEN``.
+ACTIONS_BOT = "github-actions[bot]"
 
 
 class ApiError(Exception):
-    """The GitHub API refused a request (``status`` is the HTTP code)."""
+    """A GitHub API request failed (``status`` is the HTTP code, 0 for network errors)."""
 
-    def __init__(self, status: int) -> None:
-        super().__init__(f"HTTP {status}")
+    def __init__(self, status: int, reason: str = "") -> None:
+        super().__init__(f"HTTP {status}" if status else f"network error: {reason}")
         self.status = status
 
 
@@ -63,6 +65,15 @@ class GitHubComments:
                 return json.load(resp)
         except urllib.error.HTTPError as e:
             raise ApiError(e.code) from e
+        except (urllib.error.URLError, OSError) as e:  # DNS, refused, reset, timeout
+            raise ApiError(0, str(e)) from e
+
+    def login(self) -> str:
+        """Login of the token's owner; ``GITHUB_TOKEN`` cannot read it, so it is the bot."""
+        try:
+            return self._request("GET", self._url.rsplit("/repos/", 1)[0] + "/user")["login"]
+        except ApiError:
+            return ACTIONS_BOT
 
     def list_comments(self) -> list[dict]:
         """Return every comment of the PR, following the pagination."""
@@ -86,24 +97,39 @@ class GitHubComments:
         self._request("PATCH", f"{self._url}/comments/{comment_id}", {"body": body})
 
 
-def find_comment_id(comments: list[dict]) -> int | None:
-    """Return the id of the comment that starts with the marker, if any."""
+def find_comment_id(comments: list[dict], author: str | None = None) -> int | None:
+    """Return the id of the publisher's comment that starts with the marker, if any.
+
+    Args:
+        comments: Comments of the PR.
+        author: Login that publishes the report. A comment with the marker written by
+            someone else (e.g. quoting it) is never picked. ``None`` accepts any author.
+    """
     for comment in comments:
-        if (comment.get("body") or "").startswith(MARKER):
+        if not (comment.get("body") or "").startswith(MARKER):
+            continue
+        if author is None or (comment.get("user") or {}).get("login") == author:
             return comment["id"]
     return None
 
 
-def publish(body: str, api: CommentsApi) -> None:
-    """Create the comment, or update the one that already has the marker."""
-    existing = find_comment_id(api.list_comments())
+def publish(body: str, api: CommentsApi, author: str | None = None) -> None:
+    """Create the comment, or update the publisher's one that already has the marker."""
+    existing = find_comment_id(api.list_comments(), author)
     if existing is None:
         api.create(body)
     else:
         api.update(existing, body)
 
 
-def run(body: str, diff_exit: int, fail_on_error: bool, api: CommentsApi, summary: Path) -> int:
+def run(
+    body: str,
+    diff_exit: int,
+    fail_on_error: bool,
+    api: CommentsApi,
+    summary: Path,
+    author: str | None = None,
+) -> int:
     """Publish the diff and return the exit code the job must finish with.
 
     Args:
@@ -112,6 +138,7 @@ def run(body: str, diff_exit: int, fail_on_error: bool, api: CommentsApi, summar
         fail_on_error: Whether exit 1 (new ``error`` severity) must fail the job.
         api: Where the comment is published.
         summary: Path of ``$GITHUB_STEP_SUMMARY``.
+        author: Login that publishes the comment (see :func:`find_comment_id`).
 
     Returns:
         ``diff_exit``, except that exit 1 becomes 0 without ``fail_on_error``.
@@ -121,9 +148,10 @@ def run(body: str, diff_exit: int, fail_on_error: bool, api: CommentsApi, summar
         with summary.open("a", encoding="utf-8") as f:
             f.write(body)
         try:
-            publish(body, api)
+            publish(body, api, author)
         except ApiError as e:
-            # Forks get a read-only token: the summary is then the only output.
+            # Forks get a read-only token, or the network fails: the summary is then
+            # the only output, and the diff's own exit code still decides the job.
             print(f"::warning::debtector could not comment on the PR ({e}); see the job summary")
     if diff_exit == 1 and not fail_on_error:
         return 0
@@ -146,7 +174,11 @@ def main() -> int:
     )
     summary = Path(os.environ.get("GITHUB_STEP_SUMMARY", os.devnull))
     body = args.body_file.read_text(encoding="utf-8")
-    return run(body, args.diff_exit, args.fail_on_error == "true", api, summary)
+    try:
+        author = api.login()
+    except ApiError:
+        author = ACTIONS_BOT
+    return run(body, args.diff_exit, args.fail_on_error == "true", api, summary, author)
 
 
 if __name__ == "__main__":

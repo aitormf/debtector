@@ -234,6 +234,9 @@ Each step emits stable JSON and composes easily from scripts, IDEs, CI or agents
 ```yaml
 # .github/workflows/debtector.yml
 on: pull_request
+concurrency:
+  group: debtector-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 permissions:
   contents: read
   pull-requests: write
@@ -244,10 +247,10 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0   # the base commit must be available
-      - uses: aitormf/debtector@v0.18.0
+      - uses: aitormf/debtector@v0.19.0
         # with:
         #   fail-on-error: false   # default true: fail after commenting if the diff has `error` severity
-        #   version: 0.18.0        # default: the version of the Action
+        #   version: 0.19.0        # default: the version of the Action
 ```
 
 PRs from forks get a read-only token: there is no comment, the diff is in the job summary and the job does not fail because of that. Do not use `pull_request_target` to work around it.
