@@ -21,6 +21,22 @@ INSTABILITY_TOLERANCE = 0.05
 _FLOAT_EPSILON = 1e-9
 
 
+def instability_grew(before: float, after: float) -> bool:
+    """Whether instability grew more than :data:`INSTABILITY_TOLERANCE`.
+
+    Uses an epsilon: ``0.40 - 0.35`` is ``0.05000000000000004`` in floating point, so a
+    delta of exactly the tolerance does not count, while one visibly above it (0.05003) does.
+
+    Args:
+        before: Instability on the reference side (base or baseline).
+        after: Current instability.
+
+    Returns:
+        ``True`` if the growth exceeds the tolerance.
+    """
+    return after - before > INSTABILITY_TOLERANCE + _FLOAT_EPSILON
+
+
 def instability_regressions(base: list[ModuleMetrics], pr: list[ModuleMetrics]) -> list[dict]:
     """Modules present in both sides whose instability grew more than the tolerance.
 
@@ -40,10 +56,7 @@ def instability_regressions(base: list[ModuleMetrics], pr: list[ModuleMetrics]) 
             "after": round(m.instability, 4),
         }
         for m in pr
-        # Epsilon: 0.40 - 0.35 is 0.05000000000000004, a delta of exactly the tolerance
-        # must not count as a regression; anything visibly above it (0.05003) does.
-        if m.file_path in before
-        and m.instability - before[m.file_path] > INSTABILITY_TOLERANCE + _FLOAT_EPSILON
+        if m.file_path in before and instability_grew(before[m.file_path], m.instability)
     ]
 
 

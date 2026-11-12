@@ -35,7 +35,7 @@ from .audit import (
 )
 from .audit.complexity import ComplexityFinding, select_complexity_findings
 from .config import AuditThresholds, Severity, load_config
-from .diff import compute_diff
+from .diff import compute_diff, instability_grew
 from .git_history import (
     compute_bus_factor,
     compute_hotspots,
@@ -816,9 +816,6 @@ def cmd_audit(args) -> None:
 # ──────────────────────────────────────────────
 
 _BASELINE_FILE = ".debtector/baseline.json"
-# Instability tolerance: minimum difference to count as a regression.
-# A delta < 5% is treated as rounding noise, not real degradation.
-_INSTABILITY_TOLERANCE = 0.05
 
 
 def _baseline_path(project: str) -> Path:
@@ -994,7 +991,7 @@ def _baseline_status(args) -> None:
         prev = baseline_map.get(m.file_path)
         if prev is None:
             continue
-        if m.instability > prev["instability"] + _INSTABILITY_TOLERANCE:
+        if instability_grew(prev["instability"], m.instability):
             regressions.append(
                 {
                     "file_path": m.file_path,
