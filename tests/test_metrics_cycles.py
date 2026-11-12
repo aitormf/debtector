@@ -141,3 +141,27 @@ class TestFindCycles:
         for cycle in cycles:
             assert isinstance(cycle, list)
             assert all(isinstance(n, str) for n in cycle)
+
+
+class TestFindCyclesResolvesImports:
+    """Import targets are stored as module names; cycles must resolve them to files."""
+
+    def test_real_python_import_cycles_are_found(self, tmp_path) -> None:
+        from debtector.indexer import Indexer
+
+        pkg = tmp_path / "pkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("", encoding="utf-8")
+        (pkg / "a.py").write_text("import pkg.b\n", encoding="utf-8")
+        (pkg / "b.py").write_text("import pkg.a\n", encoding="utf-8")
+        (pkg / "c.py").write_text("from . import d\n", encoding="utf-8")
+        (pkg / "d.py").write_text("from .c import x\n", encoding="utf-8")
+        store = GraphStore(str(tmp_path / "index.db"))
+        try:
+            Indexer(store).index(str(tmp_path))
+            cycles = {frozenset(c) for c in find_cycles(store)}
+        finally:
+            store.close()
+
+        assert frozenset({"pkg/a.py", "pkg/b.py"}) in cycles
+        assert frozenset({"pkg/c.py", "pkg/d.py"}) in cycles
