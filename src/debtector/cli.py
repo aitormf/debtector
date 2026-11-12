@@ -893,6 +893,36 @@ def _git_out(cwd: str, *args: str) -> str:
     return proc.stdout.strip()
 
 
+def _refresh_index(project: str) -> None:
+    """Bring the project's index up to date, failing instead of comparing stale data.
+
+    Unlike :func:`_auto_index`, a refresh that fails or skips files is an error: a
+    diff against a partially updated index could hide a regression.
+
+    Args:
+        project: Path to the project root.
+
+    Raises:
+        InvalidInputError: If indexing raised or any file failed to index.
+    """
+    store = _get_store(project)
+    try:
+        rel = store.get_metadata(_INDEX_ROOT_KEY)
+        try:
+            stats = Indexer(store).index(
+                str(Path(project) / rel) if rel else project, extra_paths=_test_dirs(project)
+            )
+        except Exception as e:  # noqa: BLE001 - reported as invalid input, with the cause
+            raise InvalidInputError(f"Could not refresh the current index: {e}") from e
+    finally:
+        store.close()
+    if stats["errors"]:
+        raise InvalidInputError(
+            f"Could not refresh the current index: {stats['errors']} file(s) failed "
+            "(see .debtector/debtector.log)"
+        )
+
+
 def _index_base_ref(project: str, ref: str, db_path: str, worktree: Path) -> None:
     """Index *ref* of the project's repository into *db_path* through a temporary worktree.
 
@@ -909,12 +939,21 @@ def _index_base_ref(project: str, ref: str, db_path: str, worktree: Path) -> Non
     Raises:
         InvalidInputError: If *project* is not in a git repository or *ref* does not exist.
     """
-    project = os.path.abspath(project)
+    # Physical path: git reports the real toplevel, and a symlinked alias would give a
+    # relative path with ``..`` that escapes the worktree.
+    project = os.path.realpath(project)
     toplevel = _git_out(project, "rev-parse", "--show-toplevel")
     try:
         _git_out(project, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
     except InvalidInputError as e:
         raise InvalidInputError(f"Unknown git ref: {ref}") from e
+    submodules = _git_out(project, "submodule", "status", "--recursive")
+    if any(line and not line.startswith("-") for line in submodules.splitlines()):
+        # A new worktree leaves submodules empty: the base would miss their files.
+        raise InvalidInputError(
+            "--base does not support repositories with initialized submodules; "
+            "index both revisions and run: debtector diff <db_base> <db_pr>"
+        )
     rel_project = Path(os.path.relpath(project, os.path.realpath(toplevel)))
     store = _get_store(project)
     try:
@@ -928,7 +967,12 @@ def _index_base_ref(project: str, ref: str, db_path: str, worktree: Path) -> Non
         try:
             store.test_prefixes = _test_prefixes(project, str(Path(project) / rel_root))
             extra = [str(wt_project / os.path.relpath(d, project)) for d in _test_dirs(project)]
-            Indexer(store).index(str(wt_project / rel_root), extra_paths=extra)
+            stats = Indexer(store).index(str(wt_project / rel_root), extra_paths=extra)
+            if stats["errors"]:
+                raise InvalidInputError(
+                    f"Could not index {ref}: {stats['errors']} file(s) failed "
+                    "(see .debtector/debtector.log)"
+                )
             store.set_metadata(_INDEX_ROOT_KEY, rel_root)
         finally:
             store.close()
@@ -959,7 +1003,7 @@ def cmd_diff(args) -> None:
             if base_ref:
                 db_base = str(Path(tmp) / "base.db")
                 _index_base_ref(args.project, base_ref, db_base, Path(tmp) / "worktree")
-                _auto_index(args.project)
+                _refresh_index(args.project)
                 db_pr = str(_debtector_dir(args.project) / "index.db")
             validate_index(db_base)
             validate_index(db_pr)
