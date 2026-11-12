@@ -75,3 +75,7 @@ annotated_tag = true  # git push --follow-tags solo sube tags anotados
 testpaths = ["tests"]
 addopts = "--cov=debtector --cov-report=term-missing"
 norecursedirs = ["tests/fixtures"]
+
+[tool.ruff.lint.per-file-ignores]
+# Red-commit test of change pr-diff/T1: its import order is frozen by the task-done protection.
+"tests/test_diff.py" = ["I001"]
