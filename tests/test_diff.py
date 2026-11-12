@@ -134,3 +134,9 @@ def test_E7_equal_indexes_give_empty_diff_and_message(
         argparse.Namespace(project=str(tmp_path), json=True, db_base=base, db_pr=pr, base=None)
     )
     assert json.loads(capsys.readouterr().out) == result
+
+
+def test_instability_delta_exactly_at_tolerance_despite_float_rounding() -> None:
+    """0.35 + 0.05 is 0.39999999999999997 in floating point: 0.35 → 0.40 is not a regression."""
+    base = [_mm("a.py", 7 / 20)]  # Ca=13, Ce=7
+    assert instability_regressions(base, [_mm("a.py", 8 / 20)]) == []  # Ca=12, Ce=8
