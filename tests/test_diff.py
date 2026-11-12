@@ -140,3 +140,9 @@ def test_instability_delta_exactly_at_tolerance_despite_float_rounding() -> None
     """0.35 + 0.05 is 0.39999999999999997 in floating point: 0.35 → 0.40 is not a regression."""
     base = [_mm("a.py", 7 / 20)]  # Ca=13, Ce=7
     assert instability_regressions(base, [_mm("a.py", 8 / 20)]) == []  # Ca=12, Ce=8
+
+
+def test_instability_delta_just_above_tolerance_is_a_regression() -> None:
+    """Ca=23, Ce=20 → Ca=16, Ce=17 grows instability by ~0.05004: above the tolerance."""
+    base = [_mm("a.py", 20 / 43)]
+    assert len(instability_regressions(base, [_mm("a.py", 17 / 33)])) == 1
