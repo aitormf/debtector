@@ -325,7 +325,11 @@ def compute_diff(
                 )
                 skipped.append({"section": "hotspots", "reason": reason})
             else:
-                new_hotspots, worsened_hotspots = _hotspot_diff(base, pr, cfg.audit, project_root)
+                # Graph paths are relative to the indexed directory (``index src``):
+                # git must report the churn relative to it too.
+                rel = pr.get_metadata("index_root")
+                history_root = str(Path(project_root) / rel) if rel else project_root
+                new_hotspots, worsened_hotspots = _hotspot_diff(base, pr, cfg.audit, history_root)
         except RuntimeError:
             # Not a git repository (or no git): no churn, so no hotspots.
             log.warning("diff_hotspots_unavailable", root=project_root, exc_info=True)
