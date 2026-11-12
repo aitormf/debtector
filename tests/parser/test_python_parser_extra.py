@@ -102,15 +102,12 @@ class TestPythonAliasedImports:
 class TestPythonBareRelativeImport:
     """Tests for bare relative imports (from . import X)."""
 
-    def test_bare_relative_import_uses_name_as_target(self, parsed_extras) -> None:
-        """'from . import helpers' creates an IMPORTS_FROM edge targeting 'helpers'.
-
-        The parser picks up the dotted_name child of the import_from_statement,
-        which for ``from . import helpers`` is the imported name itself.
-        """
+    def test_bare_relative_import_keeps_the_dot(self, parsed_extras) -> None:
+        """'from . import helpers' targets '.helpers': relative, not the absolute 'helpers'."""
         _, edges = parsed_extras
         import_targets = {e.target for e in edges if e.kind == EdgeKind.IMPORTS_FROM}
-        assert "helpers" in import_targets
+        assert ".helpers" in import_targets
+        assert "helpers" not in import_targets
 
     def test_bare_relative_import_does_not_produce_empty_target(self, parsed_extras) -> None:
         """No IMPORTS_FROM edge has an empty string as target."""

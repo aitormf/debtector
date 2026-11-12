@@ -11,8 +11,9 @@ from .python_parser import PythonParser
 #: ``extra`` data, new edges...) so ``index`` re-parses files even if their hash is unchanged.
 #: 1 = original output; 2 = adds ``extra["complexity"]`` to Function/Method nodes;
 #: 3 = adds ``extra["nested_complexity"]`` (Python closures); 4 = also finds closures
-#: inside blocks and methods of local classes.
-PARSER_VERSION = 4
+#: inside blocks and methods of local classes; 5 = Python relative imports keep their
+#: leading dots (``.c``, ``..util``), so they never match an absolute import.
+PARSER_VERSION = 5
 
 
 class ParserRegistry:
