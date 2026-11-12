@@ -18,6 +18,7 @@ from .metrics import (
 
 # A delta below 5% in instability is rounding noise, not real degradation.
 INSTABILITY_TOLERANCE = 0.05
+_FLOAT_EPSILON = 1e-9
 
 
 def instability_regressions(base: list[ModuleMetrics], pr: list[ModuleMetrics]) -> list[dict]:
@@ -39,10 +40,10 @@ def instability_regressions(base: list[ModuleMetrics], pr: list[ModuleMetrics]) 
             "after": round(m.instability, 4),
         }
         for m in pr
-        # Round the delta: 0.35 + 0.05 is 0.39999999999999997, a delta of exactly the
-        # tolerance must not count as a regression.
+        # Epsilon: 0.40 - 0.35 is 0.05000000000000004, a delta of exactly the tolerance
+        # must not count as a regression; anything visibly above it (0.05003) does.
         if m.file_path in before
-        and round(m.instability - before[m.file_path], 4) > INSTABILITY_TOLERANCE
+        and m.instability - before[m.file_path] > INSTABILITY_TOLERANCE + _FLOAT_EPSILON
     ]
 
 
