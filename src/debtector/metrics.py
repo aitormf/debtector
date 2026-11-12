@@ -282,15 +282,20 @@ def find_cycles(store: GraphStore) -> list[list[str]]:
     # Build the adjacency list with indexed nodes only
     placeholders = ",".join("?" * len(_CYCLE_EDGE_KINDS))
     rows = conn.execute(
-        f"SELECT source_qualified, target_qualified FROM edges"  # nosec B608
+        f"SELECT kind, source_qualified, target_qualified, file_path FROM edges"  # nosec B608
         f" WHERE kind IN ({placeholders})",
         list(_CYCLE_EDGE_KINDS),
     ).fetchall()
 
+    # IMPORTS_FROM targets are module names ("pkg.b", "c"): resolve them to files,
+    # as compute_metrics and sdp_violations do, or no real import cycle is found.
+    module_map = _build_module_map(file_set)
     adj: dict[str, list[str]] = defaultdict(list)
     for r in rows:
         src, tgt = r["source_qualified"], r["target_qualified"]
-        if src in file_set and tgt in file_set:
+        if r["kind"] == EdgeKind.IMPORTS_FROM:
+            tgt = _resolve_import_target(tgt, r["file_path"], module_map)
+        if src in file_set and tgt in file_set and tgt != src:
             adj[src].append(tgt)
 
     # Iterative Tarjan algorithm for strongly connected components.
