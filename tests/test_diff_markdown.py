@@ -77,6 +77,21 @@ def test_all_sections_are_rendered() -> None:
         assert text in out
 
 
+def test_worsened_hotspot_shows_before_and_after() -> None:
+    result = _empty()
+    result["worsened_hotspots"] = [
+        {
+            "file_path": "h.py",
+            "churn": 3,
+            "complexity_before": 20,
+            "complexity_after": 40,
+            "severity_before": "medium",
+            "severity": "high",
+        }
+    ]
+    assert "20 → 40 (medium → high)" in render_diff_markdown(result)
+
+
 def test_E24_cli_format_markdown(tmp_path: Path, capsys) -> None:
     configure_logging(project=str(tmp_path))
     base = _index(tmp_path / "base.db", {"a.py": {"f": 18}})

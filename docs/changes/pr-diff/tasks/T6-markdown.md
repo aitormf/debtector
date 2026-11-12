@@ -1,7 +1,7 @@
 ---
 id: T6
 title: Salida markdown del diff para comentarios de PR
-status: todo
+status: done
 depends_on: [T4, T5]
 examples: [E23, E24, E25, E26]
 verification: uv run pytest tests/test_diff_markdown.py -q
