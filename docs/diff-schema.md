@@ -17,6 +17,9 @@ nothing changed). Without changes the text output is `No architectural changes`.
 | `instability_regressions` | `{file_path, metric: "instability", before, after}` |
 | `worsened_functions` | `{qualified_name, file_path, before, after, severity}`: complexity in the PR is `>= complexity_medium` and the function is new (`before: null`) or its complexity grew; `severity` is that of `after` |
 | `improved_functions` | same: it was `>= complexity_medium` in the base and in the PR it is below it or gone (`after: null`); `severity` is that of `before` |
+| `new_hotspots` | `{file_path, churn, complexity, hotspot_score, severity}`: the file is an actionable hotspot in the PR and was not in the base |
+| `worsened_hotspots` | `{file_path, churn, complexity_before, complexity_after, severity_before, severity}`: actionable `medium` in the base and `high` in the PR |
+| `skipped` | list of `{section, reason}` for what could not be computed; empty if nothing was skipped. Today only `hotspots`, in a shallow clone |
 
 Rules:
 
@@ -24,3 +27,5 @@ Rules:
 - A module that exists only in one index is never an instability regression.
 - An instability regression needs `after > before + 0.05` (a delta of exactly 0.05 is not one).
 - Functions are identified by `qualified_name` (a rename is a removal plus a new function). Only production functions and methods count; test files are ignored. Thresholds are `[audit.thresholds]` `complexity_medium` / `complexity_high`. Complexity is informational: it never changes the exit code.
+- Hotspots use `select_actionable_hotspots` (D-0007) with the `[audit.thresholds]` `hotspot_*` keys, once per side. The churn (commits of the file) is the one of the repository of `--project` on both sides: only the complexity differs. They are informational and never change the exit code.
+- In a shallow clone (`git clone --depth 1`, the default of CI checkouts) the churn is truncated: `new_hotspots` and `worsened_hotspots` are empty and `skipped` has an item for `hotspots` with the reason. The rest of the diff works as usual. Fetch the full history (`fetch-depth: 0`) to get hotspots.

@@ -866,10 +866,23 @@ _DIFF_SECTIONS = (
     ("instability_regressions", "Instability regressions"),
     ("worsened_functions", "Functions with worse complexity"),
     ("improved_functions", "Functions with better complexity"),
+    ("new_hotspots", "New hotspots"),
+    ("worsened_hotspots", "Worsened hotspots"),
 )
 
 
 def _diff_item(item) -> str:
+    if isinstance(item, dict) and "hotspot_score" in item:
+        return (
+            f"{item['file_path']}: churn {item['churn']}, "
+            f"complexity {item['complexity']} ({item['severity']})"
+        )
+    if isinstance(item, dict) and "complexity_after" in item:
+        return (
+            f"{item['file_path']}: churn {item['churn']}, complexity "
+            f"{item['complexity_before']} → {item['complexity_after']} "
+            f"({item['severity_before']} → {item['severity']})"
+        )
     if isinstance(item, list):
         return " → ".join(item) + " → ..."
     if isinstance(item, dict) and "qualified_name" in item:
@@ -1049,7 +1062,7 @@ def cmd_diff(args) -> None:
             base, pr = _open_store(db_base, args.project), _open_store(db_pr, args.project)
             try:
                 check_comparable(base, pr)
-                result = compute_diff(base, pr, cfg)
+                result = compute_diff(base, pr, cfg, args.project)
             finally:
                 base.close()
                 pr.close()
@@ -1060,14 +1073,16 @@ def cmd_diff(args) -> None:
 
     if args.json:
         _json_out(result)
-    elif not any(result.values()):
-        print("No architectural changes")
     else:
+        if not any(result[key] for key, _ in _DIFF_SECTIONS):
+            print("No architectural changes")
         for key, title in _DIFF_SECTIONS:
             if result[key]:
                 print(f"\n{title} ({len(result[key])}):")
                 for item in result[key]:
                     print(f"   {_diff_item(item)}")
+        for item in result["skipped"]:
+            print(f"\nSkipped {item['section']}: {item['reason']}")
     if blocking:
         sys.exit(1)
 
