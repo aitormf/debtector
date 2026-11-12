@@ -64,6 +64,7 @@ from .metrics import (
     sdp_violations,
 )
 from .models import NodeKind, node_to_dict
+from .render.diff_markdown import render_diff_markdown
 
 log = structlog.get_logger()
 
@@ -1073,6 +1074,8 @@ def cmd_diff(args) -> None:
 
     if args.json:
         _json_out(result)
+    elif getattr(args, "format", "text") == "markdown":
+        print(render_diff_markdown(result), end="")
     else:
         if not any(result[key] for key, _ in _DIFF_SECTIONS):
             print("No architectural changes")
@@ -2061,6 +2064,12 @@ def main() -> None:
         dest="base_ref",
         metavar="REF",
         help="Git ref to compare the current index against (indexed in a temporary worktree)",
+    )
+    p_diff.add_argument(
+        "--format",
+        choices=["text", "markdown"],
+        default="text",
+        help="Output format: text (default) or markdown (PR comment)",
     )
 
     # coupling (ex-metrics)
