@@ -1,7 +1,7 @@
 ---
 id: T7
 title: GitHub Action que comenta el diff en la PR
-status: todo
+status: done
 depends_on: [T3, T6]
 examples: [E27, E28, E29, E30]
 verification: uv run pytest tests/test_action_publish.py -q

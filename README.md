@@ -227,6 +227,31 @@ Each step emits stable JSON and composes easily from scripts, IDEs, CI or agents
 
 ---
 
+## Architectural diff in pull requests
+
+`debtector diff --base <ref> --format markdown` compares the project with a git ref and prints a PR comment. The GitHub Action runs it on every `pull_request`, publishes the result in a single comment that is updated on each push, and always writes it to the job summary:
+
+```yaml
+# .github/workflows/debtector.yml
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0   # the base commit must be available
+      - uses: aitormf/debtector@v0.18.0
+        # with:
+        #   fail-on-error: false   # default true: fail after commenting if the diff has `error` severity
+        #   version: 0.18.0        # default: the version of the Action
+```
+
+PRs from forks get a read-only token: there is no comment, the diff is in the job summary and the job does not fail because of that. Do not use `pull_request_target` to work around it.
+
 ## Ratcheting in CI
 
 The typical CI flow is:
@@ -402,7 +427,7 @@ Logs always go to `.debtector/debtector.log`, never to stdout.
 - [x] **`debtector audit`** — tech-lead view: health score, cohesion (LCOM4), testRisk, cycle priority ([schema](docs/audit-schema.md))
 - [x] **Cyclomatic complexity per function** (`debtector complexity`) — churn × complexity hotspots
 - [ ] Cognitive complexity per function
-- [ ] Graph diff — metric delta between base branch and PR
+- [x] Graph diff — metric delta between base branch and PR (GitHub Action)
 - [ ] GitHub Action — automatic comment on PRs
 - [ ] More languages — Go, Rust, Java
 

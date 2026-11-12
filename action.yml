@@ -1,0 +1,63 @@
+name: debtector diff
+description: Comment the architectural diff of a pull request (new cycles, god modules, complexity)
+author: aitormf
+
+inputs:
+  fail-on-error:
+    description: Fail the job, after commenting, when the diff has something with `error` severity
+    required: false
+    default: "true"
+  version:
+    description: debtector version to install from PyPI; empty installs the version of this Action
+    required: false
+    default: ""
+  github-token:
+    description: Token used to comment on the PR
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+
+    - name: Install debtector
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        if [ -n "$VERSION" ]; then
+          uv tool install "debtector==${VERSION}"
+        else
+          uv tool install "$ACTION_PATH"
+        fi
+        uv tool dir --bin >> "$GITHUB_PATH"
+
+    # tree-sitter-language-pack downloads grammars on first use: retry on outages.
+    - name: Index the PR
+      shell: bash
+      run: |
+        for attempt in 1 2 3; do
+          if debtector index .; then exit 0; fi
+          echo "Indexing failed (attempt ${attempt}), retrying..."
+          sleep $((attempt * 10))
+        done
+        exit 1
+
+    - name: Diff against the base and comment
+      shell: bash
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        body="${RUNNER_TEMP}/debtector-diff.md"
+        set +e
+        debtector diff --base "$BASE_SHA" --format markdown > "$body"
+        code=$?
+        set -e
+        python3 "${ACTION_PATH}/scripts/action_publish.py" \
+          --body-file "$body" --diff-exit "$code" --fail-on-error "$FAIL_ON_ERROR"
