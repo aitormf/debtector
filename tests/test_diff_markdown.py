@@ -121,3 +121,12 @@ def test_markdown_syntax_in_names_stays_literal() -> None:
 def test_existing_backslash_cannot_cancel_an_escape() -> None:
     """``a\\`` before a backtick: the backslash itself is escaped first."""
     assert "a\\\\\\`b" in _row_for("a\\`b")
+
+
+def test_line_breaks_in_names_cannot_leave_the_table() -> None:
+    """A filename with ``\\r`` (or any line separator) stays on its table row."""
+    out = render_diff_markdown(
+        {**_empty(), "worsened_functions": [_fn("a\r\r# fake x\x85y.py::f", 10, 30)]}
+    )
+    assert not any(line.startswith("# fake") for line in out.splitlines())
+    assert all(c not in out for c in "\r \x85")
