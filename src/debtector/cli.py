@@ -954,14 +954,24 @@ def _index_base_ref(project: str, ref: str, db_path: str, worktree: Path) -> Non
             "--base does not support repositories with initialized submodules; "
             "index both revisions and run: debtector diff <db_base> <db_pr>"
         )
-    rel_project = Path(os.path.relpath(project, os.path.realpath(toplevel)))
+    real_top = os.path.realpath(toplevel)
+    rel_project = Path(os.path.relpath(project, real_top))
     store = _get_store(project)
     try:
         rel_root = store.get_metadata(_INDEX_ROOT_KEY) or "."
     finally:
         store.close()
-    _git_out(project, "worktree", "add", "--detach", str(worktree), ref)
+    indexed = os.path.realpath(Path(project) / rel_root)
+    if os.path.commonpath([indexed, real_top]) != real_top:
+        # The worktree only contains the repository: the base would be empty.
+        raise InvalidInputError(
+            f"The indexed directory {indexed} is outside the git repository {real_top}; "
+            "--base can only compare directories inside it"
+        )
     try:
+        # Inside the guard: a failing post-checkout hook makes ``worktree add`` report an
+        # error after the worktree is already registered.
+        _git_out(project, "worktree", "add", "--detach", str(worktree), ref)
         wt_project = worktree / rel_project
         store = GraphStore(db_path)
         try:
@@ -977,7 +987,13 @@ def _index_base_ref(project: str, ref: str, db_path: str, worktree: Path) -> Non
         finally:
             store.close()
     finally:
-        _git_out(project, "worktree", "remove", "--force", str(worktree))
+        try:
+            _git_out(project, "worktree", "remove", "--force", str(worktree))
+        except InvalidInputError:
+            # Never registered (``add`` failed early) or already gone: do not mask the
+            # original error; ``prune`` drops a registration whose directory is gone.
+            log.warning("diff_worktree_remove_failed", worktree=str(worktree), exc_info=True)
+            _git_out(project, "worktree", "prune")
 
 
 def cmd_diff(args) -> None:
