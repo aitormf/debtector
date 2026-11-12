@@ -1,7 +1,7 @@
 ---
 id: T2
 title: Validación de entradas y código de salida de diff
-status: todo
+status: done
 depends_on: [T1]
 examples: [E8, E9, E10]
 verification: uv run pytest tests/test_diff.py -q
