@@ -76,3 +76,34 @@ def test_workflow_cancels_superseded_runs_of_the_same_pr() -> None:
     concurrency = workflow["concurrency"]
     assert "pull_request.number" in concurrency["group"]
     assert concurrency["cancel-in-progress"] is True
+
+
+def test_unknown_token_identity_matches_any_bot_but_never_a_person(tmp_path: Path) -> None:
+    """A GitHub App token cannot read ``/user``: its comments come from ``<app>[bot]``."""
+    user = {"id": 1, "body": f"{MARKER} quote", "user": {"login": "alice", "type": "User"}}
+    app = {"id": 2, "body": f"{MARKER}\nold", "user": {"login": "my-app[bot]", "type": "Bot"}}
+    api = AuthoredApi([user, app])
+
+    action_publish.run(
+        f"{MARKER}\nnew", 0, True, api, tmp_path / "s.md", author=action_publish.ANY_BOT
+    )
+
+    assert user["body"] == f"{MARKER} quote"
+    assert app["body"] == f"{MARKER}\nnew"
+    assert len(api.comments) == 2
+
+
+def test_oversized_report_is_truncated_in_the_comment_but_whole_in_the_summary(
+    tmp_path: Path,
+) -> None:
+    body = MARKER + "\n" + "| row |\n" * 20_000
+    api = AuthoredApi([])
+    summary = tmp_path / "s.md"
+
+    action_publish.run(body, 0, True, api, summary, author=BOT)
+
+    posted = api.comments[0]["body"]
+    assert len(posted) <= 65_536
+    assert posted.startswith(MARKER)
+    assert "truncated" in posted
+    assert summary.read_text(encoding="utf-8") == body
