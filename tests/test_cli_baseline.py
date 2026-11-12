@@ -171,3 +171,41 @@ class TestBaselineStatus:
         assert "regressions" in data
         assert "new_cycles" in data
         assert "new_god_modules" in data
+
+
+class TestBaselineInstabilityTolerance:
+    """The 0.05 tolerance is exact despite floating-point rounding."""
+
+    def _seed_x_with_instability_0_4(self, project: str) -> None:
+        # x.py: Ca=3 (i1, i2, i3 import it), Ce=2 (it imports o1, o2) → I = 2/5 = 0.4
+        _seed(
+            project,
+            {
+                "x.py": [_import("x.py", "o1.py"), _import("x.py", "o2.py")],
+                "o1.py": [],
+                "o2.py": [],
+                "i1.py": [_import("i1.py", "x.py")],
+                "i2.py": [_import("i2.py", "x.py")],
+                "i3.py": [_import("i3.py", "x.py")],
+            },
+        )
+
+    def _write_baseline(self, project: Path, instability: float) -> None:
+        path = project / ".debtector" / "baseline.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        module = {"file_path": "x.py", "fan_in": 3, "fan_out": 2, "instability": instability}
+        path.write_text(json.dumps({"modules": [module], "cycles": [], "god_modules": []}))
+
+    def test_delta_exactly_at_tolerance_is_not_a_regression(self, tmp_path: Path, capsys) -> None:
+        """0.35 → 0.40: 0.35 + 0.05 is 0.39999999999999997 in floating point."""
+        self._seed_x_with_instability_0_4(str(tmp_path))
+        self._write_baseline(tmp_path, 0.35)
+        cmd_baseline(_args(str(tmp_path), "status", json=True))
+        assert json.loads(capsys.readouterr().out)["regressions"] == []
+
+    def test_delta_above_tolerance_is_a_regression(self, tmp_path: Path, capsys) -> None:
+        self._seed_x_with_instability_0_4(str(tmp_path))
+        self._write_baseline(tmp_path, 0.3499)
+        cmd_baseline(_args(str(tmp_path), "status", json=True))
+        regressions = json.loads(capsys.readouterr().out)["regressions"]
+        assert [r["file_path"] for r in regressions] == ["x.py"]
