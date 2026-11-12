@@ -893,6 +893,33 @@ def _git_out(cwd: str, *args: str) -> str:
     return proc.stdout.strip()
 
 
+def _current_index_root(project: str) -> str:
+    """Return the indexed directory of the project's index, relative to the project.
+
+    Args:
+        project: Path to the project root.
+
+    Returns:
+        The recorded ``index_root``, or ``"."`` for an empty (new) index.
+
+    Raises:
+        InvalidInputError: If the index has files but no recorded root (built by an
+            older debtector): guessing it could rewrite every path, as in
+            :func:`_auto_index`.
+    """
+    store = _get_store(project)
+    try:
+        rel = store.get_metadata(_INDEX_ROOT_KEY)
+        if rel is None and store.get_all_files():
+            raise InvalidInputError(
+                "The current index has no recorded root (built by an older debtector); "
+                "reindex it first: debtector index <dir>"
+            )
+    finally:
+        store.close()
+    return rel or "."
+
+
 def _refresh_index(project: str) -> None:
     """Bring the project's index up to date, failing instead of comparing stale data.
 
@@ -905,15 +932,15 @@ def _refresh_index(project: str) -> None:
     Raises:
         InvalidInputError: If indexing raised or any file failed to index.
     """
+    rel = _current_index_root(project)
     store = _get_store(project)
     try:
-        rel = store.get_metadata(_INDEX_ROOT_KEY)
         try:
-            stats = Indexer(store).index(
-                str(Path(project) / rel) if rel else project, extra_paths=_test_dirs(project)
-            )
+            stats = Indexer(store).index(str(Path(project) / rel), extra_paths=_test_dirs(project))
         except Exception as e:  # noqa: BLE001 - reported as invalid input, with the cause
             raise InvalidInputError(f"Could not refresh the current index: {e}") from e
+        # A fresh index records its root, so later commands keep auto-refreshing it.
+        store.set_metadata(_INDEX_ROOT_KEY, rel)
     finally:
         store.close()
     if stats["errors"]:
@@ -956,11 +983,7 @@ def _index_base_ref(project: str, ref: str, db_path: str, worktree: Path) -> Non
         )
     real_top = os.path.realpath(toplevel)
     rel_project = Path(os.path.relpath(project, real_top))
-    store = _get_store(project)
-    try:
-        rel_root = store.get_metadata(_INDEX_ROOT_KEY) or "."
-    finally:
-        store.close()
+    rel_root = _current_index_root(project)
     indexed = os.path.realpath(Path(project) / rel_root)
     if os.path.commonpath([indexed, real_top]) != real_top:
         # The worktree only contains the repository: the base would be empty.
