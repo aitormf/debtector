@@ -48,6 +48,11 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "C4", "UP"]
 
+[tool.ruff.lint.isort]
+# Declared explicitly: ruff otherwise sorts an import of a module that does not exist yet
+# (a red test of a new module) as third-party.
+known-first-party = ["debtector"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
