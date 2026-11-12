@@ -72,7 +72,8 @@ _MD_SPECIAL = "\\`*_[]!|~"
 def _escape(value: object) -> str:
     """Make *value* literal inside a table cell: no Markdown, no HTML, one line."""
     text = "".join("\\" + c if c in _MD_SPECIAL else c for c in str(value))
-    return html.escape(text, quote=False).replace("\n", " ")
+    # splitlines covers every line break Markdown honours (\r, \u2028, \x85...), not only \n.
+    return " ".join(html.escape(text, quote=False).splitlines())
 
 
 def _row(cells: tuple) -> str:
