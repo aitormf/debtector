@@ -90,3 +90,35 @@ def test_indexing_errors_are_exit_2(tmp_path: Path, capsys, monkeypatch, side: s
     assert exc.value.code == 2
     assert "index" in capsys.readouterr().err.lower()
     assert _worktrees(repo) == 1
+
+
+def test_indexed_root_outside_the_repository_is_rejected(tmp_path: Path, capsys) -> None:
+    """``index ../shared``: the base worktree cannot contain it, so an empty base would lie."""
+    repo = _repo(tmp_path)
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "s.py").write_text("def fs():\n    return 1\n", encoding="utf-8")
+    cmd_index(argparse.Namespace(project=str(repo), path=str(shared), json=False))
+    capsys.readouterr()
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_diff(_args(repo, base_ref="main"))
+
+    assert exc.value.code == 2
+    assert "outside" in capsys.readouterr().err
+    assert _worktrees(repo) == 1
+
+
+def test_worktree_is_removed_when_checkout_hook_fails(tmp_path: Path, capsys) -> None:
+    """A failing post-checkout hook leaves ``git worktree add`` registered despite its error."""
+    repo = _repo(tmp_path)
+    hook = repo / ".git" / "hooks" / "post-checkout"
+    hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+    capsys.readouterr()
+
+    with pytest.raises(SystemExit) as exc:
+        cmd_diff(_args(repo, base_ref="main"))
+
+    assert exc.value.code == 2
+    assert _worktrees(repo) == 1
