@@ -159,7 +159,22 @@ def _get_store(project: str) -> GraphStore:
         An open :class:`~debtector.graph_store.GraphStore` instance.
     """
     db_path = _debtector_dir(project) / "index.db"
-    store = GraphStore(str(db_path))
+    return _open_store(str(db_path), project)
+
+
+def _open_store(db_path: str, project: str) -> GraphStore:
+    """Open the index at *db_path* with the ``test_paths`` of *project* applied.
+
+    Args:
+        db_path: Path to the SQLite index.
+        project: Project root whose ``debtector.toml`` defines ``test_paths``; the
+            index's ``index_root`` is resolved against it.
+
+    Returns:
+        An open :class:`~debtector.graph_store.GraphStore` whose ``is_test_path``
+        knows the configured test directories.
+    """
+    store = GraphStore(db_path)
     rel = store.get_metadata(_INDEX_ROOT_KEY)
     store.test_prefixes = _test_prefixes(project, str(Path(project) / rel) if rel else project)
     return store
@@ -847,12 +862,16 @@ _DIFF_SECTIONS = (
     ("new_sdp_violations", "New SDP violations"),
     ("resolved_sdp_violations", "Resolved SDP violations"),
     ("instability_regressions", "Instability regressions"),
+    ("worsened_functions", "Functions with worse complexity"),
+    ("improved_functions", "Functions with better complexity"),
 )
 
 
 def _diff_item(item) -> str:
     if isinstance(item, list):
         return " → ".join(item) + " → ..."
+    if isinstance(item, dict) and "qualified_name" in item:
+        return f"{item['qualified_name']}: {item['before']} → {item['after']}"
     if isinstance(item, dict) and "metric" in item:
         return f"{item['file_path']}: {item['before']} → {item['after']}"
     if isinstance(item, dict):
@@ -875,7 +894,7 @@ def cmd_diff(args) -> None:
     try:
         validate_index(args.db_base)
         validate_index(args.db_pr)
-        base, pr = GraphStore(args.db_base), GraphStore(args.db_pr)
+        base, pr = _open_store(args.db_base, args.project), _open_store(args.db_pr, args.project)
         try:
             check_comparable(base, pr)
             result = compute_diff(base, pr, cfg)

@@ -10,6 +10,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from .audit.complexity import select_complexity_findings
 from .config import MetricsSeverity, Severity
 from .graph_store import GraphStore
 from .metrics import (
@@ -19,6 +20,7 @@ from .metrics import (
     god_modules,
     sdp_violations,
 )
+from .models import NodeKind
 
 _PARSER_VERSION_KEY = "parser_version"
 # Columns of the original schema that the diff reads (later migrations only add others).
@@ -159,6 +161,58 @@ def _sdp_dict(v) -> dict:
     }
 
 
+def _function_complexity(store: GraphStore) -> dict[str, tuple[int, str]]:
+    """Complexity and file of every production function or method: id -> (complexity, path)."""
+    nodes = store.get_nodes_by_kind(NodeKind.FUNCTION) + store.get_nodes_by_kind(NodeKind.METHOD)
+    findings = select_complexity_findings(
+        nodes, medium=0, high=float("inf"), is_test=store.is_test_path
+    )
+    return {f.qualified_name: (f.complexity, f.file_path) for f in findings}
+
+
+def _complexity_diff(base: GraphStore, pr: GraphStore, thr) -> tuple[list[dict], list[dict]]:
+    """Functions that got worse or better in complexity (D-0010).
+
+    Args:
+        base: Store of the base branch.
+        pr: Store of the PR.
+        thr: Audit thresholds (``complexity_medium`` / ``complexity_high``).
+
+    Returns:
+        ``(worsened, improved)``, each a list of ``{qualified_name, file_path, before,
+        after, severity}`` with ``None`` for the side where the function does not exist.
+    """
+    before, after = _function_complexity(base), _function_complexity(pr)
+    medium = thr.complexity_medium
+
+    def severity(cx: int) -> str:
+        return "high" if cx >= thr.complexity_high else "medium"
+
+    worsened = [
+        {
+            "qualified_name": qn,
+            "file_path": path,
+            "before": before[qn][0] if qn in before else None,
+            "after": cx,
+            "severity": severity(cx),
+        }
+        for qn, (cx, path) in after.items()
+        if cx >= medium and (qn not in before or cx > before[qn][0])
+    ]
+    improved = [
+        {
+            "qualified_name": qn,
+            "file_path": path,
+            "before": cx,
+            "after": after[qn][0] if qn in after else None,
+            "severity": severity(cx),
+        }
+        for qn, (cx, path) in before.items()
+        if cx >= medium and (qn not in after or after[qn][0] < medium)
+    ]
+    return worsened, improved
+
+
 def compute_diff(base: GraphStore, pr: GraphStore, cfg) -> dict[str, list]:
     """Compare the structure of two indexes.
 
@@ -170,7 +224,8 @@ def compute_diff(base: GraphStore, pr: GraphStore, cfg) -> dict[str, list]:
     Returns:
         A dict with one key per section: ``new_cycles``, ``resolved_cycles``,
         ``new_god_modules``, ``resolved_god_modules``, ``new_sdp_violations``,
-        ``resolved_sdp_violations`` and ``instability_regressions``.
+        ``resolved_sdp_violations``, ``instability_regressions``, ``worsened_functions`` and
+        ``improved_functions``.
     """
     thr = cfg.metrics.thresholds
     new_cycles, resolved_cycles = _cycle_diff(find_cycles(base), find_cycles(pr))
@@ -192,6 +247,8 @@ def compute_diff(base: GraphStore, pr: GraphStore, cfg) -> dict[str, list]:
 
     base_sdp, pr_sdp = sdp(base), sdp(pr)
 
+    worsened, improved = _complexity_diff(base, pr, cfg.audit)
+
     return {
         "new_cycles": new_cycles,
         "resolved_cycles": resolved_cycles,
@@ -202,4 +259,6 @@ def compute_diff(base: GraphStore, pr: GraphStore, cfg) -> dict[str, list]:
         "instability_regressions": instability_regressions(
             compute_metrics(base), compute_metrics(pr)
         ),
+        "worsened_functions": worsened,
+        "improved_functions": improved,
     }
