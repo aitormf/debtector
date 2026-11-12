@@ -165,3 +165,27 @@ class TestFindCyclesResolvesImports:
 
         assert frozenset({"pkg/a.py", "pkg/b.py"}) in cycles
         assert frozenset({"pkg/c.py", "pkg/d.py"}) in cycles
+
+
+class TestAbsoluteImportIsNotLocal:
+    """``import json`` is the standard library even if the package has a ``json.py``."""
+
+    def test_stdlib_name_clash_is_not_a_cycle(self, tmp_path) -> None:
+        from debtector.indexer import Indexer
+        from debtector.metrics import compute_metrics
+
+        pkg = tmp_path / "pkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("", encoding="utf-8")
+        (pkg / "a.py").write_text("import json\n", encoding="utf-8")
+        (pkg / "json.py").write_text("import pkg.a\n", encoding="utf-8")
+        store = GraphStore(str(tmp_path / "index.db"))
+        try:
+            Indexer(store).index(str(tmp_path))
+            cycles = find_cycles(store)
+            fan_in = {m.file_path: m.fan_in for m in compute_metrics(store)}
+        finally:
+            store.close()
+
+        assert cycles == []
+        assert fan_in["pkg/json.py"] == 0
