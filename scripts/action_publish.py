@@ -171,7 +171,9 @@ def run(
             # Forks get a read-only token, or the network fails: the summary is then
             # the only output, and the diff's own exit code still decides the job.
             print(f"::warning::debtector could not comment on the PR ({e}); see the job summary")
-    if diff_exit == 1 and not fail_on_error:
+    # Exit 1 is a severity violation only when a report was produced; without one it
+    # is a crash (invalid config, traceback) and must fail the job.
+    if diff_exit == 1 and not fail_on_error and body.startswith(MARKER):
         return 0
     return diff_exit
 
