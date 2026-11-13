@@ -25,6 +25,7 @@ Rules:
 
 - A cycle is identified by its set of modules: the same cycle in another order is not new.
 - Ca and Ce count distinct internal modules: external imports (no File in the index) and repeated imports of the same module do not add to them (metrics version 2).
+- SDP violations ignore pure facades: an `__init__.py` with no classes or functions is neither source nor target (metrics version 4).
 - A module that exists only in one index is never an instability regression.
 - An instability regression needs `after > before + 0.05` (a delta of exactly 0.05 is not one).
 - Functions are identified by `qualified_name` (a rename is a removal plus a new function). Only production functions and methods count; test files are ignored. Thresholds are `[audit.thresholds]` `complexity_medium` / `complexity_high`. Complexity is informational: it never changes the exit code.

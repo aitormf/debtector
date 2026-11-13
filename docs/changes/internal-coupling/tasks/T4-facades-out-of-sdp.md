@@ -1,7 +1,7 @@
 ---
 id: T4
 title: Las fachadas puras no participan en SDP
-status: todo
+status: done
 depends_on: [T3]
 examples: [E13, E14, E15, E16]
 verification: uv run pytest -q tests/test_metrics_sdp.py
