@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .. import metrics as _metrics
 from ..config import Severity, load_config
-from ..diff import instability_grew
+from ..diff import _function_complexity, instability_grew
 from ..metrics import compute_metrics, find_cycles
 from .common import (
     _blocks,
@@ -61,6 +61,8 @@ def _baseline_save(args) -> None:
     cycles = find_cycles(store)
     gods = _configured_god_modules(store, cfg)
     sdp = _configured_sdp_violations(store, cfg)
+    medium = cfg.audit.complexity_medium
+    functions = {qn: cx for qn, (cx, _) in _function_complexity(store).items() if cx >= medium}
     store.close()
 
     snapshot = {
@@ -78,6 +80,7 @@ def _baseline_save(args) -> None:
         "cycles": cycles,
         "god_modules": [m.file_path for m in gods],
         "sdp_violations": [{"source": v.source, "target": v.target} for v in sdp],
+        "complexity": {"medium": medium, "functions": functions},
     }
 
     path = _baseline_path(args.project)

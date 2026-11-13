@@ -1,7 +1,7 @@
 ---
 id: T2
 title: `baseline save` guarda la complejidad de las funciones
-status: todo
+status: done
 depends_on: []
 examples: [E7, E8]
 verification: uv run pytest tests/test_baseline_complexity.py -q
