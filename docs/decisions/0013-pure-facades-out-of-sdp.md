@@ -2,11 +2,11 @@
 id: D-0013
 title: "Las fachadas puras de paquete no participan en las violaciones SDP"
 type: rule
-status: accepted
+status: superseded
 date: 2026-11-13
 affects: [src/debtector/metrics.py, docs/audit-schema.md, docs/diff-schema.md]
 supersedes: null
-superseded_by: null
+superseded_by: D-0017
 issue: null
 ---
 
