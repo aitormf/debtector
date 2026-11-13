@@ -31,7 +31,7 @@ from .models import EdgeKind, NodeKind
 
 # Version of the Ca/Ce computation. Bump it when a change makes the numbers
 # incomparable with those of an older baseline (D-0014).
-METRICS_VERSION = 4
+METRICS_VERSION = 5
 
 # Edge kinds considered for cycle detection
 _CYCLE_EDGE_KINDS = (EdgeKind.IMPORTS_FROM, EdgeKind.CALLS)
@@ -186,6 +186,8 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     if not file_rows:
         return []
 
+    # Test files are not modules and are not dependents either (D-0015).
+    file_rows = [r for r in file_rows if not store.is_test_path(r["qualified_name"])]
     file_paths: set[str] = {r["qualified_name"] for r in file_rows}
     module_map = _build_module_map(file_paths)
 
@@ -204,7 +206,7 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     for r in import_rows:
         src = r["source_qualified"]
         resolved = _resolve_import_target(r["target_qualified"], r["file_path"], module_map)
-        if resolved not in file_paths or (src, resolved) in seen_pairs:
+        if src not in file_paths or resolved not in file_paths or (src, resolved) in seen_pairs:
             continue
         seen_pairs.add((src, resolved))
         ce_map[src] = ce_map.get(src, 0.0) + IMPORTS_FROM_WEIGHT
@@ -252,6 +254,7 @@ def find_cycles(store: GraphStore) -> list[list[str]]:
         for r in conn.execute(
             "SELECT qualified_name FROM nodes WHERE kind = ?", (NodeKind.FILE,)
         ).fetchall()
+        if not store.is_test_path(r["qualified_name"])  # D-0015
     }
 
     if not file_set:

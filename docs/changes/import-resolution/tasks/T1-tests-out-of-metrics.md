@@ -1,7 +1,7 @@
 ---
 id: T1
 title: Los ficheros de test no cuentan en las métricas de acoplamiento
-status: todo
+status: done
 depends_on: []
 examples: [E1, E2, E3, E4]
 verification: uv run pytest tests/test_metrics_test_files.py -q
