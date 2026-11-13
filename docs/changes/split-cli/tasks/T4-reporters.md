@@ -1,7 +1,7 @@
 ---
 id: T4
 title: Reporters de CI en cli/reporters.py
-status: todo
+status: done
 depends_on: [T3]
 examples: []
 verification: uv run pytest -q && uv run ruff check .
