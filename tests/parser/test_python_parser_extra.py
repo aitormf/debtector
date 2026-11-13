@@ -103,10 +103,10 @@ class TestPythonBareRelativeImport:
     """Tests for bare relative imports (from . import X)."""
 
     def test_bare_relative_import_keeps_the_dot(self, parsed_extras) -> None:
-        """'from . import helpers' targets '.helpers': relative, not the absolute 'helpers'."""
+        """'from . import helpers' targets '.' (names in extra): relative, not 'helpers'."""
         _, edges = parsed_extras
         import_targets = {e.target for e in edges if e.kind == EdgeKind.IMPORTS_FROM}
-        assert ".helpers" in import_targets
+        assert "." in import_targets
         assert "helpers" not in import_targets
 
     def test_bare_relative_import_does_not_produce_empty_target(self, parsed_extras) -> None:

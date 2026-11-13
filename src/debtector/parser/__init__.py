@@ -17,7 +17,7 @@ from .python_parser import PythonParser
 #: 7 = JS/TS ``export ... from "<module>"`` reexports are imports.
 #: 8 = test files also follow ``test/``, ``__tests__/`` and .tsx/.jsx/.mjs/.cjs
 #:     suffixes; re-parse so their CALLS become COVERS.
-PARSER_VERSION = 8
+PARSER_VERSION = 9
 
 
 class ParserRegistry:
