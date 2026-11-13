@@ -1,7 +1,7 @@
 ---
 id: T2
 title: Los imports absolutos de Python se resuelven desde la raíz del paquete
-status: todo
+status: done
 depends_on: [T1]
 examples: [E5, E6, E7, E8, E9]
 verification: uv run pytest tests/test_metrics_package_root.py -q

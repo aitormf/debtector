@@ -31,7 +31,7 @@ from .models import EdgeKind, NodeKind
 
 # Version of the Ca/Ce computation. Bump it when a change makes the numbers
 # incomparable with those of an older baseline (D-0014).
-METRICS_VERSION = 8
+METRICS_VERSION = 9
 
 # Edge kinds considered for cycle detection
 _CYCLE_EDGE_KINDS = (EdgeKind.IMPORTS_FROM, EdgeKind.CALLS)
@@ -78,6 +78,11 @@ def _build_module_map(file_paths: set[str]) -> dict[str, str]:
 
     - Dotted name: ``"debtector/models.py"`` → ``"debtector.models"``
     - ``__init__.py``: ``"debtector/parser/__init__.py"`` → ``"debtector.parser"``
+    - Python files also get their name from the top of their package (the highest
+      directory chain with ``__init__.py`` in the index): ``"src/pkg/mod.py"`` →
+      ``"pkg.mod"``; a file outside any package is named by its own name
+      (``"scripts/utils.py"`` → ``"utils"``). A name shared by several files is not
+      mapped (D-0016). Names from the repo root keep priority.
 
     Args:
         file_paths: Set of file paths of the indexed File nodes.
@@ -97,7 +102,31 @@ def _build_module_map(file_paths: set[str]) -> dict[str, str]:
         if dot_name.endswith(".__init__"):
             dot_name = dot_name[:-9]
         module_map[dot_name] = fp
+
+    pkg_names: dict[str, set[str]] = {}
+    for fp in file_paths:
+        name = _python_package_name(fp, file_paths)
+        if name:
+            pkg_names.setdefault(name, set()).add(fp)
+    for name, owners in pkg_names.items():
+        if len(owners) == 1:
+            module_map.setdefault(name, next(iter(owners)))
     return module_map
+
+
+def _python_package_name(fp: str, file_paths: set[str]) -> str:
+    """Return the module name of a Python file from the root of its package."""
+    if not fp.endswith(".py"):
+        return ""
+    parts = fp.replace("\\", "/").split("/")
+    stem = parts[-1][:-3]
+    dirs = parts[:-1]
+    pkg: list[str] = []
+    while dirs and "/".join([*dirs, "__init__.py"]) in file_paths:
+        pkg.insert(0, dirs.pop())
+    if stem != "__init__":
+        pkg.append(stem)
+    return ".".join(pkg)
 
 
 def _resolve_import_target(
