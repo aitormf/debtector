@@ -354,9 +354,9 @@ class TestCmdReport:
         clean = ModuleMetrics(file_path="src/b.py", fan_in=5.0, fan_out=1.0, instability=0.167)
         with (
             patch("debtector.cli.compute_metrics", return_value=[flagged, clean]),
-            patch("debtector.cli.god_modules", return_value=[]),
+            patch("debtector.cli.common.god_modules", return_value=[]),
             patch(
-                "debtector.cli.sdp_violations",
+                "debtector.cli.common.sdp_violations",
                 return_value=[SdpViolation("src/b.py", "src/a.py", 0.167, 0.8)],
             ),
             patch("debtector.cli.find_cycles", return_value=[]),

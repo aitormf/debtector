@@ -15,7 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from debtector.cli import _get_store, cmd_audit, cmd_bus_factor, cmd_hotspots, cmd_index
+from debtector.cli import cmd_audit, cmd_bus_factor, cmd_hotspots, cmd_index
+from debtector.cli.common import _get_store
 from debtector.git_history import compute_temporal_coupling, parse_churn
 from debtector.logging import configure_logging
 

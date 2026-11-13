@@ -9,7 +9,8 @@ from unittest import mock
 
 import pytest
 
-from debtector.cli import _get_store, cmd_audit
+from debtector.cli import cmd_audit
+from debtector.cli.common import _get_store
 from debtector.indexer import Indexer
 
 
@@ -208,7 +209,7 @@ def test_cmd_audit_calls_god_modules_before_close(sample_project: Path) -> None:
 
     with (
         patch("debtector.cli._auto_index"),
-        patch("debtector.cli.god_modules", return_value=[]) as mock_god_modules,
+        patch("debtector.cli.common.god_modules", return_value=[]) as mock_god_modules,
     ):
         cmd_audit(args)
 

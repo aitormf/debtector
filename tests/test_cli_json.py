@@ -8,14 +8,13 @@ from pathlib import Path
 import pytest
 
 from debtector.cli import (
-    _debtector_dir,
-    _get_store,
     cmd_imports,
     cmd_index,
     cmd_search,
     cmd_status,
     cmd_untested,
 )
+from debtector.cli.common import _debtector_dir, _get_store
 
 # ──────────────────────────────────────────────
 # Helpers
