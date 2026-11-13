@@ -181,3 +181,24 @@ class TestAuditThresholds:
 
         with pytest.raises(ValueError, match="audit.thresholds"):
             load_config(tmp_path)
+
+
+class TestTestriskDefaultsLiveInConfig:
+    """config.py owns the test-risk defaults; it does not depend on audit/testrisk.py (SDP)."""
+
+    def test_config_does_not_import_testrisk(self) -> None:
+        import ast
+
+        import debtector.config as config_module
+
+        tree = ast.parse(Path(config_module.__file__).read_text(encoding="utf-8"))
+        imported = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
+        assert "audit.testrisk" not in imported
+
+    def test_testrisk_uses_config_defaults(self) -> None:
+        from debtector import config
+        from debtector.audit import testrisk
+
+        assert config.DEFAULT_HIGH_CE == testrisk.DEFAULT_HIGH_CE == 10.0
+        assert config.DEFAULT_HIGH_CHURN == testrisk.DEFAULT_HIGH_CHURN == 5
+        assert config.DEFAULT_HIGH_CA == testrisk.DEFAULT_HIGH_CA == 10.0
