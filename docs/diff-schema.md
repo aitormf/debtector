@@ -25,7 +25,7 @@ Rules:
 
 - A cycle is identified by its set of modules: the same cycle in another order is not new.
 - Ca and Ce count distinct internal modules: external imports (no File in the index) and repeated imports of the same module do not add to them (metrics version 2).
-- SDP violations ignore pure facades: an `__init__.py` with no classes or functions is neither source nor target (metrics version 4).
+- SDP violations ignore pure facades: an `__init__.py` or `index.js/.ts/.jsx/.tsx` with no classes or functions is neither source nor target (metrics version 4; `index.*` since version 9).
 - Test files (as `is_test_path` classifies them) are not modules and not dependents: they take no part in Ca, Ce, cycles, god modules or SDP (metrics version 5).
 - A module that exists only in one index is never an instability regression.
 - An instability regression needs `after > before + 0.05` (a delta of exactly 0.05 is not one).
