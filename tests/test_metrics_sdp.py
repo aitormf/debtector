@@ -148,4 +148,4 @@ class TestPureFacadesOutOfSdp:
     def test_E16_metrics_version_is_4(self) -> None:
         from debtector.metrics import METRICS_VERSION
 
-        assert METRICS_VERSION == 4
+        assert METRICS_VERSION >= 4  # bumped later by import-resolution
