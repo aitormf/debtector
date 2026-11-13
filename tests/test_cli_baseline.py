@@ -11,6 +11,7 @@ import pytest
 from debtector.cli.baseline import cmd_baseline
 from debtector.cli.common import _get_store
 from debtector.logging import configure_logging
+from debtector.metrics import METRICS_VERSION
 from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
 # ──────────────────────────────────────────────
@@ -195,7 +196,9 @@ class TestBaselineInstabilityTolerance:
         path = project / ".debtector" / "baseline.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         module = {"file_path": "x.py", "fan_in": 3, "fan_out": 2, "instability": instability}
-        path.write_text(json.dumps({"modules": [module], "cycles": [], "god_modules": []}))
+        data = {"modules": [module], "cycles": [], "god_modules": []}
+        data["metrics_version"] = METRICS_VERSION
+        path.write_text(json.dumps(data))
 
     def test_delta_exactly_at_tolerance_is_not_a_regression(self, tmp_path: Path, capsys) -> None:
         """0.35 → 0.40: 0.35 + 0.05 is 0.39999999999999997 in floating point."""
@@ -238,9 +241,12 @@ class TestBaselineMetricsVersion:
         _seed(str(tmp_path), {"src/a.py": []})
         cmd_baseline(_args(str(tmp_path), "save"))
         data = json.loads((tmp_path / ".debtector" / "baseline.json").read_text())
-        assert data["metrics_version"] == METRICS_VERSION == 1
+        assert data["metrics_version"] == METRICS_VERSION
 
-    def test_E2_baseline_without_version_is_compared_as_v1(self, tmp_path: Path, capsys) -> None:
+    def test_E2_baseline_without_version_is_compared_as_v1(
+        self, tmp_path: Path, capsys, monkeypatch
+    ) -> None:
+        monkeypatch.setattr("debtector.metrics.METRICS_VERSION", 1)
         # x.py has Ca=3 / Ce=2 → I=0.4; the baseline (no version field) says 0.0
         _seed(
             str(tmp_path),

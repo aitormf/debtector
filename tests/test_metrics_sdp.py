@@ -61,7 +61,9 @@ class TestSdpViolations:
         for i in range(3):
             _add(store, f"src/x{i}.py", "src/a.py")
         _add(store, "src/a.py", "src/b.py")
-        _add(store, "src/b.py", "flask", "requests")
+        _add(store, "src/b.py", "src/f.py", "src/r.py")
+        _add(store, "src/f.py")
+        _add(store, "src/r.py")
 
     def test_stable_to_unstable_edge_is_flagged(self, tmp_db: GraphStore) -> None:
         self._stable_depends_on_unstable(tmp_db)

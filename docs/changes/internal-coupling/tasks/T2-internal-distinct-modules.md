@@ -1,7 +1,7 @@
 ---
 id: T2
 title: Ca y Ce cuentan módulos internos distintos
-status: todo
+status: done
 depends_on: [T1]
 examples: [E5, E6, E7, E8, E9]
 verification: uv run pytest -q tests/test_metrics.py tests/test_metrics_resolution.py

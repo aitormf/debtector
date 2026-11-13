@@ -88,12 +88,14 @@ class TestRatcheting:
         for i in range(3):
             imp = f"src/imp_{i}.py"
             _seed(str(tmp_path), {imp: [_import(imp, "src/a.py")]})
-        _seed(str(tmp_path), {"src/a.py": [_import("src/a.py", "src/x.py")]})
+        _seed(str(tmp_path), {"src/a.py": [_import("src/a.py", "src/x.py")], "src/x.py": []})
         cmd_baseline(_args(str(tmp_path), "save"))
 
         # Worsen: a now imports 6 modules → Ce=6, Ca=3 → I=0.67
         edges_a = [_import("src/a.py", f"src/dep_{i}.py") for i in range(6)]
         _seed(str(tmp_path), {"src/a.py": edges_a})
+        for i in range(6):
+            _seed(str(tmp_path), {f"src/dep_{i}.py": []})
         with pytest.raises(SystemExit) as exc:
             cmd_baseline(_args(str(tmp_path), "status"))
         assert exc.value.code == 1

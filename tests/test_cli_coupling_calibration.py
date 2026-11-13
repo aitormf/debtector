@@ -51,7 +51,9 @@ _VIOLATING = {
     "src/x1.py": ["src/a.py"],
     "src/x2.py": ["src/a.py"],
     "src/a.py": ["src/b.py"],
-    "src/b.py": ["flask", "requests"],
+    "src/b.py": ["src/f.py", "src/r.py"],
+    "src/f.py": [],
+    "src/r.py": [],
 }
 _CLEAN = {**_VIOLATING, "src/a.py": []}
 

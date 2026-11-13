@@ -72,20 +72,66 @@ class TestComputeMetrics:
         assert metrics["src/a.py"].fan_out == 1
         assert metrics["src/b.py"].fan_out == 0
 
-    def test_fan_out_counts_external_imports(self, tmp_db: GraphStore) -> None:
-        """Ce also counts imports of external packages (e.g. 'flask')."""
+    def test_E5_external_imports_do_not_count_in_ce(self, tmp_db: GraphStore) -> None:
+        """E5: json, os, networkx and one internal import -> Ce(a)=1, Ca(b)=1 (R2)."""
         tmp_db.store_file(
             "src/a.py",
             [_file("src/a.py")],
             [
-                _import("src/a.py", "src/b.py"),
-                _import("src/a.py", "flask"),
+                _import("src/a.py", "json"),
+                _import("src/a.py", "os"),
+                _import("src/a.py", "networkx"),
+                _import("src/a.py", ".b"),
             ],
         )
         tmp_db.store_file("src/b.py", [_file("src/b.py")], [])
 
         metrics = {m.file_path: m for m in compute_metrics(tmp_db)}
-        assert metrics["src/a.py"].fan_out == 2
+        assert metrics["src/a.py"].fan_out == 1
+        assert metrics["src/b.py"].fan_in == 1
+
+    def test_E6_repeated_imports_of_same_module_count_once(self, tmp_db: GraphStore) -> None:
+        """E6: two import statements of the same module -> Ce(a)=1, Ca(b)=1 (R2)."""
+        tmp_db.store_file(
+            "src/a.py",
+            [_file("src/a.py")],
+            [_import("src/a.py", ".b"), _import("src/a.py", ".b")],
+        )
+        tmp_db.store_file("src/b.py", [_file("src/b.py")], [])
+
+        metrics = {m.file_path: m for m in compute_metrics(tmp_db)}
+        assert metrics["src/a.py"].fan_out == 1
+        assert metrics["src/b.py"].fan_in == 1
+
+    def test_E7_module_with_only_external_imports_is_isolated(self, tmp_db: GraphStore) -> None:
+        """E7: only json and pathlib, nobody imports it -> Ca=0, Ce=0, I=0 (R2)."""
+        tmp_db.store_file(
+            "src/a.py",
+            [_file("src/a.py")],
+            [_import("src/a.py", "json"), _import("src/a.py", "pathlib")],
+        )
+
+        (row,) = compute_metrics(tmp_db)
+        assert (row.fan_in, row.fan_out, row.instability) == (0, 0, 0.0)
+
+    def test_E8_js_external_package_does_not_count_in_ce(self, tmp_db: GraphStore) -> None:
+        """E8: react (external) and ./b (internal) in a JS file -> Ce(a)=1 (R2)."""
+        tmp_db.store_file(
+            "src/a.js",
+            [_file("src/a.js")],
+            [_import("src/a.js", "react"), _import("src/a.js", "./b")],
+        )
+        tmp_db.store_file("src/b.js", [_file("src/b.js")], [])
+
+        metrics = {m.file_path: m for m in compute_metrics(tmp_db)}
+        assert metrics["src/a.js"].fan_out == 1
+        assert metrics["src/b.js"].fan_in == 1
+
+    def test_E9_metrics_version_is_2(self) -> None:
+        """E9: the Ca/Ce computation changed, so the version is 2 (D-0014)."""
+        from debtector.metrics import METRICS_VERSION
+
+        assert METRICS_VERSION == 2
 
     def test_fan_in_counts_incoming_imports(self, tmp_db: GraphStore) -> None:
         """Ca counts how many files import this one."""
