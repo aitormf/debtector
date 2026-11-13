@@ -9,7 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from debtector.cli import cmd_complexity, cmd_index, main
+from debtector.cli.app import main
+from debtector.cli.graph import cmd_index
+from debtector.cli.quality import cmd_complexity
 
 SRC = """\
 def simple():

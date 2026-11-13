@@ -4,7 +4,7 @@ title: "Audit como segunda superficie de presentación"
 type: architecture
 status: accepted
 date: 2026-05-22
-affects: [src/debtector/cli.py, src/debtector/audit/, docs/audit-schema.md]
+affects: [src/debtector/cli/, src/debtector/audit/, docs/audit-schema.md]
 supersedes: null
 superseded_by: null
 issue: null
