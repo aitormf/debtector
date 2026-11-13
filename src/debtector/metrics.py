@@ -26,6 +26,10 @@ from dataclasses import dataclass
 from .graph_store import GraphStore
 from .models import EdgeKind, NodeKind
 
+# Version of the Ca/Ce computation. Bump it when a change makes the numbers
+# incomparable with those of an older baseline (D-0014).
+METRICS_VERSION = 1
+
 # Edge kinds considered for cycle detection
 _CYCLE_EDGE_KINDS = (EdgeKind.IMPORTS_FROM, EdgeKind.CALLS)
 

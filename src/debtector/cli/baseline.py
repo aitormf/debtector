@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from .. import metrics as _metrics
 from ..config import Severity, load_config
 from ..diff import instability_grew
 from ..metrics import compute_metrics, find_cycles
@@ -63,6 +64,7 @@ def _baseline_save(args) -> None:
     store.close()
 
     snapshot = {
+        "metrics_version": _metrics.METRICS_VERSION,
         "saved_at": datetime.datetime.now(datetime.UTC).isoformat(),
         "modules": [
             {
@@ -120,6 +122,13 @@ def _baseline_status(args) -> None:
     current_sdp = _configured_sdp_violations(store, cfg)
     store.close()
 
+    # A baseline from another metric version has incomparable Ca/Ce (D-0014); the
+    # ones saved before the field existed are version 1. Cycles do not depend on them.
+    saved_version = baseline.get("metrics_version", 1)
+    mismatch = saved_version != _metrics.METRICS_VERSION
+    if mismatch:
+        current_gods, current_sdp, current_modules = [], [], []
+
     # Detect regressions by type
     new_cycles = [c for c in current_cycles if frozenset(c) not in baseline_cycles]
     new_gods = [m.file_path for m in current_gods if m.file_path not in baseline_gods]
@@ -156,14 +165,18 @@ def _baseline_status(args) -> None:
     )
 
     if args.json:
-        _json_out(
-            {
-                "regressions": regressions,
-                "new_cycles": new_cycles,
-                "new_god_modules": new_gods,
-                "new_sdp_violations": new_sdp,
+        result = {
+            "regressions": regressions,
+            "new_cycles": new_cycles,
+            "new_god_modules": new_gods,
+            "new_sdp_violations": new_sdp,
+        }
+        if mismatch:
+            result["metrics_version_mismatch"] = {
+                "baseline": saved_version,
+                "current": _metrics.METRICS_VERSION,
             }
-        )
+        _json_out(result)
         if has_blocking:
             sys.exit(1)
         return
@@ -176,6 +189,12 @@ def _baseline_status(args) -> None:
     )
 
     reporter = getattr(args, "reporter", None)
+
+    if mismatch:
+        print(
+            f"⚠  baseline saved with coupling metrics v{saved_version}, current is "
+            f"v{_metrics.METRICS_VERSION}: run debtector baseline save"
+        )
 
     if not has_any_warning:
         print("✓  No changes from baseline")
