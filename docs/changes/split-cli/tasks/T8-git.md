@@ -1,7 +1,7 @@
 ---
 id: T8
 title: Historial de git en cli/git.py
-status: todo
+status: done
 depends_on: [T7]
 examples: []
 verification: uv run pytest -q && uv run ruff check .
