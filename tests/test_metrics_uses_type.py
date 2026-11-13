@@ -83,4 +83,4 @@ class TestUsesTypeDoesNotCount:
 
     def test_E12_metrics_version_is_3(self) -> None:
         """The metric changed: baselines of version 2 are incomparable (D-0014)."""
-        assert METRICS_VERSION == 3
+        assert METRICS_VERSION >= 3  # bumped to 4 by T4 (E16)

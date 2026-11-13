@@ -55,6 +55,8 @@ Array of module-level coupling entries, sorted by `fan_in` descending.
 | `instability` | number  | `Ce / (Ca + Ce)` in `[0.0, 1.0]`.                      |
 | `god_module`  | boolean | `true` when `fan_in` is above the project's percentile and at least `god_module_min_ca` (default 10). |
 
+SDP violations (stable module importing a less stable one) skip pure facades: an `__init__.py` with no classes or functions is neither source nor target (metrics version 4).
+
 ## `cycles`
 
 Array of detected import cycles, prioritised by the fan-in of the most

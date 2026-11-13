@@ -31,7 +31,7 @@ from .models import EdgeKind, NodeKind
 
 # Version of the Ca/Ce computation. Bump it when a change makes the numbers
 # incomparable with those of an older baseline (D-0014).
-METRICS_VERSION = 3
+METRICS_VERSION = 4
 
 # Edge kinds considered for cycle detection
 _CYCLE_EDGE_KINDS = (EdgeKind.IMPORTS_FROM, EdgeKind.CALLS)
@@ -470,6 +470,24 @@ class SdpViolation:
     target_instability: float
 
 
+def _pure_facades(store: GraphStore, files: set[str]) -> set[str]:
+    """Return the ``__init__.py`` files among ``files`` with no class or function."""
+    inits = [f for f in files if posixpath.basename(f) == "__init__.py"]
+    if not inits:
+        return set()
+    defining: set[str] = set()
+    for i in range(0, len(inits), 450):
+        batch = inits[i : i + 450]
+        marks = ",".join("?" * len(batch))
+        rows = store._conn.execute(
+            f"SELECT DISTINCT file_path FROM nodes WHERE kind IN (?, ?, ?)"  # nosec B608
+            f" AND file_path IN ({marks})",
+            (NodeKind.CLASS, NodeKind.FUNCTION, NodeKind.METHOD, *batch),
+        ).fetchall()
+        defining.update(r["file_path"] for r in rows)
+    return set(inits) - defining
+
+
 def sdp_violations(store: GraphStore, margin: float = 0.0) -> list[SdpViolation]:
     """Detect violations of the Stable Dependencies Principle (SDP).
 
@@ -491,6 +509,7 @@ def sdp_violations(store: GraphStore, margin: float = 0.0) -> list[SdpViolation]
         return []
     instability = {m.file_path: m.instability for m in metrics}
     module_map = _build_module_map(set(instability))
+    facades = _pure_facades(store, set(instability))
 
     rows = store._conn.execute(
         "SELECT source_qualified, target_qualified, file_path FROM edges"
@@ -503,7 +522,8 @@ def sdp_violations(store: GraphStore, margin: float = 0.0) -> list[SdpViolation]
         src = r["source_qualified"]
         tgt = _resolve_import_target(r["target_qualified"], r["file_path"], module_map)
         if src != tgt and src in instability and tgt in instability:
-            pairs.add((src, tgt))
+            if src not in facades and tgt not in facades:
+                pairs.add((src, tgt))
 
     return [
         SdpViolation(src, tgt, instability[src], instability[tgt])
