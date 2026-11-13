@@ -31,7 +31,7 @@ from .models import EdgeKind, NodeKind
 
 # Version of the Ca/Ce computation. Bump it when a change makes the numbers
 # incomparable with those of an older baseline (D-0014).
-METRICS_VERSION = 5
+METRICS_VERSION = 6
 
 # Edge kinds considered for cycle detection
 _CYCLE_EDGE_KINDS = (EdgeKind.IMPORTS_FROM, EdgeKind.CALLS)
@@ -104,6 +104,7 @@ def _resolve_import_target(
     target: str,
     source_file: str,
     module_map: dict[str, str],
+    files: set[str] | None = None,
 ) -> str:
     """Resolve an IMPORTS_FROM target to a file path if it is an internal module.
 
@@ -118,6 +119,8 @@ def _resolve_import_target(
         target: Value stored in ``edges.target_qualified`` for the edge.
         source_file: ``file_path`` of the file that contains the edge.
         module_map: Map built by :func:`_build_module_map`.
+        files: Indexed file paths. Defaults to the values of ``module_map``, which
+            lacks the files whose module name collides (``x.js`` and ``x.ts``).
 
     Returns:
         File path of the imported module if resolved; *target* unchanged otherwise.
@@ -146,7 +149,13 @@ def _resolve_import_target(
     # JS/TS relative path: "./b", "../lib/b" (with or without extension or index file)
     if target.startswith(("./", "../")):
         base = posixpath.normpath(posixpath.join(posixpath.dirname(source_file), target))
-        values = set(module_map.values())
+        values = files if files is not None else set(module_map.values())
+        # TypeScript: "./x.js" may name x.ts, "./c.jsx" may name c.tsx (exact file wins)
+        if base in values:
+            return base
+        for js_ext, ts_ext in ((".js", ".ts"), (".jsx", ".tsx")):
+            if base.endswith(js_ext) and base[: -len(js_ext)] + ts_ext in values:
+                return base[: -len(js_ext)] + ts_ext
         for ext in ("", ".js", ".ts", ".jsx", ".tsx"):
             for cand in (base + ext, f"{base}/index{ext}"):
                 if cand in values:
@@ -205,7 +214,9 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     seen_pairs: set[tuple[str, str]] = set()
     for r in import_rows:
         src = r["source_qualified"]
-        resolved = _resolve_import_target(r["target_qualified"], r["file_path"], module_map)
+        resolved = _resolve_import_target(
+            r["target_qualified"], r["file_path"], module_map, file_paths
+        )
         if src not in file_paths or resolved not in file_paths or (src, resolved) in seen_pairs:
             continue
         seen_pairs.add((src, resolved))
@@ -275,7 +286,7 @@ def find_cycles(store: GraphStore) -> list[list[str]]:
     for r in rows:
         src, tgt = r["source_qualified"], r["target_qualified"]
         if r["kind"] == EdgeKind.IMPORTS_FROM:
-            tgt = _resolve_import_target(tgt, r["file_path"], module_map)
+            tgt = _resolve_import_target(tgt, r["file_path"], module_map, file_set)
         if src in file_set and tgt in file_set and tgt != src:
             adj[src].append(tgt)
 
@@ -523,7 +534,9 @@ def sdp_violations(store: GraphStore, margin: float = 0.0) -> list[SdpViolation]
     pairs: set[tuple[str, str]] = set()
     for r in rows:
         src = r["source_qualified"]
-        tgt = _resolve_import_target(r["target_qualified"], r["file_path"], module_map)
+        tgt = _resolve_import_target(
+            r["target_qualified"], r["file_path"], module_map, set(instability)
+        )
         if src != tgt and src in instability and tgt in instability:
             if src not in facades and tgt not in facades:
                 pairs.add((src, tgt))
