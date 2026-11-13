@@ -1,7 +1,7 @@
 ---
 id: T6
 title: Diff de PR en cli/pr_diff.py
-status: todo
+status: done
 depends_on: [T5]
 examples: []
 verification: uv run pytest -q && uv run ruff check .

@@ -9,7 +9,8 @@ from pathlib import Path
 import pytest
 from test_diff_base_ref import _args, _git, _repo, _worktrees
 
-from debtector.cli import cmd_diff, cmd_index
+from debtector.cli import cmd_index
+from debtector.cli.pr_diff import cmd_diff
 from debtector.indexer import Indexer
 
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from test_diff_complexity import _index
 
-from debtector.cli import cmd_diff
+from debtector.cli.pr_diff import cmd_diff
 from debtector.logging import configure_logging
 
 

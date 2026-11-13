@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from debtector.diff import compute_diff, instability_regressions
 
-from debtector.cli import cmd_diff
+from debtector.cli.pr_diff import cmd_diff
 from debtector.config import load_config
 from debtector.graph_store import GraphStore
 from debtector.logging import configure_logging
