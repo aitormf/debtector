@@ -21,3 +21,6 @@ Por qué el sistema es como es: decisiones de arquitectura, reglas de negocio y 
 | [D-0009](0009-github-action-in-repo.md) | La GitHub Action vive en este repo y publica un comentario único | architecture | accepted | action.yml, .github/workflows/, scripts/ |
 | [D-0010](0010-function-complexity-in-diff.md) | Qué funciones entran en el diff por complejidad | rule | accepted | src/debtector/diff.py, docs/diff-schema.md |
 | [D-0011](0011-cli-package-one-module-per-group.md) | La CLI es un paquete con un módulo por grupo de comandos | architecture | accepted | src/debtector/cli/, tests/ |
+| [D-0012](0012-coupling-counts-distinct-internal-modules.md) | Ca y Ce cuentan módulos internos distintos, sin imports externos ni anotaciones de tipo | rule | accepted | src/debtector/metrics.py, docs/audit-schema.md, docs/diff-schema.md |
+| [D-0013](0013-pure-facades-out-of-sdp.md) | Las fachadas puras de paquete no participan en las violaciones SDP | rule | accepted | src/debtector/metrics.py, docs/audit-schema.md, docs/diff-schema.md |
+| [D-0014](0014-baseline-records-metrics-version.md) | El baseline guarda la versión de la métrica y no se compara el acoplamiento entre versiones | rule | accepted | src/debtector/metrics.py, src/debtector/cli/baseline.py |
