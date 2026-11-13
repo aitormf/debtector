@@ -1,7 +1,7 @@
 ---
 id: T2
 title: Comandos del grafo en cli/graph.py
-status: todo
+status: done
 depends_on: [T1]
 examples: []
 verification: uv run pytest -q && uv run ruff check .
