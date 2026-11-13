@@ -17,7 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from debtector.cli import cmd_audit, cmd_index
+from debtector.cli import cmd_index
+from debtector.cli.quality import cmd_audit
 from debtector.logging import configure_logging
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git not available")
