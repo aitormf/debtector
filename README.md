@@ -111,6 +111,13 @@ The index lives in `.debtector/index.db`. The baseline in `.debtector/baseline.j
 | `baseline status --reporter github` | Same but emits GitHub Actions Annotations (`::error/::warning`) |
 | `baseline status --reporter gitlab` | Same but emits GitLab CI section markers |
 
+### Review and PR diff
+
+| Command | Description |
+|---------|-------------|
+| `audit` | Tech-lead view: health score, cohesion (LCOM4), testRisk, cycle priority, complexity. `--top-n N`, `--full`, `--json` ([schema](docs/audit-schema.md)) |
+| `diff --base <ref>` | Architectural diff between the current index and a git ref (indexed in a temporary worktree). `diff <db_base> <db_pr>` compares two existing indexes. `--format text\|markdown`, `--json` ([schema](docs/diff-schema.md)). Exit 1 when the diff has something with `error` severity |
+
 ### Behavioral coupling (git history)
 
 | Command | Description |
@@ -143,24 +150,27 @@ debtector --json search "AuthService"
 
 | Metric | Description |
 |--------|-------------|
-| **Ca (fan-in)** | How many modules depend on this one. Weight 1.0 per `IMPORTS_FROM` and `USES_TYPE` |
-| **Ce (fan-out)** | How many modules this one imports. Same weight scheme |
+| **Ca (fan-in)** | How many distinct internal modules (files in the index) import this one |
+| **Ce (fan-out)** | How many distinct internal modules this one imports. Imports of the standard library or third-party packages and `USES_TYPE` edges do not count; test files are not modules |
 | **I (instability)** | `Ce / (Ca + Ce)`. 0 = very stable, 1 = very unstable. Reported for every module, but only flagged `⚠ unstable` when it is the target of a Stable Dependencies Principle (SDP) violation: a module imports another one whose I is higher by more than `sdp_margin`. A leaf with I = 1 is normal and not flagged |
 | **God module** | Ca above the project's `god_module_percentile` **and** at least `god_module_min_ca` |
 
 Example output:
 
 ```
-Module                      Ca      Ce       I    Flags
-──────────────────────────────────────────────────────
-src/graph_store.py        12.0     3.0   0.200
-src/cli.py                 0.0    14.5   1.000  ⚠ unstable
-src/models.py              9.5     0.0   0.000  ● god
-──────────────────────────────────────────────────────
-Total: 8 modules
+Module                              Ca      Ce       I  Flags
+─────────────────────────────────────────────────────────────
+src/debtector/models.py           14.0     0.0   0.000   ● god
+src/debtector/graph_store.py       9.0     1.0   0.100
+src/debtector/indexer.py           3.0     3.0   0.500   ⚠ unstable
+─────────────────────────────────────────────────────────────
+Total: 36 modules
 
 ✓  No cycles
-● God modules (Ca > p90): src/models.py
+● God modules (Ca > p90 and Ca >= 10):
+   src/debtector/models.py  Ca=14.0
+⚠  SDP violations (1):
+   src/debtector/cli/common.py (I=0.333) → src/debtector/indexer.py (I=0.500)
 ```
 
 ### Cycles
@@ -169,7 +179,7 @@ Import cycle detection using Tarjan's algorithm (SCCs). Considers `IMPORTS_FROM`
 
 ### God modules
 
-Modules whose fan-in exceeds the 90th percentile of the project. Relative threshold, not absolute.
+Modules whose fan-in exceeds the project's `god_module_percentile` (90 by default) **and** reaches `god_module_min_ca` (10 by default), so a small project does not always flag its top 10%.
 
 ### Inheritance (`debtector coupling --json`)
 
@@ -188,7 +198,7 @@ Example output of `debtector hotspots`:
 ```
 Module                            Churn  Complexity   Coupling     Score
 ───────────────────────────────────────────────────────────────────────
-src/cli.py                           31         290      14.50   8990.00
+src/cli.py                           31         290      14.00   8990.00
 src/graph_store.py                   47         138      15.00   6486.00
 src/parser/python_parser.py          28         130       3.00   3640.00
 ───────────────────────────────────────────────────────────────────────
@@ -260,10 +270,10 @@ Each step emits stable JSON and composes easily from scripts, IDEs, CI or agents
          - uses: actions/checkout@v6
            with:
              fetch-depth: 0   # the base commit and the history must be available
-         - uses: aitormf/debtector@v0.30.0   # pin a release tag
+         - uses: aitormf/debtector@v0.32.0   # pin a release tag
            # with:
            #   fail-on-error: false   # default true: fail after commenting if the diff has `error` severity
-           #   version: 0.30.0        # debtector version from PyPI; default: the version of the Action
+           #   version: 0.32.0        # debtector version from PyPI; default: the version of the Action
            #   github-token: ${{ secrets.MY_TOKEN }}   # default: the job's GITHUB_TOKEN
    ```
 
@@ -300,8 +310,9 @@ The typical CI flow is:
 
 - If `baseline.json` does not exist → exit 0 (silent mode, does not block)
 - If it exists and metrics are equal or improve → exit 0
-- If there are new cycles, new god modules, new SDP violations, or instability worsens → exit 1
+- If there are new cycles, new god modules, new SDP violations, or instability worsens → reported, and exit 1 for those whose severity is `error` (by default only cycles)
 - A baseline saved by an older version has no SDP data: SDP violations are not compared until you run `debtector baseline save` again
+- A baseline saved with another version of the coupling metrics (`metrics_version`) does not compare god modules, SDP violations or instability (cycles still are) and asks you to run `debtector baseline save` again
 - New or worsened functions with complexity >= `complexity_medium` are reported and, with `complexity = "error"`, exit 1. A baseline without complexity data, or saved with another `complexity_medium`, skips this comparison and asks you to run `debtector baseline save` again
 
 ### Severity configuration (`debtector.toml`)
@@ -387,11 +398,11 @@ See [`docs/audit-schema.md`](docs/audit-schema.md#health-score) for the full for
 |------|-------------|
 | `CONTAINS` | File → class/function |
 | `HAS_METHOD` | Class → method |
-| `IMPORTS_FROM` | File → imported module (weight 1.0 in Ca/Ce) |
+| `IMPORTS_FROM` | File → imported module (the only edge counted in Ca/Ce) |
 | `INHERITS` | Class → base class |
 | `CALLS` | Function/method → called function/method |
 | `COVERS` | Test function → production symbol it exercises |
-| `USES_TYPE` | Function → type referenced in type hints (weight 1.0 in Ca/Ce) |
+| `USES_TYPE` | Function → type referenced in type hints (not counted in Ca/Ce) |
 
 ---
 
@@ -448,15 +459,15 @@ Logs always go to `.debtector/debtector.log`, never to stdout.
 - [x] `.debtectorignore` — additional ignored paths
 - [x] **Ca, Ce, instability** — coupling metrics per module
 - [x] **Cycles** — detection with Tarjan's algorithm
-- [x] **God modules** — fan-in outliers (90th percentile)
+- [x] **God modules** — fan-in outliers (90th percentile and minimum Ca)
 - [x] **Inheritance** — depth and number of children
-- [x] **USES_TYPE** — type hint coupling (weight 1.0)
+- [x] **USES_TYPE** — type hint edges (not counted in Ca/Ce: the import already counts)
 - [x] **`debtector coupling`** — tabular output with flags (formerly `metrics`)
 - [x] **Baseline + ratcheting** — CI only fails if metrics worsen
 - [x] **Configurable severity** — `debtector.toml` error/warning/info per type
 - [x] **CI reporter** — GitHub Annotations + GitLab CI section markers
 - [x] **Silent auto-index** — analysis commands index before executing
-- [x] **Hotspots** — churn × structural coupling; real technical debt ranking
+- [x] **Hotspots** — churn × cyclomatic complexity; real technical debt ranking
 - [x] **Temporal coupling** — files that co-change without a direct import
 - [x] **Bus factor** — knowledge concentration risk per file
 - [x] **`debtector git-coupling` / `report`** — aggregated behavioral and full views

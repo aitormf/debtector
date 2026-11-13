@@ -28,7 +28,7 @@ uv run pytest                        # tests
 uv run ruff check .                  # linter
 uv run ruff format .                 # formatter, si hace cambios devuelve un error, hace falta volver a empezar el proceso de commit
 uv run bandit -r src/                # seguridad
-uv run pre-commit install && uv run pre-commit install --hook-type commit-msg  # instalar hooks locales
+uv run pre-commit install && uv run pre-commit install --hook-type commit-msg && uv run pre-commit install --hook-type pre-push  # instalar hooks locales
 ```
 
 ---
@@ -38,13 +38,31 @@ uv run pre-commit install && uv run pre-commit install --hook-type commit-msg  #
 ```
 src/debtector/
 ├── models.py         # NodeInfo, EdgeInfo, GraphNode, GraphEdge, enums NodeKind/EdgeKind
-├── graph_store.py    # GraphStore: SQLite + NetworkX cache en memoria
-├── indexer.py        # Orquestador: recorre archivos, detecta cambios por SHA-256, parsea
-├── metrics.py        # [Fase 1] Ca, Ce, inestabilidad, ciclos, god modules — TODO
-├── cli/              # CLI (paquete, D-0011): index, search, summary, impact, imports, status, callers, metrics, baseline
+├── graph_store.py    # GraphStore: SQLite + FTS5 + NetworkX cache en memoria; clasificación de tests
+├── indexer.py        # Orquestador: recorre archivos, detecta cambios por SHA-256, parsea, .debtectorignore
+├── metrics.py        # Ca, Ce, inestabilidad, ciclos, god modules, SDP, herencia; METRICS_VERSION
+├── git_history.py    # Churn, hotspots, temporal coupling, bus factor (git log / git blame)
+├── diff.py           # Diff arquitectónico entre dos índices (base vs. PR) y blocks_ci
+├── config.py         # Carga de debtector.toml (umbrales, severidades, test_paths)
+├── utils.py          # Utilidades compartidas
 ├── logging.py        # Configuración structlog (dev vs prod)
+├── cli/              # CLI (paquete, D-0011), un módulo por grupo de comandos
+│   ├── app.py            # argparse y despacho
+│   ├── common.py         # Helpers compartidos (store, raíz del índice, test paths, salida)
+│   ├── graph.py          # index, search, summary, impact, imports, status, callers
+│   ├── coupling.py       # coupling (y alias obsoleto metrics)
+│   ├── baseline.py       # baseline save / status (ratcheting)
+│   ├── reporters.py      # Reporters CI: GitHub annotations y GitLab
+│   ├── quality.py        # complexity, untested, audit
+│   ├── git.py            # hotspots, temporal-coupling, bus-factor, git-coupling
+│   ├── report.py         # report (estructural + behavioral)
+│   └── pr_diff.py        # diff (--base <ref> o dos índices)
+├── audit/            # Superficie audit (D-0003): health score, LCOM4, testRisk, prioridad de ciclos, complejidad
+├── render/
+│   └── diff_markdown.py  # Markdown del diff para el comentario de PR
 └── parser/
     ├── base.py           # LanguageParser (abstracta)
+    ├── complexity.py     # Complejidad ciclomática (McCabe) sobre tree-sitter (D-0004)
     ├── python_parser.py  # Tree-sitter Python
     └── js_parser.py      # Tree-sitter JS/TS
 ```
@@ -61,7 +79,7 @@ Archivo fuente → Parser (Tree-sitter) → (NodeInfo[], EdgeInfo[]) → GraphSt
 
 ## Schema SQLite
 
-Tres tablas: `nodes`, `edges`, `metadata`.
+Tres tablas: `nodes`, `edges`, `metadata` (más la tabla virtual FTS5 `nodes_fts` para `search`).
 
 - **nodes**: `id`, `kind` (File/Class/Function/Method), `name`, `qualified_name` (UNIQUE), `file_path`, `line_start`, `line_end`, `language`, `parent_name`, `signature`, `docstring`, `decorators` (JSON), `file_hash`, `extra` (JSON), `updated_at`
 - **edges**: `id`, `kind` (CONTAINS/HAS_METHOD/IMPORTS_FROM/INHERITS/CALLS/COVERS/USES_TYPE), `source_qualified`, `target_qualified`, `file_path`, `line`, `extra` (JSON), `updated_at`
@@ -69,7 +87,7 @@ Tres tablas: `nodes`, `edges`, `metadata`.
 
 ### Persistencia del baseline
 
-`.debtector/baseline.json` — snapshot de métricas de acoplamiento (Ca, Ce, ciclos, god modules) guardado con `debtector baseline save`. Se commitea al repo; es la referencia para el ratcheting en CI. El `.debtector/.gitignore` es gestionado por debtector y siempre se sobreescribe: ignora todo excepto `.gitignore` y `baseline.json`.
+`.debtector/baseline.json` — snapshot de métricas (`metrics_version`, Ca/Ce/I por módulo, ciclos, god modules, violaciones SDP y complejidad de las funciones >= `complexity_medium`) guardado con `debtector baseline save`. Se commitea al repo; es la referencia para el ratcheting en CI. El `.debtector/.gitignore` es gestionado por debtector y siempre se sobreescribe: ignora todo excepto `.gitignore` y `baseline.json`.
 
 ### qualified_name
 
@@ -89,7 +107,7 @@ Cuando un archivo cambia: `BEGIN IMMEDIATE` → delete todos sus nodos/aristas �
 
 ## Code style
 
-- **ruff** con `line-length=100`, `target-version="py310"`, reglas `E,F,W,I,B,C4,UP`
+- **ruff** con `line-length=100`, `target-version="py312"`, reglas `E,F,W,I,B,C4,UP`
 - **Google style docstrings** en todas las funciones y clases públicas
 - **Type hints** obligatorios en todos los parámetros y retornos
 - Imports ordenados por ruff (isort integrado)
@@ -144,7 +162,7 @@ test(indexer): add fixture for JS files
 | `push` | pytest (todos los tests) |
 | `pull_request` | pytest + ruff + bandit |
 
-Pre-commit hooks: ruff (lint + format), commitizen, bandit.
+Pre-commit hooks: ruff (lint + format), commitizen, bandit; en `pre-push`: ruff check + pytest.
 
 ---
 
@@ -164,7 +182,9 @@ Pre-commit hooks: ruff (lint + format), commitizen, bandit.
 | Python | `.py` |
 | JavaScript/TypeScript | `.js`, `.jsx`, `.ts`, `.tsx` |
 
-Directorios ignorados en indexación: `.git`, `__pycache__`, `node_modules`, `.next`, `dist`, `build`, `.venv`, `venv`, `.idea`, `.vscode`.
+Directorios ignorados en indexación (`DEFAULT_IGNORE_DIRS` en `indexer.py`): `.git`, `.svn`, `__pycache__`, `.mypy_cache`, `.pytest_cache`, `.ruff_cache`, `node_modules`, `.next`, `.nuxt`, `dist`, `build`, `.tox`, `.venv`, `venv`, `env`, `.env`, `.idea`, `.vscode`, `coverage`, `.eggs`. Rutas adicionales: `.debtectorignore` en la raíz del proyecto.
+
+Los ficheros de test (`test_*`, `*_test.py`, `*.test.*`/`*.spec.*` en ts/tsx/js/jsx/mjs/cjs, directorios `test/`, `tests/`, `__tests__/` y `test_paths`) no cuentan en las métricas de acoplamiento (D-0015).
 
 ---
 
@@ -172,7 +192,7 @@ Directorios ignorados en indexación: `.git`, `__pycache__`, `node_modules`, `.n
 
 `tests/fixtures/sample.py` — servicio Flask de ejemplo. Al parsearse debe producir:
 - **Nodos**: 1 File + 3 Class (`User`, `UserService`, `AdminService`) + 5 Method + 2 Function = **11 nodos**
-- **Aristas**: CONTAINS × 3 + HAS_METHOD × 5 + IMPORTS_FROM × 4 + INHERITS × 1 = **~14 aristas**
+- **Aristas**: CONTAINS × 5 + HAS_METHOD × 5 + IMPORTS_FROM × 5 + INHERITS × 1 + CALLS × 8 + USES_TYPE × 3 = **27 aristas**
 
 Usar como smoke test tras tocar parsers o GraphStore.
 

@@ -9,13 +9,13 @@ ICP: dev/tech lead que usa agentes de código.
 *Construible sobre el grafo existente. Sin esto no hay producto.*
 
 - [x] **`metrics.py`** — módulo de métricas de acoplamiento:
-  - Fan-in (Ca): aristas IMPORTS_FROM entrantes al módulo
-  - Fan-out (Ce): aristas IMPORTS_FROM salientes del módulo
+  - Fan-in (Ca): módulos internos distintos que importan el módulo (D-0012)
+  - Fan-out (Ce): módulos internos distintos que el módulo importa; los imports externos no cuentan (D-0012)
   - Inestabilidad (I): Ce / (Ca + Ce) — 0 estable, 1 inestable
 - [x] **Detección de ciclos** — DFS sobre aristas IMPORTS_FROM + CALLS
-- [x] **God module detection** — outliers estadísticos en Ca (percentil 90 del proyecto, no umbral absoluto)
+- [x] **God module detection** — outliers estadísticos en Ca (percentil 90 del proyecto y además `god_module_min_ca`)
 - [x] **Profundidad de herencia y número de hijos** — traverse INHERITS edges
-- [x] **Arista `USES_TYPE`** — `def f(x: User) -> Response` genera aristas hacia `User` y `Response`; enriquece Ca/Ce sin nueva fuente de datos
+- [x] **Arista `USES_TYPE`** — `def f(x: User) -> Response` genera aristas hacia `User` y `Response`; ya no cuenta en Ca/Ce: el tipo ya cuenta por su import (D-0012)
 - [x] **Comando `debtector coupling`** — output tabular con Ca, Ce, I, ciclos, god modules por módulo (antes `metrics`, alias conservado)
 - [x] **Baseline** — `debtector baseline save` guarda snapshot de métricas en `.debtector/baseline.json`; `debtector baseline status` muestra delta respecto al baseline
 - [x] **Ratcheting** — CI solo falla si las métricas empeoran respecto al baseline; deuda existente no bloquea
@@ -31,7 +31,7 @@ ICP: dev/tech lead que usa agentes de código.
 - [x] **Parser `git log --numstat`** — churn por módulo (commits que tocan cada archivo)
 - [x] **Hotspot score** — churn × complejidad ciclomática (Tornhill); el acoplamiento estructural se muestra como contexto. Antes: churn × acoplamiento
 - [x] **Complejidad ciclomática por función** — McCabe con tree-sitter en `Function`/`Method` (`extra.complexity`), comando `debtector complexity`; `PARSER_VERSION` fuerza el reindexado cuando cambia la salida de los parsers
-- [x] **Complejidad en baseline/ratcheting** — `baseline save` guarda la complejidad de las funciones >= `complexity_medium` y `baseline status` bloquea según `[metrics.severity] complexity`
+- [x] **Complejidad en baseline/ratcheting** — `baseline save` guarda la complejidad de las funciones >= `complexity_medium` y `baseline status` bloquea según `[metrics.severity] complexity`; `diff` bloquea igual con `worsened_functions` (D-0019)
 - [x] **Temporal coupling** — archivos que cambian juntos en commits con frecuencia > umbral, aunque no tengan import entre ellos
 - [x] **Bus factor por módulo** — porcentaje de código escrito por un único autor vía `git blame`
 - [x] **Integración Karajan** — interfaz JSON disponible en todos los comandos (`--json`); Karajan puede invocar `debtector report --json` directamente
@@ -61,7 +61,7 @@ ICP: dev/tech lead que usa agentes de código.
 - [x] **Delta de métricas por PR** — qué módulos empeoraron, qué mejoraron, nuevos ciclos, nuevos god modules
 - [x] **GitHub Action** (`action.yml` en este repo, D-0009) — indexa rama base + rama PR y publica un comentario único con el diff
 - [ ] **Diff consciente de movimientos** — hoy `diff` identifica funciones y hotspots por ruta, así que mover o renombrar un fichero (p. ej. `cli.py` → `cli/__init__.py`, PR #42) lista cada función compleja como empeorada y mejorada a la vez, y el fichero como hotspot nuevo con el churn heredado. Emparejar funciones que desaparecen y aparecen con el mismo nombre y complejidad, y usar los renombrados de git para los hotspots
-- [x] **SDP sin fachadas de paquete** — un `__init__.py` que solo reexporta sus submódulos depende de ellos por diseño, pero cuenta como violación SDP si es más estable que el submódulo (p. ej. `audit/__init__.py` → `audit/testrisk.py`, PR #47). Ignorar las aristas de un `__init__.py` de solo reexportación hacia su propio paquete, o atribuir sus dependientes a los submódulos
+- [x] **SDP sin fachadas de paquete** (D-0013, ampliada a barrels JS/TS `index.*` en D-0017) — un `__init__.py` que solo reexporta sus submódulos depende de ellos por diseño, pero cuenta como violación SDP si es más estable que el submódulo (p. ej. `audit/__init__.py` → `audit/testrisk.py`, PR #47). Ignorar las aristas de un `__init__.py` de solo reexportación hacia su propio paquete, o atribuir sus dependientes a los submódulos
 
 ---
 
@@ -99,8 +99,8 @@ ICP: dev/tech lead que usa agentes de código.
 - [x] Arista `COVERS` + `debtector untested` — símbolos sin cobertura de tests
 - [x] FTS5 con BM25 y camelCase splitting — `debtector search`
 - [x] Aristas `CALLS` en parsers Python y JS/TS
-- [x] `debtector install-hook` — pre-commit hook de git
-- [x] `debtector install-skill` — skills para Claude Code
+- [x] `debtector install-hook` — pre-commit hook de git (retirado al renombrar codeindex → debtector)
+- [x] `debtector install-skill` — skills para Claude Code (retirado al renombrar codeindex → debtector)
 - [x] `debtector impact` — radio de impacto de cambios
 - [x] Búsqueda semántica (`sqlite-vec` + `fastembed`) — retirada; ver D-0001
 - [x] **Schema migrations** — `GraphStore._apply_migrations` migra la DB al abrirla

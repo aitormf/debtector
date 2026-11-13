@@ -111,6 +111,13 @@ El índice vive en `.debtector/index.db`. El baseline en `.debtector/baseline.js
 | `baseline status --reporter github` | Igual pero emite GitHub Actions Annotations (`::error/::warning`) |
 | `baseline status --reporter gitlab` | Igual pero emite GitLab CI section markers |
 
+### Revisión y diff de PR
+
+| Comando | Descripción |
+|---------|-------------|
+| `audit` | Vista para tech lead: health score, cohesión (LCOM4), testRisk, prioridad de ciclos, complejidad. `--top-n N`, `--full`, `--json` ([schema](docs/audit-schema.md)) |
+| `diff --base <ref>` | Diff arquitectónico entre el índice actual y una ref de git (indexada en un worktree temporal). `diff <db_base> <db_pr>` compara dos índices existentes. `--format text\|markdown`, `--json` ([schema](docs/diff-schema.md)). Exit 1 si el diff tiene algo con severidad `error` |
+
 ### Acoplamiento behavioral (git history)
 
 | Comando | Descripción |
@@ -133,6 +140,8 @@ debtector --json baseline status
 debtector --json search "AuthService"
 ```
 
+`--json` y `--project` se aceptan antes o después del subcomando (`debtector audit --json` equivale a `debtector --json audit`).
+
 ---
 
 ## Métricas disponibles
@@ -141,23 +150,27 @@ debtector --json search "AuthService"
 
 | Métrica | Descripción |
 |---------|-------------|
-| **Ca (fan-in)** | Cuántos módulos dependen de éste. Peso 1.0 por `IMPORTS_FROM` y `USES_TYPE` |
-| **Ce (fan-out)** | Cuántos módulos importa éste. Mismo esquema de pesos |
-| **I (inestabilidad)** | `Ce / (Ca + Ce)`. 0 = muy estable, 1 = muy inestable |
+| **Ca (fan-in)** | Cuántos módulos internos distintos (ficheros del índice) importan éste |
+| **Ce (fan-out)** | Cuántos módulos internos distintos importa éste. Los imports de la librería estándar o de terceros y las aristas `USES_TYPE` no cuentan; los ficheros de test no son módulos |
+| **I (inestabilidad)** | `Ce / (Ca + Ce)`. 0 = muy estable, 1 = muy inestable. Se informa para todos los módulos, pero solo se marca `⚠ inestable` cuando es el destino de una violación del Stable Dependencies Principle (SDP): un módulo importa otro cuya I es mayor en más de `sdp_margin`. Una hoja con I = 1 es normal y no se marca |
+| **God module** | Ca por encima del `god_module_percentile` del proyecto **y** al menos `god_module_min_ca` |
 
 Ejemplo de salida:
 
 ```
-Módulo                      Ca      Ce       I    Flags
-──────────────────────────────────────────────────────
-src/graph_store.py        12.0     3.0   0.200
-src/cli.py                 0.0    14.5   1.000  ⚠ inestable
-src/models.py              9.5     0.0   0.000  ● god
-──────────────────────────────────────────────────────
-Total: 8 módulos
+Module                              Ca      Ce       I  Flags
+─────────────────────────────────────────────────────────────
+src/debtector/models.py           14.0     0.0   0.000   ● god
+src/debtector/graph_store.py       9.0     1.0   0.100
+src/debtector/indexer.py           3.0     3.0   0.500   ⚠ unstable
+─────────────────────────────────────────────────────────────
+Total: 36 modules
 
-✓  Sin ciclos
-● God modules (Ca > p90): src/models.py
+✓  No cycles
+● God modules (Ca > p90 and Ca >= 10):
+   src/debtector/models.py  Ca=14.0
+⚠  SDP violations (1):
+   src/debtector/cli/common.py (I=0.333) → src/debtector/indexer.py (I=0.500)
 ```
 
 ### Ciclos
@@ -166,7 +179,7 @@ Detección de ciclos de importación con el algoritmo de Tarjan (SCCs). Consider
 
 ### God modules
 
-Módulos cuyo fan-in supera el percentil 90 del proyecto. Umbral relativo, no absoluto.
+Módulos cuyo fan-in supera el `god_module_percentile` del proyecto (90 por defecto) **y** alcanza `god_module_min_ca` (10 por defecto), para que un proyecto pequeño no marque siempre su 10% superior.
 
 ### Herencia (`debtector coupling --json`)
 
@@ -183,9 +196,9 @@ Profundidad de jerarquía de herencia y número de hijos directos por clase.
 Ejemplo de salida de `debtector hotspots`:
 
 ```
-Módulo                            Churn  Complexity   Coupling     Score
+Module                            Churn  Complexity   Coupling     Score
 ───────────────────────────────────────────────────────────────────────
-src/cli.py                           31         290      14.50   8990.00
+src/cli.py                           31         290      14.00   8990.00
 src/graph_store.py                   47         138      15.00   6486.00
 src/parser/python_parser.py          28         130       3.00   3640.00
 ───────────────────────────────────────────────────────────────────────
@@ -257,10 +270,10 @@ Cada paso emite JSON estable y se compone fácilmente desde scripts, IDEs, CI o 
          - uses: actions/checkout@v6
            with:
              fetch-depth: 0   # el commit base y el historial tienen que estar disponibles
-         - uses: aitormf/debtector@v0.30.0   # fija un tag de release
+         - uses: aitormf/debtector@v0.32.0   # fija un tag de release
            # with:
            #   fail-on-error: false   # por defecto true: falla tras comentar si el diff tiene severidad `error`
-           #   version: 0.30.0        # versión de debtector en PyPI; por defecto, la de la Action
+           #   version: 0.32.0        # versión de debtector en PyPI; por defecto, la de la Action
            #   github-token: ${{ secrets.MI_TOKEN }}   # por defecto, el GITHUB_TOKEN del job
    ```
 
@@ -272,7 +285,7 @@ Cada paso emite JSON estable y se compone fácilmente desde scripts, IDEs, CI o 
 
 5. **Opcional: ajusta qué se mide.**
    - `.debtectorignore` en la raíz del repo excluye rutas (código generado, `scripts/`, benchmarks, ejemplos de docs).
-   - `test_paths` en `debtector.toml` si tus tests no siguen las convenciones habituales; los ficheros de test nunca cuentan como módulos.
+   - `test_paths` en `debtector.toml` si tus tests no siguen las convenciones habituales (ver [Rutas de test](#rutas-de-test-debtectortoml)); los ficheros de test nunca cuentan como módulos.
 
 6. **Opcional: hazlo obligatorio.** En la regla de protección de `main`, añade *Architectural diff* (el `name` del job) como status check requerido.
 
@@ -297,7 +310,9 @@ El flujo típico en CI es:
 
 - Si no existe `baseline.json` → exit 0 (modo silencioso, no bloquea)
 - Si existe y las métricas mejoran o son iguales → exit 0
-- Si hay nuevos ciclos, nuevos god modules o la inestabilidad empeora → exit 1
+- Si hay nuevos ciclos, nuevos god modules, nuevas violaciones SDP o la inestabilidad empeora → se informa, y exit 1 para los que tengan severidad `error` (por defecto, solo los ciclos)
+- Un baseline guardado por una versión antigua no tiene datos SDP: las violaciones SDP no se comparan hasta que vuelvas a ejecutar `debtector baseline save`
+- Un baseline guardado con otra versión de las métricas de acoplamiento (`metrics_version`) no compara god modules, violaciones SDP ni inestabilidad (los ciclos sí) y pide volver a ejecutar `debtector baseline save`
 - Las funciones nuevas o empeoradas con complejidad >= `complexity_medium` se informan y, con `complexity = "error"`, dan exit 1. Un baseline sin datos de complejidad, o guardado con otro `complexity_medium`, no compara la complejidad y pide volver a ejecutar `debtector baseline save`
 
 ### Configuración de severidad (`debtector.toml`)
@@ -305,7 +320,9 @@ El flujo típico en CI es:
 ```toml
 [metrics.thresholds]
 god_module_percentile = 90    # percentil para considerar god module
-instability_threshold = 0.8   # I >= umbral → aviso en tabla
+god_module_min_ca     = 10    # un god module además necesita Ca >= esto (mínimo absoluto)
+sdp_margin            = 0.1   # I(B) - I(A) por encima de esto marca A -> B como violación SDP
+# instability_threshold está obsoleto: se acepta, pero se ignora (se registra un aviso)
 
 [metrics.severity]
 cycles      = "error"    # bloquea CI
@@ -316,6 +333,52 @@ inheritance = "info"     # solo informa
 ```
 
 Severidades: `error` (exit 1) · `warning` (imprime, exit 0) · `info` (silencioso, exit 0).
+
+### Rutas de test (`debtector.toml`)
+
+`audit` informa hallazgos `testRisk` para los ficheros sin aristas `COVERS` entrantes. Los
+ficheros de test se detectan por convención (`test_*`, `*_test.py`, `*.test.*`/`*.spec.*`, `tests/`, `test/`, `__tests__/`). Si tus
+tests viven en otro sitio, o fuera del directorio que indexas (`debtector index ./src` con los tests
+en `./tests`), lístalos, relativos a la raíz del proyecto:
+
+```toml
+test_paths = ["tests"]
+```
+
+Los ficheros bajo `test_paths` son ficheros de test además de las convenciones, y se indexan aunque
+estén fuera del directorio indexado (no cuentan como módulos en las métricas de acoplamiento).
+Si no se encuentra ningún test, `audit` omite los hallazgos `untested *` (no afectan al
+health score), imprime un aviso en stderr e informa `"testRisk": {"status": "skipped", ...}`
+en el JSON.
+
+### Calibración del audit (`debtector.toml`)
+
+El health score de `audit` se normaliza por el tamaño del proyecto (un hallazgo `high` por módulo
+de media puntúa 0) y solo cuenta los hotspots *accionables*: los que están en o por encima del
+`hotspot_percentile` del hotspot score del proyecto y por encima de `hotspot_min_score`. En un
+repositorio de un solo autor `critical_knowledge_concentration` se lista pero no puntúa. Umbrales
+(valores por defecto):
+
+```toml
+[audit.thresholds]
+testrisk_high_ce    = 10   # untested_high_coupling: Ce >=
+testrisk_high_churn = 5    # untested_hotspots: commits >=
+testrisk_high_ca    = 10   # critical_knowledge_concentration: Ca >=
+hotspot_percentile  = 90   # percentil [1, 99] de los hotspot scores del proyecto
+hotspot_min_score   = 50   # mínimo absoluto: commits x complejidad del fichero
+hotspot_high_factor = 3    # un hotspot es high desde este múltiplo del corte; si no, medium
+complexity_medium   = 21   # complejidad de función desde la que es un hallazgo medium
+complexity_high     = 31   # complejidad de función desde la que es un hallazgo high
+```
+Cada función o método de producción en o por encima de `complexity_medium` (`medium`) o
+`complexity_high` (`high`) también puntúa, y aparece en la sección `complexity` de
+`debtector --json audit`; los ficheros de test nunca cuentan.
+
+Los autores se cuentan sobre todo el historial del repositorio por nombre (respetando `.mailmap`);
+las cuentas de bots (nombres que acaban en `[bot]`) se ignoran. Si una persona hace commits con varias
+variantes de nombre, añade un `.mailmap` para que cuenten una vez; si no, el repositorio parece multiautor.
+
+Ver [`docs/audit-schema.md`](docs/audit-schema.md#health-score) para la fórmula completa.
 
 ---
 
@@ -335,11 +398,11 @@ Severidades: `error` (exit 1) · `warning` (imprime, exit 0) · `info` (silencio
 |------|-------------|
 | `CONTAINS` | Fichero → clase/función |
 | `HAS_METHOD` | Clase → método |
-| `IMPORTS_FROM` | Fichero → módulo importado (peso 1.0 en Ca/Ce) |
+| `IMPORTS_FROM` | Fichero → módulo importado (la única arista que cuenta en Ca/Ce) |
 | `INHERITS` | Clase → clase base |
 | `CALLS` | Función/método → función/método llamado |
 | `COVERS` | Función de test → símbolo de producción que ejercita |
-| `USES_TYPE` | Función → tipo referenciado en type hints (peso 1.0 en Ca/Ce) |
+| `USES_TYPE` | Función → tipo referenciado en type hints (no cuenta en Ca/Ce) |
 
 ---
 
@@ -396,15 +459,15 @@ Los logs siempre van a `.debtector/debtector.log`, nunca a stdout.
 - [x] `.debtectorignore` — rutas adicionales ignoradas
 - [x] **Ca, Ce, inestabilidad** — métricas de acoplamiento por módulo
 - [x] **Ciclos** — detección con algoritmo de Tarjan
-- [x] **God modules** — outliers de fan-in (percentil 90)
+- [x] **God modules** — outliers de fan-in (percentil 90 y Ca mínimo)
 - [x] **Herencia** — profundidad y número de hijos
-- [x] **USES_TYPE** — acoplamiento por type hints (peso 1.0)
+- [x] **USES_TYPE** — aristas de type hints (no cuentan en Ca/Ce: ya cuenta el import)
 - [x] **`debtector coupling`** — output tabular con flags (antes `metrics`)
 - [x] **Baseline + ratcheting** — CI solo falla si empeoran las métricas
 - [x] **Severidad configurable** — `debtector.toml` error/warning/info por tipo
 - [x] **CI reporter** — GitHub Annotations + GitLab CI section markers
 - [x] **Auto-index silencioso** — los comandos de análisis indexan antes de ejecutarse
-- [x] **Hotspots** — churn × acoplamiento estructural; ranking de deuda técnica real
+- [x] **Hotspots** — churn × complejidad ciclomática; ranking de deuda técnica real
 - [x] **Temporal coupling** — archivos que co-cambian sin import directo
 - [x] **Bus factor** — riesgo de concentración de conocimiento por archivo
 - [x] **`debtector git-coupling` / `report`** — vistas agregadas behavioral y completa
