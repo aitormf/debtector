@@ -55,7 +55,7 @@ Array of module-level coupling entries, sorted by `fan_in` descending.
 | `instability` | number  | `Ce / (Ca + Ce)` in `[0.0, 1.0]`.                      |
 | `god_module`  | boolean | `true` when `fan_in` is above the project's percentile and at least `god_module_min_ca` (default 10). |
 
-SDP violations (stable module importing a less stable one) skip pure facades: an `__init__.py` with no classes or functions is neither source nor target (metrics version 4).
+SDP violations (stable module importing a less stable one) skip pure facades: an `__init__.py` or `index.js/.ts/.jsx/.tsx` with no classes or functions is neither source nor target (metrics version 4; `index.*` since version 9).
 Test files are excluded from every coupling metric (Ca, Ce, cycles, god modules and their percentile, SDP): they are neither modules nor dependents (metrics version 5).
 
 ## `cycles`

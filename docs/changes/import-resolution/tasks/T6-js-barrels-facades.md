@@ -1,7 +1,7 @@
 ---
 id: T6
 title: Los index JS/TS sin clases ni funciones son fachadas puras
-status: todo
+status: done
 depends_on: [T5]
 examples: [E22, E23, E24]
 verification: uv run pytest tests/test_metrics_js_facades.py -q

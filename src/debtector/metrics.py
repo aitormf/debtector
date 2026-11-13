@@ -31,7 +31,7 @@ from .models import EdgeKind, NodeKind
 
 # Version of the Ca/Ce computation. Bump it when a change makes the numbers
 # incomparable with those of an older baseline (D-0014).
-METRICS_VERSION = 9
+METRICS_VERSION = 10
 
 # Edge kinds considered for cycle detection
 _CYCLE_EDGE_KINDS = (EdgeKind.IMPORTS_FROM, EdgeKind.CALLS)
@@ -513,9 +513,12 @@ class SdpViolation:
     target_instability: float
 
 
+_FACADE_NAMES = frozenset({"__init__.py", "index.js", "index.ts", "index.jsx", "index.tsx"})
+
+
 def _pure_facades(store: GraphStore, files: set[str]) -> set[str]:
-    """Return the ``__init__.py`` files among ``files`` with no class or function."""
-    inits = [f for f in files if posixpath.basename(f) == "__init__.py"]
+    """Return the ``__init__.py`` and ``index.{js,ts,jsx,tsx}`` files with no class or function."""
+    inits = [f for f in files if posixpath.basename(f) in _FACADE_NAMES]
     if not inits:
         return set()
     defining: set[str] = set()
