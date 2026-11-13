@@ -61,6 +61,7 @@ ICP: dev/tech lead que usa agentes de código.
 - [x] **Delta de métricas por PR** — qué módulos empeoraron, qué mejoraron, nuevos ciclos, nuevos god modules
 - [x] **GitHub Action** (`action.yml` en este repo, D-0009) — indexa rama base + rama PR y publica un comentario único con el diff
 - [ ] **Diff consciente de movimientos** — hoy `diff` identifica funciones y hotspots por ruta, así que mover o renombrar un fichero (p. ej. `cli.py` → `cli/__init__.py`, PR #42) lista cada función compleja como empeorada y mejorada a la vez, y el fichero como hotspot nuevo con el churn heredado. Emparejar funciones que desaparecen y aparecen con el mismo nombre y complejidad, y usar los renombrados de git para los hotspots
+- [ ] **SDP sin fachadas de paquete** — un `__init__.py` que solo reexporta sus submódulos depende de ellos por diseño, pero cuenta como violación SDP si es más estable que el submódulo (p. ej. `audit/__init__.py` → `audit/testrisk.py`, PR #47). Ignorar las aristas de un `__init__.py` de solo reexportación hacia su propio paquete, o atribuir sus dependientes a los submódulos
 
 ---
 
