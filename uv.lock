@@ -231,7 +231,7 @@ wheels = [
 
 [[package]]
 name = "debtector"
-version = "0.19.3"
+version = "0.19.4"
 source = { editable = "." }
 dependencies = [
     { name = "networkx" },
