@@ -1,7 +1,7 @@
 ---
 id: T5
 title: Baseline en cli/baseline.py
-status: todo
+status: done
 depends_on: [T4]
 examples: []
 verification: uv run pytest -q && uv run ruff check .
