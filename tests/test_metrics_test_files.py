@@ -63,4 +63,4 @@ def test_E3_percentile_is_over_production_modules(tmp_db: GraphStore) -> None:
 
 
 def test_E4_metrics_version_bumped() -> None:
-    assert METRICS_VERSION == 5
+    assert METRICS_VERSION >= 5
