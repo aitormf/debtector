@@ -196,7 +196,7 @@ El `.debtector/.gitignore` es gestionado por codeIndex (siempre sobreescrito): i
 | `INHERITS` | Clase hereda de otra | `app.py::AdminService` → `UserService` |
 | `CALLS` | Función/método llama a otro símbolo | `app.py::create_app` → `app.py::UserService.__init__` |
 | `COVERS` | Test ejerce a símbolo de producción | `tests/test_auth.py::test_login` → `src/auth.py::login` |
-| `USES_TYPE` | Función referencia un tipo en sus type hints (peso 1.0 en Ca/Ce) | `app.py::get_user` → `User` |
+| `USES_TYPE` | Función referencia un tipo en sus type hints (no cuenta en Ca/Ce) | `app.py::get_user` → `User` |
 | `DEPENDS_ON` | Dependencia genérica (uso futuro) | — |
 
 ---
@@ -220,11 +220,11 @@ src/auth/service.py::create_app            → Function
 
 | Métrica | Definición | Rango |
 |---|---|---|
-| Fan-in (Ca) | Suma ponderada de aristas IMPORTS_FROM + USES_TYPE entrantes | ≥ 0 |
-| Fan-out (Ce) | Suma ponderada de aristas IMPORTS_FROM + USES_TYPE salientes | ≥ 0 |
+| Fan-in (Ca) | Módulos internos distintos que importan este módulo (IMPORTS_FROM) | ≥ 0 |
+| Fan-out (Ce) | Módulos internos distintos que importa este módulo (IMPORTS_FROM) | ≥ 0 |
 | Inestabilidad (I) | Ce / (Ca + Ce) | [0, 1] |
 
-Pesos: `IMPORTS_FROM` = 1.0, `USES_TYPE` = 1.0. Ambos pesos son constantes públicas en `metrics.py` (`IMPORTS_FROM_WEIGHT`, `USES_TYPE_WEIGHT`) para facilitar ajustes en experimentos.
+Las aristas `USES_TYPE` no cuentan en Ca ni en Ce (D-0012). `IMPORTS_FROM_WEIGHT` es una constante pública en `metrics.py`.
 
 ### Ciclos
 

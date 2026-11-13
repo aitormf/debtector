@@ -1,7 +1,7 @@
 ---
 id: T3
 title: Las anotaciones de tipo no cuentan en Ca ni Ce
-status: todo
+status: done
 depends_on: [T2]
 examples: [E10, E11, E12]
 verification: uv run pytest -q tests/test_metrics_uses_type.py tests/test_metrics.py
