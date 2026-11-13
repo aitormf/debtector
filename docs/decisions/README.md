@@ -20,3 +20,4 @@ Por qué el sistema es como es: decisiones de arquitectura, reglas de negocio y 
 | [D-0008](0008-diff-reuses-baseline-rules.md) | debtector diff compara dos índices con las reglas de baseline status | rule | accepted | src/debtector/diff.py, src/debtector/cli.py, docs/diff-schema.md |
 | [D-0009](0009-github-action-in-repo.md) | La GitHub Action vive en este repo y publica un comentario único | architecture | accepted | action.yml, .github/workflows/, scripts/ |
 | [D-0010](0010-function-complexity-in-diff.md) | Qué funciones entran en el diff por complejidad | rule | accepted | src/debtector/diff.py, docs/diff-schema.md |
+| [D-0011](0011-cli-package-one-module-per-group.md) | La CLI es un paquete con un módulo por grupo de comandos | architecture | accepted | src/debtector/cli/, tests/ |
