@@ -145,7 +145,7 @@ Array of single-author files (`bus_factor == 1`).
 |---------------|--------|-----------------------------------------------|
 | `file_path`   | string | Relative file path.                           |
 | `top_author`  | string | Highest-share author.                         |
-| `bus_factor` | int    | Authors needed to cover ≥50% of churn (always `1` here). |
+| `bus_factor` | int    | Authors needed to cover ≥80% of the lines (`git blame`) (always `1` here). |
 
 ## `inheritance`
 

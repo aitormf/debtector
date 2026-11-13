@@ -31,7 +31,7 @@ ICP: dev/tech lead que usa agentes de código.
 - [x] **Parser `git log --numstat`** — churn por módulo (commits que tocan cada archivo)
 - [x] **Hotspot score** — churn × complejidad ciclomática (Tornhill); el acoplamiento estructural se muestra como contexto. Antes: churn × acoplamiento
 - [x] **Complejidad ciclomática por función** — McCabe con tree-sitter en `Function`/`Method` (`extra.complexity`), comando `debtector complexity`; `PARSER_VERSION` fuerza el reindexado cuando cambia la salida de los parsers
-- [ ] **Complejidad en baseline/ratcheting** — llegará con `debtector diff`
+- [ ] **Complejidad en baseline/ratcheting** — a medias: `debtector diff` ya compara la complejidad entre la rama base y la PR; falta guardarla en `baseline.json` y en `baseline status`
 - [x] **Temporal coupling** — archivos que cambian juntos en commits con frecuencia > umbral, aunque no tengan import entre ellos
 - [x] **Bus factor por módulo** — porcentaje de código escrito por un único autor vía `git blame`
 - [x] **Integración Karajan** — interfaz JSON disponible en todos los comandos (`--json`); Karajan puede invocar `debtector report --json` directamente
@@ -78,12 +78,13 @@ ICP: dev/tech lead que usa agentes de código.
 
 - [ ] **LCOM4 con atributos compartidos** — hoy solo une métodos por `CALLS`, así que clases cohesivas (`IgnoreRules`, bases abstractas) salen con LCOM4 > 1. Añadir arista de acceso a atributos (`self.x`) en los parsers y excluir métodos abstractos/sin cuerpo; hasta entonces `cohesion` no cuenta en el health score
 - [ ] **Rutas en Windows** — el indexer guarda rutas con el separador del sistema (`os.path.relpath`) pero la clasificación de tests y los patrones SQL esperan `/`; normalizar a POSIX al guardar
-- [ ] **Tests como módulos al indexar `.`** — si el usuario indexa la raíz, los ficheros de test cuentan en Ca/Ce, hotspots y god modules; solo se excluyen los que llegan vía `test_paths`
+- [x] **Tests como módulos al indexar `.`** — los ficheros de test no cuentan en las métricas de acoplamiento (D-0015); la clasificación reconoce también `test/`, `__tests__/` y `.test`/`.spec` en tsx/jsx/mjs/cjs
+- [x] **Resolución de imports** — layout `src/` de Python (D-0016), `from X import submódulo` (D-0018), imports ESM `.js` → `.ts`, `require()` en cualquier sitio, reexports `export ... from` y barrels JS/TS como fachadas (D-0017)
 - [ ] **`debtector status` cuenta los ficheros de `test_paths`** — `get_stats` los incluye en `files_count` y en los conteos por tipo
-- [ ] **Clones superficiales en CI** — con `fetch-depth: 1` (el defecto de `actions/checkout`) el historial solo tiene un commit: churn, hotspots y temporal coupling salen a cero. Avisar sin bloquear al detectarlo (`git rev-parse --is-shallow-repository`) y documentar `fetch-depth: 0`; el exento de autor único ya no se aplica en ese caso
+- [ ] **Clones superficiales en CI** — a medias: `is_shallow_repository` existe, `diff` lo informa en `skipped`, el exento de autor único ya no se aplica y `fetch-depth: 0` está documentado. Falta que `audit`, `hotspots` y `temporal-coupling` avisen al usuario (hoy solo va al log)
 - [ ] **Gramáticas de tree-sitter descargadas en runtime** — `tree-sitter-language-pack` las baja de GitHub en el primer uso; sin red o con un 5xx de GitHub el índice falla. Empaquetarlas o documentar cómo descargarlas antes (el CI propio ya las cachea)
-- [ ] **Texto de `busFactor` en `docs/audit-schema.md`** — dice «≥50% del churn» pero el código usa el 80% de las líneas de `git blame`
-- [ ] **Salida humana de `audit`** — solo muestra critical y high; los hotspots puntúan como medium y no se ven
+- [x] **Texto de `busFactor` en `docs/audit-schema.md`** — corregido: autores necesarios para cubrir el 80% de las líneas de `git blame`
+- [ ] **Salida humana de `audit`** — a medias: ya lista los hotspots y los hallazgos de complejidad con su severidad (también medium); el resumen solo cuenta critical y high
 - [ ] **Cobertura real** — leer `coverage.xml` / `lcov.info` si existen; la heurística `COVERS` no ve llamadas a métodos de objetos (`service.validate()`) y deja ficheros probados como «sin cubrir»
 - [ ] **Más lenguajes** — Go, Rust, Java (Tree-sitter los soporta; solo falta escribir el parser siguiendo `base.py`)
 

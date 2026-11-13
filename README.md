@@ -229,31 +229,62 @@ Each step emits stable JSON and composes easily from scripts, IDEs, CI or agents
 
 ## Architectural diff in pull requests
 
-`debtector diff --base <ref> --format markdown` compares the project with a git ref and prints a PR comment. The GitHub Action runs it on every `pull_request`, publishes the result in a single comment that is updated on each push, and always writes it to the job summary:
+`debtector diff --base <ref> --format markdown` compares the project with a git ref and prints a PR comment. The GitHub Action runs it on every pull request, publishes the result in a single comment that is updated on each push (new cycles, new god modules, new SDP violations, worsened complexity and hotspots), and always writes it to the job summary.
 
-```yaml
-# .github/workflows/debtector.yml
-on: pull_request
-concurrency:
-  group: debtector-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-permissions:
-  contents: read
-  pull-requests: write
-jobs:
-  diff:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0   # the base commit must be available
-      - uses: aitormf/debtector@v0.19.0
-        # with:
-        #   fail-on-error: false   # default true: fail after commenting if the diff has `error` severity
-        #   version: 0.19.0        # default: the version of the Action
-```
+### Adding the GitHub Action to your repository
 
-PRs from forks get a read-only token: there is no comment, the diff is in the job summary and the job does not fail because of that. Do not use `pull_request_target` to work around it.
+1. **Create the workflow** `.github/workflows/debtector.yml`:
+
+   ```yaml
+   name: debtector
+
+   # Use pull_request, never pull_request_target: it would run PR code with a write token.
+   on:
+     pull_request:
+       branches: [main]
+
+   # One run per PR: a newer push cancels the older one, so two runs never race on the comment.
+   concurrency:
+     group: debtector-${{ github.event.pull_request.number }}
+     cancel-in-progress: true
+
+   permissions:
+     contents: read
+     pull-requests: write   # to create and update the comment
+
+   jobs:
+     diff:
+       name: Architectural diff
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v6
+           with:
+             fetch-depth: 0   # the base commit and the history must be available
+         - uses: aitormf/debtector@v0.30.0   # pin a release tag
+           # with:
+           #   fail-on-error: false   # default true: fail after commenting if the diff has `error` severity
+           #   version: 0.30.0        # debtector version from PyPI; default: the version of the Action
+           #   github-token: ${{ secrets.MY_TOKEN }}   # default: the job's GITHUB_TOKEN
+   ```
+
+2. **Check the token permissions.** The job asks for `pull-requests: write` itself. If your organization or repository restricts workflow permissions (*Settings → Actions → General → Workflow permissions*), allow that scope there too, or the Action will not be able to comment.
+
+3. **Pin the version.** Use a release tag (`@vX.Y.Z`, see [releases](https://github.com/aitormf/debtector/releases)) rather than `@main`. The Action installs the debtector of that same tag unless you pass `version`.
+
+4. **Decide what blocks the PR.** By default the job fails, after commenting, when the diff has something with `error` severity. Severities come from `debtector.toml` (see [Severity configuration](#severity-configuration-debtectortoml)); for example `cycles = "error"` blocks new cycles and `god_modules = "warning"` only reports them. Set `fail-on-error: false` to comment without ever failing.
+
+5. **Optional: tune what is measured.**
+   - `.debtectorignore` at the repository root excludes paths (generated code, `scripts/`, benchmarks, docs examples).
+   - `test_paths` in `debtector.toml` if your tests do not follow the usual conventions (see [Test paths](#test-paths-debtectortoml)); test files never count as modules.
+
+6. **Optional: require the check.** In the branch protection rule of `main`, add *Architectural diff* (the job `name`) as a required status check.
+
+Notes:
+
+- `fetch-depth: 0` matters. With the default shallow clone the history has one commit: the diff works, but hotspots are skipped (the comment says so).
+- PRs from forks get a read-only token: there is no comment, the diff is in the job summary and the job does not fail because of that. Do not switch to `pull_request_target` to work around it.
+- The Action is used on `ubuntu-latest`. It needs `bash` and `python3` on the runner (GitHub-hosted runners have both) and installs `uv` and debtector by itself.
+- The Action complements the [baseline ratchet](#ratcheting-in-ci): the diff compares the PR with its base branch; the ratchet compares the current metrics with the committed `baseline.json`.
 
 ## Ratcheting in CI
 
@@ -293,7 +324,7 @@ Severities: `error` (exit 1) · `warning` (prints, exit 0) · `info` (silent, ex
 ### Test paths (`debtector.toml`)
 
 `audit` reports `testRisk` findings for files with no incoming `COVERS` edges. Test
-files are detected by convention (`test_*`, `*_test.py`, `*.spec.ts`, `tests/`...). If your
+files are detected by convention (`test_*`, `*_test.py`, `*.test.*`/`*.spec.*`, `tests/`, `test/`, `__tests__/`). If your
 tests live elsewhere, or outside the directory you index (`debtector index ./src` with tests
 in `./tests`), list them, relative to the project root:
 
@@ -431,7 +462,9 @@ Logs always go to `.debtector/debtector.log`, never to stdout.
 - [x] **Cyclomatic complexity per function** (`debtector complexity`) — churn × complexity hotspots
 - [ ] Cognitive complexity per function
 - [x] Graph diff — metric delta between base branch and PR (GitHub Action)
-- [ ] GitHub Action — automatic comment on PRs
+- [x] **Import resolution** — Python `src/` layout and `from pkg import submodule`, ESM `.js` → `.ts`, CommonJS `require()` anywhere, `export ... from` reexports, JS/TS barrels as facades
+- [x] **Tests out of coupling metrics** — test files (`tests/`, `test/`, `__tests__/`, `*.test.*`, `*.spec.*`, `test_paths`) are not modules
+- [x] **GitHub Action** — automatic comment on PRs, updated on each push ([setup](#adding-the-github-action-to-your-repository))
 - [ ] More languages — Go, Rust, Java
 
 ## License

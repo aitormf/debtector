@@ -226,31 +226,62 @@ Cada paso emite JSON estable y se compone fácilmente desde scripts, IDEs, CI o 
 
 ## Diff arquitectónico en pull requests
 
-`debtector diff --base <ref> --format markdown` compara el proyecto con una ref de git y escribe un comentario de PR. La GitHub Action lo ejecuta en cada `pull_request`, publica el resultado en un único comentario que se actualiza en cada push y lo escribe siempre en el job summary:
+`debtector diff --base <ref> --format markdown` compara el proyecto con una ref de git y escribe un comentario de PR. La GitHub Action lo ejecuta en cada pull request, publica el resultado en un único comentario que se actualiza en cada push (ciclos nuevos, god modules nuevos, violaciones SDP nuevas, complejidad y hotspots que empeoran) y lo escribe siempre en el job summary.
 
-```yaml
-# .github/workflows/debtector.yml
-on: pull_request
-concurrency:
-  group: debtector-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-permissions:
-  contents: read
-  pull-requests: write
-jobs:
-  diff:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0   # el commit base tiene que estar disponible
-      - uses: aitormf/debtector@v0.19.0
-        # with:
-        #   fail-on-error: false   # por defecto true: falla tras comentar si el diff tiene severidad `error`
-        #   version: 0.19.0        # por defecto: la versión de la Action
-```
+### Cómo añadir la GitHub Action a tu repositorio
 
-Las PRs desde forks tienen un token de solo lectura: no hay comentario, el diff está en el job summary y el job no falla por eso. No uses `pull_request_target` para evitarlo.
+1. **Crea el workflow** `.github/workflows/debtector.yml`:
+
+   ```yaml
+   name: debtector
+
+   # Usa pull_request, nunca pull_request_target: ejecutaría el código de la PR con un token de escritura.
+   on:
+     pull_request:
+       branches: [main]
+
+   # Una ejecución por PR: un push nuevo cancela la anterior y nunca compiten por el comentario.
+   concurrency:
+     group: debtector-${{ github.event.pull_request.number }}
+     cancel-in-progress: true
+
+   permissions:
+     contents: read
+     pull-requests: write   # para crear y actualizar el comentario
+
+   jobs:
+     diff:
+       name: Architectural diff
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v6
+           with:
+             fetch-depth: 0   # el commit base y el historial tienen que estar disponibles
+         - uses: aitormf/debtector@v0.30.0   # fija un tag de release
+           # with:
+           #   fail-on-error: false   # por defecto true: falla tras comentar si el diff tiene severidad `error`
+           #   version: 0.30.0        # versión de debtector en PyPI; por defecto, la de la Action
+           #   github-token: ${{ secrets.MI_TOKEN }}   # por defecto, el GITHUB_TOKEN del job
+   ```
+
+2. **Revisa los permisos del token.** El job pide `pull-requests: write`. Si tu organización o repositorio restringe los permisos de los workflows (*Settings → Actions → General → Workflow permissions*), permite también ese alcance allí; si no, la Action no podrá comentar.
+
+3. **Fija la versión.** Usa un tag de release (`@vX.Y.Z`, ver [releases](https://github.com/aitormf/debtector/releases)) en vez de `@main`. La Action instala el debtector de ese mismo tag salvo que pases `version`.
+
+4. **Decide qué bloquea la PR.** Por defecto el job falla, después de comentar, si el diff tiene algo con severidad `error`. Las severidades salen de `debtector.toml` (ver [Configuración de severidad](#configuración-de-severidad-debtectortoml)); por ejemplo, `cycles = "error"` bloquea los ciclos nuevos y `god_modules = "warning"` solo los informa. Con `fail-on-error: false` comenta sin fallar nunca.
+
+5. **Opcional: ajusta qué se mide.**
+   - `.debtectorignore` en la raíz del repo excluye rutas (código generado, `scripts/`, benchmarks, ejemplos de docs).
+   - `test_paths` en `debtector.toml` si tus tests no siguen las convenciones habituales; los ficheros de test nunca cuentan como módulos.
+
+6. **Opcional: hazlo obligatorio.** En la regla de protección de `main`, añade *Architectural diff* (el `name` del job) como status check requerido.
+
+Notas:
+
+- `fetch-depth: 0` importa. Con el clon superficial por defecto el historial tiene un commit: el diff funciona, pero los hotspots se omiten (el comentario lo dice).
+- Las PRs desde forks tienen un token de solo lectura: no hay comentario, el diff está en el job summary y el job no falla por eso. No cambies a `pull_request_target` para evitarlo.
+- La Action se usa en `ubuntu-latest`. Necesita `bash` y `python3` en el runner (los de GitHub tienen los dos) e instala `uv` y debtector por su cuenta.
+- La Action complementa el [ratcheting con baseline](#ratcheting-en-ci): el diff compara la PR con su rama base; el ratchet compara las métricas actuales con el `baseline.json` commiteado.
 
 ## Ratcheting en CI
 
@@ -379,7 +410,9 @@ Los logs siempre van a `.debtector/debtector.log`, nunca a stdout.
 - [x] **Complejidad ciclomática por función** (`debtector complexity`) — hotspots churn × complejidad
 - [ ] Complejidad cognitiva por función
 - [x] Graph diff — delta de métricas entre rama base y PR (GitHub Action)
-- [ ] GitHub Action — comentario automático en PRs
+- [x] **Resolución de imports** — layout `src/` de Python y `from paquete import submódulo`, ESM `.js` → `.ts`, `require()` de CommonJS en cualquier sitio, reexports `export ... from`, barrels JS/TS como fachadas
+- [x] **Tests fuera de las métricas de acoplamiento** — los ficheros de test (`tests/`, `test/`, `__tests__/`, `*.test.*`, `*.spec.*`, `test_paths`) no son módulos
+- [x] **GitHub Action** — comentario automático en PRs, actualizado en cada push ([cómo añadirla](#cómo-añadir-la-github-action-a-tu-repositorio))
 - [ ] Más lenguajes — Go, Rust, Java
 
 ## Licencia
