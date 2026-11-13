@@ -210,3 +210,87 @@ class TestBaselineInstabilityTolerance:
         cmd_baseline(_args(str(tmp_path), "status", json=True))
         regressions = json.loads(capsys.readouterr().out)["regressions"]
         assert [r["file_path"] for r in regressions] == ["x.py"]
+
+
+class TestBaselineMetricsVersion:
+    """R1 (D-0014): the baseline records the coupling-metric version."""
+
+    def _write_baseline(self, project: Path, **extra) -> None:
+        path = project / ".debtector" / "baseline.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        module = {"file_path": "x.py", "fan_in": 0, "fan_out": 0, "instability": 0.0}
+        data = {"modules": [module], "cycles": [], "god_modules": [], "sdp_violations": []}
+        path.write_text(json.dumps({**data, **extra}))
+
+    def _seed_cycle(self, project: Path) -> None:
+        _seed(
+            str(project),
+            {
+                "a.py": [_import("a.py", "b.py")],
+                "b.py": [_import("b.py", "a.py")],
+                "x.py": [],
+            },
+        )
+
+    def test_E1_save_writes_metrics_version(self, tmp_path: Path) -> None:
+        from debtector.metrics import METRICS_VERSION
+
+        _seed(str(tmp_path), {"src/a.py": []})
+        cmd_baseline(_args(str(tmp_path), "save"))
+        data = json.loads((tmp_path / ".debtector" / "baseline.json").read_text())
+        assert data["metrics_version"] == METRICS_VERSION == 1
+
+    def test_E2_baseline_without_version_is_compared_as_v1(self, tmp_path: Path, capsys) -> None:
+        # x.py has Ca=3 / Ce=2 → I=0.4; the baseline (no version field) says 0.0
+        _seed(
+            str(tmp_path),
+            {
+                "x.py": [_import("x.py", "o1.py"), _import("x.py", "o2.py")],
+                "o1.py": [],
+                "o2.py": [],
+                "i1.py": [_import("i1.py", "x.py")],
+                "i2.py": [_import("i2.py", "x.py")],
+                "i3.py": [_import("i3.py", "x.py")],
+            },
+        )
+        self._write_baseline(tmp_path)
+        cmd_baseline(_args(str(tmp_path), "status", json=True))
+        data = json.loads(capsys.readouterr().out)
+        assert [r["file_path"] for r in data["regressions"]] == ["x.py"]
+        assert "metrics_version_mismatch" not in data
+
+    def test_E3_other_version_warns_and_skips_ca_ce_comparisons(
+        self, tmp_path: Path, capsys, monkeypatch
+    ) -> None:
+        monkeypatch.setattr("debtector.metrics.METRICS_VERSION", 2)
+        _seed(str(tmp_path), {"x.py": [_import("x.py", "o.py")], "o.py": []})
+        self._write_baseline(tmp_path, metrics_version=1)
+
+        cmd_baseline(_args(str(tmp_path), "status"))
+        out = capsys.readouterr().out
+        assert "baseline saved with coupling metrics v1, current is v2" in out
+        assert "debtector baseline save" in out
+        assert "Instability regressions" not in out
+
+        cmd_baseline(_args(str(tmp_path), "status", json=True))
+        data = json.loads(capsys.readouterr().out)
+        assert data["metrics_version_mismatch"] == {"baseline": 1, "current": 2}
+        assert data["regressions"] == []
+        assert data["new_god_modules"] == []
+        assert data["new_sdp_violations"] == []
+
+    def test_E4_other_version_still_compares_cycles(
+        self, tmp_path: Path, capsys, monkeypatch
+    ) -> None:
+        monkeypatch.setattr("debtector.metrics.METRICS_VERSION", 2)
+        (tmp_path / "debtector.toml").write_text(
+            '[metrics.severity]\ncycles = "error"\n', encoding="utf-8"
+        )
+        self._seed_cycle(tmp_path)
+        self._write_baseline(tmp_path, metrics_version=1)
+        with pytest.raises(SystemExit) as exc:
+            cmd_baseline(_args(str(tmp_path), "status"))
+        assert exc.value.code == 1
+        out = capsys.readouterr().out
+        assert "current is v2" in out
+        assert "cycle" in out.lower()
