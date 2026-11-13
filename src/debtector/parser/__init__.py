@@ -12,8 +12,9 @@ from .python_parser import PythonParser
 #: 1 = original output; 2 = adds ``extra["complexity"]`` to Function/Method nodes;
 #: 3 = adds ``extra["nested_complexity"]`` (Python closures); 4 = also finds closures
 #: inside blocks and methods of local classes; 5 = Python relative imports keep their
-#: leading dots (``.c``, ``..util``), so they never match an absolute import.
-PARSER_VERSION = 5
+#: leading dots (``.c``, ``..util``), so they never match an absolute import;
+#: 6 = JS/TS ``require("<literal>")`` is an import wherever it is.
+PARSER_VERSION = 6
 
 
 class ParserRegistry:

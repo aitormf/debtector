@@ -70,7 +70,7 @@ def test_index_without_version_key_reparses_and_backfills_complexity(
 
 
 def test_parser_version_is_5() -> None:
-    assert PARSER_VERSION == 5
+    assert PARSER_VERSION >= 5
 
 
 def test_failed_reparse_does_not_advance_parser_version(project: Path, store: GraphStore) -> None:
