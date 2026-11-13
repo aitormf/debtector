@@ -183,8 +183,8 @@ class TestAuditThresholds:
             load_config(tmp_path)
 
 
-class TestTestriskDefaultsLiveInConfig:
-    """config.py owns the test-risk defaults; it does not depend on audit/testrisk.py (SDP)."""
+class TestTestriskDefaultsDependency:
+    """config.py reads the test-risk defaults from a leaf module, not audit/testrisk.py."""
 
     def test_config_does_not_import_testrisk(self) -> None:
         import ast
@@ -202,3 +202,15 @@ class TestTestriskDefaultsLiveInConfig:
         assert config.DEFAULT_HIGH_CE == testrisk.DEFAULT_HIGH_CE == 10.0
         assert config.DEFAULT_HIGH_CHURN == testrisk.DEFAULT_HIGH_CHURN == 5
         assert config.DEFAULT_HIGH_CA == testrisk.DEFAULT_HIGH_CA == 10.0
+
+    def test_config_imports_cleanly_in_a_fresh_interpreter(self) -> None:
+        import subprocess  # nosec B404 - fixed argv, no shell
+        import sys
+
+        result = subprocess.run(  # nosec B603 - fixed argv
+            [sys.executable, "-c", "import debtector.config"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
