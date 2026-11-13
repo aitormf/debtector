@@ -20,7 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from debtector.cli import cmd_audit, cmd_index
+from debtector.cli import cmd_index
+from debtector.cli.quality import cmd_audit
 from debtector.git_history import list_authors
 from debtector.logging import configure_logging
 

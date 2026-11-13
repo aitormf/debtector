@@ -9,8 +9,8 @@ from unittest import mock
 
 import pytest
 
-from debtector.cli import cmd_audit
 from debtector.cli.common import _get_store
+from debtector.cli.quality import cmd_audit
 from debtector.indexer import Indexer
 
 
@@ -86,7 +86,7 @@ class AdminService:
 def test_cmd_audit_smoke(sample_project: Path, capsys) -> None:
     """Test that cmd_audit executes without crashing."""
     args = Args(str(sample_project), json_out=False)
-    with mock.patch("debtector.cli._auto_index"):
+    with mock.patch("debtector.cli.quality._auto_index"):
         cmd_audit(args)
 
     captured = capsys.readouterr()
@@ -97,7 +97,7 @@ def test_cmd_audit_smoke(sample_project: Path, capsys) -> None:
 def test_cmd_audit_json_smoke(sample_project: Path, capsys) -> None:
     """Test that cmd_audit --json produces valid JSON."""
     args = Args(str(sample_project), json_out=True)
-    with mock.patch("debtector.cli._auto_index"):
+    with mock.patch("debtector.cli.quality._auto_index"):
         cmd_audit(args)
 
     captured = capsys.readouterr()
@@ -120,7 +120,7 @@ def test_cmd_audit_json_smoke(sample_project: Path, capsys) -> None:
 def test_cmd_audit_json_structure(sample_project: Path, capsys) -> None:
     """Test that cmd_audit --json has the documented schema."""
     args = Args(str(sample_project), json_out=True)
-    with mock.patch("debtector.cli._auto_index"):
+    with mock.patch("debtector.cli.quality._auto_index"):
         cmd_audit(args)
 
     captured = capsys.readouterr()
@@ -169,7 +169,7 @@ def test_cmd_audit_json_structure(sample_project: Path, capsys) -> None:
 def test_cmd_audit_with_full_flag(sample_project: Path, capsys) -> None:
     """Test that --full returns all results without limiting to top_n."""
     args = Args(str(sample_project), top_n=2, full=True, json_out=True)
-    with mock.patch("debtector.cli._auto_index"):
+    with mock.patch("debtector.cli.quality._auto_index"):
         cmd_audit(args)
 
     captured = capsys.readouterr()
@@ -187,8 +187,8 @@ def test_cmd_audit_calls_bus_factor_with_store(sample_project: Path) -> None:
     args = Args(str(sample_project), json_out=False)
 
     with (
-        patch("debtector.cli._auto_index"),
-        patch("debtector.cli.compute_bus_factor", return_value=[]) as mock_bus_factor,
+        patch("debtector.cli.quality._auto_index"),
+        patch("debtector.cli.quality.compute_bus_factor", return_value=[]) as mock_bus_factor,
     ):
         cmd_audit(args)
 
@@ -208,7 +208,7 @@ def test_cmd_audit_calls_god_modules_before_close(sample_project: Path) -> None:
     args = Args(str(sample_project), json_out=False)
 
     with (
-        patch("debtector.cli._auto_index"),
+        patch("debtector.cli.quality._auto_index"),
         patch("debtector.cli.common.god_modules", return_value=[]) as mock_god_modules,
     ):
         cmd_audit(args)
@@ -260,7 +260,7 @@ def cohesion_project(tmp_path: Path) -> Path:
 
 
 def _run_audit_json(project: Path, capsys) -> dict:
-    with mock.patch("debtector.cli._auto_index"):
+    with mock.patch("debtector.cli.quality._auto_index"):
         cmd_audit(Args(str(project), json_out=True))
     return json.loads(capsys.readouterr().out.strip().split("\n")[-1])
 
@@ -288,7 +288,7 @@ def test_cmd_audit_cohesion_does_not_affect_health_score(cohesion_project: Path,
         seen.extend(findings)
         return compute_health_score(findings, modules)
 
-    with mock.patch("debtector.cli.compute_health_score", side_effect=spy):
+    with mock.patch("debtector.cli.quality.compute_health_score", side_effect=spy):
         _run_audit_json(cohesion_project, capsys)
 
     scored = [f.qualified_name for f in seen if isinstance(f, CohesionFinding)]
@@ -299,7 +299,7 @@ def test_cmd_audit_computes_lcom4_once_per_class(cohesion_project: Path, capsys)
     """compute_lcom4 runs exactly once for each class."""
     from debtector.audit.lcom4 import compute_lcom4
 
-    with mock.patch("debtector.cli.compute_lcom4", side_effect=compute_lcom4) as spy:
+    with mock.patch("debtector.cli.quality.compute_lcom4", side_effect=compute_lcom4) as spy:
         _run_audit_json(cohesion_project, capsys)
 
     assert spy.call_count == 2

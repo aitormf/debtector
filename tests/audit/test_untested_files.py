@@ -19,7 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from debtector.audit.testrisk import untested_high_coupling
-from debtector.cli import _get_uncovered_files
+from debtector.cli.quality import _get_uncovered_files
 from debtector.graph_store import GraphStore
 from debtector.metrics import ModuleMetrics
 from debtector.models import EdgeInfo, NodeInfo

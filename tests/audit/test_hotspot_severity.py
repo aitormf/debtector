@@ -17,7 +17,8 @@ from pathlib import Path
 import pytest
 
 from debtector.audit.health_score import select_actionable_hotspots
-from debtector.cli import cmd_audit, cmd_index
+from debtector.cli import cmd_index
+from debtector.cli.quality import cmd_audit
 from debtector.config import load_config
 from debtector.git_history import HotspotMetrics
 from debtector.logging import configure_logging

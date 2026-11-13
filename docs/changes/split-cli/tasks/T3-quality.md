@@ -1,7 +1,7 @@
 ---
 id: T3
 title: Calidad en cli/quality.py
-status: todo
+status: done
 depends_on: [T2]
 examples: []
 verification: uv run pytest -q && uv run ruff check .
