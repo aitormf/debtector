@@ -108,12 +108,14 @@ class MetricsSeverity:
         god_modules: Modules with outlier fan-in.
         instability: Instability regressions and new SDP violations.
         inheritance: Deep or wide inheritance hierarchies.
+        complexity: Functions that got worse in cyclomatic complexity (D-0019).
     """
 
     cycles: Severity = Severity.ERROR
     god_modules: Severity = Severity.WARNING
     instability: Severity = Severity.WARNING
     inheritance: Severity = Severity.INFO
+    complexity: Severity = Severity.WARNING
 
 
 @dataclass
@@ -237,6 +239,7 @@ def load_config(project_root: str | Path) -> DebtectorConfig:
             god_modules=Severity(sev_data.get("god_modules", MetricsSeverity.god_modules.value)),
             instability=Severity(sev_data.get("instability", MetricsSeverity.instability.value)),
             inheritance=Severity(sev_data.get("inheritance", MetricsSeverity.inheritance.value)),
+            complexity=Severity(sev_data.get("complexity", MetricsSeverity.complexity.value)),
         )
     except ValueError as exc:
         valid = [s.value for s in Severity]

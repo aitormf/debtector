@@ -315,6 +315,7 @@ sdp_margin            = 0.1   # I(B) - I(A) above this flags A -> B as an SDP vi
 [metrics.severity]
 cycles      = "error"    # blocks CI
 god_modules = "warning"  # warns but does not block
+complexity  = "warning"  # "error" blocks new or worsened functions with complexity >= complexity_medium
 instability = "warning"  # warns but does not block
 inheritance = "info"     # info only
 ```

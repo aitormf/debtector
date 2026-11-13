@@ -309,6 +309,7 @@ instability_threshold = 0.8   # I >= umbral → aviso en tabla
 [metrics.severity]
 cycles      = "error"    # bloquea CI
 god_modules = "warning"  # avisa pero no bloquea
+complexity  = "warning"  # "error" bloquea funciones nuevas o empeoradas con complejidad >= complexity_medium
 instability = "warning"  # avisa pero no bloquea
 inheritance = "info"     # solo informa
 ```
