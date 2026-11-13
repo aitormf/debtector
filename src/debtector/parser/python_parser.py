@@ -135,7 +135,8 @@ class PythonParser(LanguageParser):
                     )
 
             elif node.type == "import_from_statement":
-                for module in self._parse_from_modules(node, source):
+                module, names = self._parse_from_import(node, source)
+                if module:
                     edges.append(
                         EdgeInfo(
                             kind=EdgeKind.IMPORTS_FROM,
@@ -143,6 +144,7 @@ class PythonParser(LanguageParser):
                             target=module,
                             file_path=file_path,
                             line=node.start_point[0] + 1,
+                            extra={"names": names} if names else {},
                         )
                     )
 
@@ -168,46 +170,46 @@ class PythonParser(LanguageParser):
                         return self._text(sub, source)
         return None
 
-    def _parse_from_modules(self, node, source: bytes) -> list[str]:
-        """Extract the imported module(s) of an ``import_from_statement`` node.
+    def _parse_from_import(self, node, source: bytes) -> tuple[str | None, list[str]]:
+        """Extract the module and the imported names of an ``import_from_statement`` node.
 
         Relative imports keep their leading dots, so they can never be mistaken for
-        an absolute import of the same name (``from .json import x`` vs ``import json``):
+        an absolute import of the same name (``from .json import x`` vs ``import json``).
+        The names are kept so the resolution can tell submodules from symbols (D-0018):
 
-        - ``from os.path import join`` → ``["os.path"]``
-        - ``from .database import Pool`` → ``[".database"]``
-        - ``from . import a, b as bee`` → ``[".a", ".b"]`` (each name may be a submodule)
+        - ``from os.path import join`` → ``("os.path", ["join"])``
+        - ``from . import a, b as bee`` → ``(".", ["a", "b"])``
+        - ``from pkg import *`` → ``("pkg", [])``
 
         Args:
             node: A tree-sitter ``import_from_statement`` node.
             source: Raw source bytes.
 
         Returns:
-            The module names; empty if none can be determined.
+            ``(module, names)``; the module is ``None`` if it cannot be determined.
         """
         relative = next((c for c in node.children if c.type == "relative_import"), None)
         if relative is None:
-            module = next((c for c in node.children if c.type == "dotted_name"), None)
-            return [self._text(module, source)] if module is not None else []
-        prefix = "".join(
-            self._text(c, source) for c in relative.children if c.type == "import_prefix"
-        )
-        name = next((c for c in relative.children if c.type == "dotted_name"), None)
-        if name is not None:
-            return [prefix + self._text(name, source)]
-        # ``from . import a, b as bee``: the imported names follow the ``import`` keyword.
+            first = next((c for c in node.children if c.type == "dotted_name"), None)
+            module = self._text(first, source) if first is not None else None
+        else:
+            prefix = "".join(
+                self._text(c, source) for c in relative.children if c.type == "import_prefix"
+            )
+            name = next((c for c in relative.children if c.type == "dotted_name"), None)
+            module = prefix + (self._text(name, source) if name is not None else "")
         names: list[str] = []
         after_import = False
         for child in node.children:
             if child.type == "import":
                 after_import = True
             elif after_import and child.type == "dotted_name":
-                names.append(prefix + self._text(child, source))
+                names.append(self._text(child, source))
             elif after_import and child.type == "aliased_import":
                 sub = next((c for c in child.children if c.type == "dotted_name"), None)
                 if sub is not None:
-                    names.append(prefix + self._text(sub, source))
-        return names
+                    names.append(self._text(sub, source))
+        return module, names
 
     # ──────────────────────────────────────────────
     # Symbols (classes, functions, methods)

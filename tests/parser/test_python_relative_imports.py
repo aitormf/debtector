@@ -29,7 +29,7 @@ def test_bare_relative_import_targets_the_dot(tmp_path: Path) -> None:
 
 
 def test_bare_parent_relative_import(tmp_path: Path) -> None:
-    assert _targets(tmp_path, "from .. import helpers\n") == {"..helpers"}
+    assert _targets(tmp_path, "from .. import helpers\n") == {".."}
 
 
 def test_absolute_imports_stay_absolute(tmp_path: Path) -> None:

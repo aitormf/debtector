@@ -1,7 +1,7 @@
 ---
 id: T2
 title: El parser guarda los nombres de `from X import a, b`
-status: todo
+status: done
 depends_on: [T1]
 examples: [E1, E2, E3, E4, E14]
 verification: uv run pytest tests/parser/test_python_from_import_names.py -q
