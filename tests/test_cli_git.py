@@ -10,12 +10,11 @@ from unittest.mock import patch
 
 import pytest
 
-from debtector.cli import (
-    _get_store,
+from debtector.cli import _get_store, cmd_report
+from debtector.cli.git import (
     cmd_bus_factor,
     cmd_git_coupling,
     cmd_hotspots,
-    cmd_report,
     cmd_temporal_coupling,
 )
 from debtector.git_history import BusFactorMetrics, HotspotMetrics, TemporalCoupling
@@ -111,21 +110,21 @@ class TestCmdHotspots:
     """Tests for debtector hotspots."""
 
     def test_human_output_shows_table_columns(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_hotspots", return_value=_HOTSPOTS):
+        with patch("debtector.cli.git.compute_hotspots", return_value=_HOTSPOTS):
             cmd_hotspots(_args(str(tmp_path)))
         out = capsys.readouterr().out
         assert "Churn" in out or "churn" in out.lower()
         assert "Score" in out or "score" in out.lower()
 
     def test_human_output_shows_file_paths(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_hotspots", return_value=_HOTSPOTS):
+        with patch("debtector.cli.git.compute_hotspots", return_value=_HOTSPOTS):
             cmd_hotspots(_args(str(tmp_path)))
         out = capsys.readouterr().out
         assert "src/auth.py" in out
         assert "src/models.py" in out
 
     def test_json_output_structure(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_hotspots", return_value=_HOTSPOTS):
+        with patch("debtector.cli.git.compute_hotspots", return_value=_HOTSPOTS):
             cmd_hotspots(_args(str(tmp_path), json=True))
         data = json.loads(capsys.readouterr().out)
         assert "hotspots" in data
@@ -140,34 +139,34 @@ class TestCmdHotspots:
         assert data["hotspots"][0]["hotspot_score"] == 120.0
 
     def test_human_output_shows_complexity_column(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_hotspots", return_value=_HOTSPOTS):
+        with patch("debtector.cli.git.compute_hotspots", return_value=_HOTSPOTS):
             cmd_hotspots(_args(str(tmp_path)))
         out = capsys.readouterr().out
         assert "Complexity" in out
         assert "12" in out
 
     def test_json_empty_when_no_data(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_hotspots", return_value=[]):
+        with patch("debtector.cli.git.compute_hotspots", return_value=[]):
             cmd_hotspots(_args(str(tmp_path), json=True))
         data = json.loads(capsys.readouterr().out)
         assert data == {"hotspots": []}
 
     def test_limit_passed_to_compute(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_hotspots", return_value=[]) as mock_fn:
+        with patch("debtector.cli.git.compute_hotspots", return_value=[]) as mock_fn:
             cmd_hotspots(_args(str(tmp_path), limit=5))
         mock_fn.assert_called_once()
         # limit must appear as keyword arg
         assert "limit=5" in str(mock_fn.call_args)
 
     def test_since_passed_to_compute(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_hotspots", return_value=[]) as mock_fn:
+        with patch("debtector.cli.git.compute_hotspots", return_value=[]) as mock_fn:
             cmd_hotspots(_args(str(tmp_path), since="6 months ago"))
         mock_fn.assert_called_once()
         call_args = mock_fn.call_args
         assert "6 months ago" in str(call_args)
 
     def test_empty_result_prints_message(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_hotspots", return_value=[]):
+        with patch("debtector.cli.git.compute_hotspots", return_value=[]):
             cmd_hotspots(_args(str(tmp_path)))
         out = capsys.readouterr().out
         assert "no hotspots" in out.lower() or "no data" in out.lower()
@@ -182,14 +181,14 @@ class TestCmdTemporalCoupling:
     """Tests for debtector temporal-coupling."""
 
     def test_human_output_shows_columns(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_temporal_coupling", return_value=_TEMPORAL):
+        with patch("debtector.cli.git.compute_temporal_coupling", return_value=_TEMPORAL):
             cmd_temporal_coupling(_args(str(tmp_path)))
         out = capsys.readouterr().out
         assert "src/auth.py" in out
         assert "src/models.py" in out
 
     def test_json_output_structure(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_temporal_coupling", return_value=_TEMPORAL):
+        with patch("debtector.cli.git.compute_temporal_coupling", return_value=_TEMPORAL):
             cmd_temporal_coupling(_args(str(tmp_path), json=True))
         data = json.loads(capsys.readouterr().out)
         assert "temporal_coupling" in data
@@ -200,18 +199,18 @@ class TestCmdTemporalCoupling:
         assert "coupling_ratio" in entry
 
     def test_json_empty_when_no_data(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_temporal_coupling", return_value=[]):
+        with patch("debtector.cli.git.compute_temporal_coupling", return_value=[]):
             cmd_temporal_coupling(_args(str(tmp_path), json=True))
         data = json.loads(capsys.readouterr().out)
         assert data == {"temporal_coupling": []}
 
     def test_min_shared_passed_to_compute(self, tmp_path: Path) -> None:
-        with patch("debtector.cli.compute_temporal_coupling", return_value=[]) as mock_fn:
+        with patch("debtector.cli.git.compute_temporal_coupling", return_value=[]) as mock_fn:
             cmd_temporal_coupling(_args(str(tmp_path), min_shared=10))
         assert "10" in str(mock_fn.call_args)
 
     def test_min_ratio_passed_to_compute(self, tmp_path: Path) -> None:
-        with patch("debtector.cli.compute_temporal_coupling", return_value=[]) as mock_fn:
+        with patch("debtector.cli.git.compute_temporal_coupling", return_value=[]) as mock_fn:
             cmd_temporal_coupling(_args(str(tmp_path), min_ratio=0.5))
         assert "0.5" in str(mock_fn.call_args)
 
@@ -225,21 +224,21 @@ class TestCmdBusFactor:
     """Tests for debtector bus-factor."""
 
     def test_human_output_shows_authors(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_bus_factor", return_value=_BUS):
+        with patch("debtector.cli.git.compute_bus_factor", return_value=_BUS):
             cmd_bus_factor(_args(str(tmp_path)))
         out = capsys.readouterr().out
         assert "Alice" in out
         assert "Bob" in out
 
     def test_human_output_shows_file_paths(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_bus_factor", return_value=_BUS):
+        with patch("debtector.cli.git.compute_bus_factor", return_value=_BUS):
             cmd_bus_factor(_args(str(tmp_path)))
         out = capsys.readouterr().out
         assert "src/auth.py" in out
         assert "src/models.py" in out
 
     def test_json_output_structure(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_bus_factor", return_value=_BUS):
+        with patch("debtector.cli.git.compute_bus_factor", return_value=_BUS):
             cmd_bus_factor(_args(str(tmp_path), json=True))
         data = json.loads(capsys.readouterr().out)
         assert "bus_factor" in data
@@ -250,7 +249,7 @@ class TestCmdBusFactor:
         assert "bus_factor" in entry
 
     def test_json_empty_when_no_data(self, tmp_path: Path, capsys) -> None:
-        with patch("debtector.cli.compute_bus_factor", return_value=[]):
+        with patch("debtector.cli.git.compute_bus_factor", return_value=[]):
             cmd_bus_factor(_args(str(tmp_path), json=True))
         data = json.loads(capsys.readouterr().out)
         assert data == {"bus_factor": []}
@@ -266,9 +265,9 @@ class TestCmdGitCoupling:
 
     def test_human_output_contains_all_sections(self, tmp_path: Path, capsys) -> None:
         with (
-            patch("debtector.cli.compute_hotspots", return_value=_HOTSPOTS),
-            patch("debtector.cli.compute_temporal_coupling", return_value=_TEMPORAL),
-            patch("debtector.cli.compute_bus_factor", return_value=_BUS),
+            patch("debtector.cli.git.compute_hotspots", return_value=_HOTSPOTS),
+            patch("debtector.cli.git.compute_temporal_coupling", return_value=_TEMPORAL),
+            patch("debtector.cli.git.compute_bus_factor", return_value=_BUS),
         ):
             cmd_git_coupling(_args(str(tmp_path)))
         out = capsys.readouterr().out
@@ -276,9 +275,9 @@ class TestCmdGitCoupling:
 
     def test_json_output_has_all_keys(self, tmp_path: Path, capsys) -> None:
         with (
-            patch("debtector.cli.compute_hotspots", return_value=_HOTSPOTS),
-            patch("debtector.cli.compute_temporal_coupling", return_value=_TEMPORAL),
-            patch("debtector.cli.compute_bus_factor", return_value=_BUS),
+            patch("debtector.cli.git.compute_hotspots", return_value=_HOTSPOTS),
+            patch("debtector.cli.git.compute_temporal_coupling", return_value=_TEMPORAL),
+            patch("debtector.cli.git.compute_bus_factor", return_value=_BUS),
         ):
             cmd_git_coupling(_args(str(tmp_path), json=True))
         data = json.loads(capsys.readouterr().out)
@@ -288,9 +287,9 @@ class TestCmdGitCoupling:
 
     def test_json_empty_all_keys_present(self, tmp_path: Path, capsys) -> None:
         with (
-            patch("debtector.cli.compute_hotspots", return_value=[]),
-            patch("debtector.cli.compute_temporal_coupling", return_value=[]),
-            patch("debtector.cli.compute_bus_factor", return_value=[]),
+            patch("debtector.cli.git.compute_hotspots", return_value=[]),
+            patch("debtector.cli.git.compute_temporal_coupling", return_value=[]),
+            patch("debtector.cli.git.compute_bus_factor", return_value=[]),
         ):
             cmd_git_coupling(_args(str(tmp_path), json=True))
         data = json.loads(capsys.readouterr().out)
