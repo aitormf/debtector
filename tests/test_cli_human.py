@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from debtector.cli import (
-    _get_store,
     cmd_callers,
     cmd_impact,
     cmd_imports,
@@ -19,6 +18,7 @@ from debtector.cli import (
     cmd_summary,
     main,
 )
+from debtector.cli.common import _get_store
 
 # ──────────────────────────────────────────────
 # Helpers
