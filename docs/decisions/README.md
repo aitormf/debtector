@@ -22,5 +22,8 @@ Por qué el sistema es como es: decisiones de arquitectura, reglas de negocio y 
 | [D-0010](0010-function-complexity-in-diff.md) | Qué funciones entran en el diff por complejidad | rule | accepted | src/debtector/diff.py, docs/diff-schema.md |
 | [D-0011](0011-cli-package-one-module-per-group.md) | La CLI es un paquete con un módulo por grupo de comandos | architecture | accepted | src/debtector/cli/, tests/ |
 | [D-0012](0012-coupling-counts-distinct-internal-modules.md) | Ca y Ce cuentan módulos internos distintos, sin imports externos ni anotaciones de tipo | rule | accepted | src/debtector/metrics.py, docs/audit-schema.md, docs/diff-schema.md |
-| [D-0013](0013-pure-facades-out-of-sdp.md) | Las fachadas puras de paquete no participan en las violaciones SDP | rule | accepted | src/debtector/metrics.py, docs/audit-schema.md, docs/diff-schema.md |
+| [D-0013](0013-pure-facades-out-of-sdp.md) | Las fachadas puras de paquete no participan en las violaciones SDP | rule | superseded | src/debtector/metrics.py, docs/audit-schema.md, docs/diff-schema.md |
 | [D-0014](0014-baseline-records-metrics-version.md) | El baseline guarda la versión de la métrica y no se compara el acoplamiento entre versiones | rule | accepted | src/debtector/metrics.py, src/debtector/cli/baseline.py |
+| [D-0015](0015-tests-out-of-coupling-metrics.md) | Los ficheros de test no cuentan en las métricas de acoplamiento | rule | accepted | src/debtector/metrics.py, docs/audit-schema.md, docs/diff-schema.md |
+| [D-0016](0016-python-imports-by-package-root.md) | Los imports absolutos de Python se resuelven desde la raíz del paquete | architecture | accepted | src/debtector/metrics.py |
+| [D-0017](0017-js-barrels-are-facades.md) | Las fachadas puras de paquete, Python o JS/TS, no participan en las violaciones SDP | rule | accepted | src/debtector/metrics.py, docs/audit-schema.md, docs/diff-schema.md |
