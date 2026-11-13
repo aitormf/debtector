@@ -1,300 +1,18 @@
 {
-  "metrics_version": 4,
-  "saved_at": "2026-11-13T12:32:28.701700+00:00",
+  "metrics_version": 11,
+  "saved_at": "2026-11-13T15:36:56.136739+00:00",
   "modules": [
-    {
-      "file_path": "tests/test_metrics_god_modules.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_logging.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_codeindexignore.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_cli_audit.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_covers.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_action_publish.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/conftest.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_metrics_resolution.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_metrics_inheritance.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_diff_complexity.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_metrics_cycles.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_config.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_graph_store.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_action_publish_edges.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_cli_language.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_models.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_parser_version.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_git_history.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_fts.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_indexer.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_graph_store_extra.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_indexer_edge_cases.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/parser/test_python_relative_imports.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/parser/__init__.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/parser/test_calls.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/parser/test_complexity.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/parser/test_js_parser_extra.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/parser/test_uses_type.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/parser/test_python_parser.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/parser/test_python_parser_extra.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/parser/test_js_parser.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/parser/test_complexity_parsers.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/audit/test_untested_files.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/audit/__init__.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/audit/test_actionable_hotspots.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/audit/test_health_score.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/audit/test_audit_schema_doc.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/audit/test_cycle_priority.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/audit/test_lcom4.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/audit/test_testrisk_joins.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/fixtures/calls_sample.ts",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/fixtures/sample.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/fixtures/python_extras.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/fixtures/sample.ts",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/fixtures/covers_prod.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/fixtures/js_commonjs.js",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/fixtures/test_covers_sample.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/fixtures/calls_sample.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
     {
       "file_path": "scripts/action_publish.py",
       "fan_in": 0.0,
       "fan_out": 0.0,
       "instability": 0.0
+    },
+    {
+      "file_path": "src/debtector/__init__.py",
+      "fan_in": 0.0,
+      "fan_out": 3.0,
+      "instability": 1.0
     },
     {
       "file_path": "src/debtector/config.py",
@@ -309,8 +27,14 @@
       "instability": 0.2857
     },
     {
+      "file_path": "src/debtector/metrics.py",
+      "fan_in": 10.0,
+      "fan_out": 2.0,
+      "instability": 0.1667
+    },
+    {
       "file_path": "src/debtector/models.py",
-      "fan_in": 13.0,
+      "fan_in": 14.0,
       "fan_out": 0.0,
       "instability": 0.0
     },
@@ -334,21 +58,51 @@
     },
     {
       "file_path": "src/debtector/indexer.py",
-      "fan_in": 3.0,
+      "fan_in": 4.0,
       "fan_out": 4.0,
-      "instability": 0.5714
+      "instability": 0.5
     },
     {
       "file_path": "src/debtector/graph_store.py",
-      "fan_in": 8.0,
+      "fan_in": 9.0,
       "fan_out": 1.0,
-      "instability": 0.1111
+      "instability": 0.1
+    },
+    {
+      "file_path": "src/debtector/cli/__init__.py",
+      "fan_in": 0.0,
+      "fan_out": 1.0,
+      "instability": 1.0
+    },
+    {
+      "file_path": "src/debtector/cli/app.py",
+      "fan_in": 1.0,
+      "fan_out": 8.0,
+      "instability": 0.8889
+    },
+    {
+      "file_path": "src/debtector/cli/git.py",
+      "fan_in": 1.0,
+      "fan_out": 2.0,
+      "instability": 0.6667
     },
     {
       "file_path": "src/debtector/cli/quality.py",
       "fan_in": 1.0,
       "fan_out": 8.0,
       "instability": 0.8889
+    },
+    {
+      "file_path": "src/debtector/cli/pr_diff.py",
+      "fan_in": 1.0,
+      "fan_out": 6.0,
+      "instability": 0.8571
+    },
+    {
+      "file_path": "src/debtector/cli/coupling.py",
+      "fan_in": 1.0,
+      "fan_out": 4.0,
+      "instability": 0.8
     },
     {
       "file_path": "src/debtector/cli/reporters.py",
@@ -367,6 +121,18 @@
       "fan_in": 1.0,
       "fan_out": 3.0,
       "instability": 0.75
+    },
+    {
+      "file_path": "src/debtector/cli/report.py",
+      "fan_in": 1.0,
+      "fan_out": 4.0,
+      "instability": 0.8
+    },
+    {
+      "file_path": "src/debtector/cli/baseline.py",
+      "fan_in": 1.0,
+      "fan_out": 5.0,
+      "instability": 0.8333
     },
     {
       "file_path": "src/debtector/parser/__init__.py",
@@ -451,222 +217,12 @@
       "fan_in": 1.0,
       "fan_out": 0.0,
       "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_cli_coupling_calibration.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_cli_complexity.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_diff_base_ref.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_diff_complexity_cli.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_cli_metrics.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_severity.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_metrics_uses_type.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_metrics.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_metrics_sdp.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_diff_markdown.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_git_paths_integration.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_diff_hotspots.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_silent_mode.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_diff_base_ref_edges.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_cli_json.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_diff.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_cli_human.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_test_paths.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_ratcheting.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_cli_baseline.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_cli_git.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/test_ci_reporter.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/audit/test_hotspot_severity.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/audit/test_hotspot_complexity.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/audit/test_health_score_calibration.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "tests/audit/test_complexity_findings.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "src/debtector/__init__.py",
-      "fan_in": 0.0,
-      "fan_out": 0.0,
-      "instability": 0.0
-    },
-    {
-      "file_path": "src/debtector/cli/__init__.py",
-      "fan_in": 0.0,
-      "fan_out": 1.0,
-      "instability": 1.0
-    },
-    {
-      "file_path": "src/debtector/cli/app.py",
-      "fan_in": 1.0,
-      "fan_out": 8.0,
-      "instability": 0.8889
-    },
-    {
-      "file_path": "src/debtector/cli/git.py",
-      "fan_in": 1.0,
-      "fan_out": 2.0,
-      "instability": 0.6667
-    },
-    {
-      "file_path": "src/debtector/cli/pr_diff.py",
-      "fan_in": 1.0,
-      "fan_out": 6.0,
-      "instability": 0.8571
-    },
-    {
-      "file_path": "src/debtector/cli/coupling.py",
-      "fan_in": 1.0,
-      "fan_out": 4.0,
-      "instability": 0.8
-    },
-    {
-      "file_path": "src/debtector/cli/report.py",
-      "fan_in": 1.0,
-      "fan_out": 4.0,
-      "instability": 0.8
-    },
-    {
-      "file_path": "src/debtector/cli/baseline.py",
-      "fan_in": 1.0,
-      "fan_out": 5.0,
-      "instability": 0.8333
-    },
-    {
-      "file_path": "src/debtector/metrics.py",
-      "fan_in": 10.0,
-      "fan_out": 2.0,
-      "instability": 0.1667
     }
   ],
   "cycles": [],
   "god_modules": [
-    "src/debtector/models.py",
-    "src/debtector/metrics.py"
+    "src/debtector/metrics.py",
+    "src/debtector/models.py"
   ],
   "sdp_violations": [
     {
