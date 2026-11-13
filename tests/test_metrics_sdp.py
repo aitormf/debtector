@@ -97,3 +97,55 @@ class TestSdpViolations:
     def test_external_imports_are_ignored(self, tmp_db: GraphStore) -> None:
         _add(tmp_db, "src/a.py", "flask")
         assert sdp_violations(tmp_db) == []
+
+
+def _class(path: str, name: str) -> NodeInfo:
+    return NodeInfo(
+        kind=NodeKind.CLASS,
+        name=name,
+        qualified_name=f"{path}::{name}",
+        file_path=path,
+        language="python",
+    )
+
+
+def _stable_to_unstable(
+    store: GraphStore, src: str, tgt: str, src_extra: list[NodeInfo] | None = None
+) -> None:
+    """``src`` (Ca=3, Ce=1, I=0.25) imports ``tgt`` (Ca=1, Ce=2, I=0.667)."""
+    for i in range(3):
+        _add(store, f"src/x{i}.py", src)
+    store.store_file(src, [_file(src), *(src_extra or [])], [_import(src, tgt)])
+    _add(store, tgt, "src/f.py", "src/r.py")
+    _add(store, "src/f.py")
+    _add(store, "src/r.py")
+
+
+class TestPureFacadesOutOfSdp:
+    """A __init__.py without classes or functions is not part of SDP (R4, D-0013)."""
+
+    def test_E13_facade_as_source(self, tmp_db: GraphStore) -> None:
+        _stable_to_unstable(tmp_db, "src/audit/__init__.py", "src/audit/x.py")
+        assert sdp_violations(tmp_db) == []
+
+    def test_E14_facade_as_target(self, tmp_db: GraphStore) -> None:
+        # c (I=0.25) -> pkg/__init__ (I=0.667), facade as destination
+        _stable_to_unstable(tmp_db, "src/c.py", "src/pkg/__init__.py")
+        assert sdp_violations(tmp_db) == []
+
+    def test_E15_init_with_a_class_still_counts(self, tmp_db: GraphStore) -> None:
+        path = "src/parser/__init__.py"
+        _stable_to_unstable(tmp_db, "src/indexer.py", path)
+        # same shape, but the __init__ defines a class: it is not a facade
+        tmp_db.store_file(
+            path,
+            [_file(path), _class(path, "ParserRegistry")],
+            [_import(path, "src/f.py"), _import(path, "src/r.py")],
+        )
+        found = sdp_violations(tmp_db, margin=0.1)
+        assert [(v.source, v.target) for v in found] == [("src/indexer.py", path)]
+
+    def test_E16_metrics_version_is_4(self) -> None:
+        from debtector.metrics import METRICS_VERSION
+
+        assert METRICS_VERSION == 4
