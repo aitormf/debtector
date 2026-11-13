@@ -1,7 +1,7 @@
 ---
 id: T7
 title: Acoplamiento en cli/coupling.py
-status: todo
+status: done
 depends_on: [T6]
 examples: []
 verification: uv run pytest -q && uv run ruff check .
