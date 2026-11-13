@@ -1,7 +1,7 @@
 ---
 id: T1
 title: La resolución usa los nombres importados para ir al submódulo
-status: todo
+status: done
 depends_on: []
 examples: [E5, E6, E7, E8, E9, E10, E11, E12, E13]
 verification: uv run pytest tests/test_metrics_from_import.py -q

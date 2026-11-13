@@ -21,6 +21,7 @@ once however many import statements there are (D-0012).
 
 from __future__ import annotations
 
+import json
 import posixpath
 import statistics
 from collections import defaultdict
@@ -193,6 +194,40 @@ def _resolve_import_target(
     return target  # unresolved → external package
 
 
+def _resolve_import_targets(
+    target: str,
+    extra: str | None,
+    source_file: str,
+    module_map: dict[str, str],
+    files: set[str],
+) -> set[str]:
+    """Resolve an IMPORTS_FROM edge to the set of files it depends on (D-0018).
+
+    Without ``extra.names`` the edge resolves as :func:`_resolve_import_target`.
+    With names, each one that is an indexed module (``X.a``) gives that file, and
+    ``X`` itself is added when some name is not a module. Unresolved targets are
+    returned as they are (callers filter them against the indexed files).
+    """
+    try:
+        names = json.loads(extra).get("names") if extra else None
+    except (ValueError, AttributeError):
+        names = None
+    if not names:
+        return {_resolve_import_target(target, source_file, module_map, files)}
+    prefix = target if target.endswith(".") else target + "."
+    resolved: set[str] = set()
+    needs_parent = False
+    for name in names:
+        sub = _resolve_import_target(prefix + name, source_file, module_map, files)
+        if sub in files:
+            resolved.add(sub)
+        else:
+            needs_parent = True
+    if needs_parent:
+        resolved.add(_resolve_import_target(target, source_file, module_map, files))
+    return resolved
+
+
 def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     """Compute Ca, Ce and I for all indexed modules.
 
@@ -235,7 +270,7 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     ca_map: dict[str, float] = {}
 
     import_rows = conn.execute(
-        "SELECT source_qualified, target_qualified, file_path FROM edges"
+        "SELECT source_qualified, target_qualified, file_path, extra FROM edges"
         " WHERE kind = ? AND file_path NOT LIKE '../%'",
         (EdgeKind.IMPORTS_FROM,),
     ).fetchall()
@@ -243,14 +278,14 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     seen_pairs: set[tuple[str, str]] = set()
     for r in import_rows:
         src = r["source_qualified"]
-        resolved = _resolve_import_target(
-            r["target_qualified"], r["file_path"], module_map, file_paths
-        )
-        if src not in file_paths or resolved not in file_paths or (src, resolved) in seen_pairs:
-            continue
-        seen_pairs.add((src, resolved))
-        ce_map[src] = ce_map.get(src, 0.0) + IMPORTS_FROM_WEIGHT
-        ca_map[resolved] = ca_map.get(resolved, 0.0) + IMPORTS_FROM_WEIGHT
+        for resolved in _resolve_import_targets(
+            r["target_qualified"], r["extra"], r["file_path"], module_map, file_paths
+        ):
+            if src not in file_paths or resolved not in file_paths or (src, resolved) in seen_pairs:
+                continue
+            seen_pairs.add((src, resolved))
+            ce_map[src] = ce_map.get(src, 0.0) + IMPORTS_FROM_WEIGHT
+            ca_map[resolved] = ca_map.get(resolved, 0.0) + IMPORTS_FROM_WEIGHT
 
     results: list[ModuleMetrics] = []
     for row in file_rows:
@@ -303,7 +338,7 @@ def find_cycles(store: GraphStore) -> list[list[str]]:
     # Build the adjacency list with indexed nodes only
     placeholders = ",".join("?" * len(_CYCLE_EDGE_KINDS))
     rows = conn.execute(
-        f"SELECT kind, source_qualified, target_qualified, file_path FROM edges"  # nosec B608
+        f"SELECT kind, source_qualified, target_qualified, file_path, extra FROM edges"  # nosec B608
         f" WHERE kind IN ({placeholders})",
         list(_CYCLE_EDGE_KINDS),
     ).fetchall()
@@ -315,9 +350,12 @@ def find_cycles(store: GraphStore) -> list[list[str]]:
     for r in rows:
         src, tgt = r["source_qualified"], r["target_qualified"]
         if r["kind"] == EdgeKind.IMPORTS_FROM:
-            tgt = _resolve_import_target(tgt, r["file_path"], module_map, file_set)
-        if src in file_set and tgt in file_set and tgt != src:
-            adj[src].append(tgt)
+            targets = _resolve_import_targets(tgt, r["extra"], r["file_path"], module_map, file_set)
+        else:
+            targets = {tgt}
+        for t in sorted(targets):
+            if src in file_set and t in file_set and t != src:
+                adj[src].append(t)
 
     # Iterative Tarjan algorithm for strongly connected components.
     # The explicit iterative version (worklist) is used instead of the
@@ -558,7 +596,7 @@ def sdp_violations(store: GraphStore, margin: float = 0.0) -> list[SdpViolation]
     facades = _pure_facades(store, set(instability))
 
     rows = store._conn.execute(
-        "SELECT source_qualified, target_qualified, file_path FROM edges"
+        "SELECT source_qualified, target_qualified, file_path, extra FROM edges"
         " WHERE kind = ? AND file_path NOT LIKE '../%'",
         (EdgeKind.IMPORTS_FROM,),
     ).fetchall()
@@ -566,12 +604,12 @@ def sdp_violations(store: GraphStore, margin: float = 0.0) -> list[SdpViolation]
     pairs: set[tuple[str, str]] = set()
     for r in rows:
         src = r["source_qualified"]
-        tgt = _resolve_import_target(
-            r["target_qualified"], r["file_path"], module_map, set(instability)
-        )
-        if src != tgt and src in instability and tgt in instability:
-            if src not in facades and tgt not in facades:
-                pairs.add((src, tgt))
+        for tgt in _resolve_import_targets(
+            r["target_qualified"], r["extra"], r["file_path"], module_map, set(instability)
+        ):
+            if src != tgt and src in instability and tgt in instability:
+                if src not in facades and tgt not in facades:
+                    pairs.add((src, tgt))
 
     return [
         SdpViolation(src, tgt, instability[src], instability[tgt])
