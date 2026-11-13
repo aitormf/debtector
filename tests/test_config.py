@@ -181,3 +181,36 @@ class TestAuditThresholds:
 
         with pytest.raises(ValueError, match="audit.thresholds"):
             load_config(tmp_path)
+
+
+class TestTestriskDefaultsDependency:
+    """config.py reads the test-risk defaults from a leaf module, not audit/testrisk.py."""
+
+    def test_config_does_not_import_testrisk(self) -> None:
+        import ast
+
+        import debtector.config as config_module
+
+        tree = ast.parse(Path(config_module.__file__).read_text(encoding="utf-8"))
+        imported = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
+        assert "audit.testrisk" not in imported
+
+    def test_testrisk_uses_config_defaults(self) -> None:
+        from debtector import config
+        from debtector.audit import testrisk
+
+        assert config.DEFAULT_HIGH_CE == testrisk.DEFAULT_HIGH_CE == 10.0
+        assert config.DEFAULT_HIGH_CHURN == testrisk.DEFAULT_HIGH_CHURN == 5
+        assert config.DEFAULT_HIGH_CA == testrisk.DEFAULT_HIGH_CA == 10.0
+
+    def test_config_imports_cleanly_in_a_fresh_interpreter(self) -> None:
+        import subprocess  # nosec B404 - fixed argv, no shell
+        import sys
+
+        result = subprocess.run(  # nosec B603 - fixed argv
+            [sys.executable, "-c", "import debtector.config"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr

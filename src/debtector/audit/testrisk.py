@@ -22,13 +22,7 @@ from dataclasses import dataclass, field
 
 from ..git_history import BusFactorMetrics, ChurnMetrics
 from ..metrics import ModuleMetrics
-
-#: Default Ce above which an untested module is flagged "high-coupling".
-DEFAULT_HIGH_CE: float = 10.0
-#: Default commit count above which an untested module is flagged "hotspot".
-DEFAULT_HIGH_CHURN: int = 5
-#: Default Ca above which a bus-factor-1 module is "critical knowledge".
-DEFAULT_HIGH_CA: float = 10.0
+from .defaults import DEFAULT_HIGH_CA, DEFAULT_HIGH_CE, DEFAULT_HIGH_CHURN
 
 
 @dataclass(frozen=True)

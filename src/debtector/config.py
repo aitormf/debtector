@@ -49,12 +49,12 @@ from pathlib import Path
 import structlog
 
 from .audit.complexity import DEFAULT_COMPLEXITY_HIGH, DEFAULT_COMPLEXITY_MEDIUM
+from .audit.defaults import DEFAULT_HIGH_CA, DEFAULT_HIGH_CE, DEFAULT_HIGH_CHURN
 from .audit.health_score import (
     DEFAULT_HOTSPOT_HIGH_FACTOR,
     DEFAULT_HOTSPOT_MIN_SCORE,
     DEFAULT_HOTSPOT_PERCENTILE,
 )
-from .audit.testrisk import DEFAULT_HIGH_CA, DEFAULT_HIGH_CE, DEFAULT_HIGH_CHURN
 
 log = structlog.get_logger()
 
