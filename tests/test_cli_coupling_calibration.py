@@ -9,10 +9,10 @@ from unittest.mock import patch
 
 import pytest
 
-from debtector.cli import cmd_report
 from debtector.cli.baseline import cmd_baseline
 from debtector.cli.common import _get_store
 from debtector.cli.coupling import cmd_coupling
+from debtector.cli.report import cmd_report
 from debtector.logging import configure_logging
 from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
@@ -107,9 +107,9 @@ class TestCouplingOutput:
         _seed(str(tmp_path), _VIOLATING)
         args = argparse.Namespace(project=str(tmp_path), json=True, limit=None)
         with (
-            patch("debtector.cli.compute_hotspots", return_value=[]),
-            patch("debtector.cli.compute_temporal_coupling", return_value=[]),
-            patch("debtector.cli.compute_bus_factor", return_value=[]),
+            patch("debtector.cli.report.compute_hotspots", return_value=[]),
+            patch("debtector.cli.report.compute_temporal_coupling", return_value=[]),
+            patch("debtector.cli.report.compute_bus_factor", return_value=[]),
         ):
             cmd_report(args)
         data = json.loads(capsys.readouterr().out)

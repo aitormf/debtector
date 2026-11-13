@@ -10,13 +10,14 @@ from unittest.mock import patch
 
 import pytest
 
-from debtector.cli import _get_store, cmd_report
+from debtector.cli.common import _get_store
 from debtector.cli.git import (
     cmd_bus_factor,
     cmd_git_coupling,
     cmd_hotspots,
     cmd_temporal_coupling,
 )
+from debtector.cli.report import cmd_report
 from debtector.git_history import BusFactorMetrics, HotspotMetrics, TemporalCoupling
 from debtector.logging import configure_logging
 from debtector.metrics import ModuleMetrics, SdpViolation
@@ -307,9 +308,9 @@ class TestCmdReport:
     def test_json_has_structural_and_behavioral_keys(self, tmp_path: Path, capsys) -> None:
         _seed(str(tmp_path), {"src/a.py": [], "src/b.py": []})
         with (
-            patch("debtector.cli.compute_hotspots", return_value=_HOTSPOTS),
-            patch("debtector.cli.compute_temporal_coupling", return_value=_TEMPORAL),
-            patch("debtector.cli.compute_bus_factor", return_value=_BUS),
+            patch("debtector.cli.report.compute_hotspots", return_value=_HOTSPOTS),
+            patch("debtector.cli.report.compute_temporal_coupling", return_value=_TEMPORAL),
+            patch("debtector.cli.report.compute_bus_factor", return_value=_BUS),
         ):
             cmd_report(_args(str(tmp_path), json=True))
         data = json.loads(capsys.readouterr().out)
@@ -325,9 +326,9 @@ class TestCmdReport:
     def test_human_output_has_both_sections(self, tmp_path: Path, capsys) -> None:
         _seed(str(tmp_path), {"src/a.py": [], "src/b.py": []})
         with (
-            patch("debtector.cli.compute_hotspots", return_value=_HOTSPOTS),
-            patch("debtector.cli.compute_temporal_coupling", return_value=_TEMPORAL),
-            patch("debtector.cli.compute_bus_factor", return_value=_BUS),
+            patch("debtector.cli.report.compute_hotspots", return_value=_HOTSPOTS),
+            patch("debtector.cli.report.compute_temporal_coupling", return_value=_TEMPORAL),
+            patch("debtector.cli.report.compute_bus_factor", return_value=_BUS),
         ):
             cmd_report(_args(str(tmp_path)))
         out = capsys.readouterr().out
@@ -337,9 +338,9 @@ class TestCmdReport:
     def test_json_output_is_valid_json(self, tmp_path: Path, capsys) -> None:
         _seed(str(tmp_path), {"src/a.py": []})
         with (
-            patch("debtector.cli.compute_hotspots", return_value=[]),
-            patch("debtector.cli.compute_temporal_coupling", return_value=[]),
-            patch("debtector.cli.compute_bus_factor", return_value=[]),
+            patch("debtector.cli.report.compute_hotspots", return_value=[]),
+            patch("debtector.cli.report.compute_temporal_coupling", return_value=[]),
+            patch("debtector.cli.report.compute_bus_factor", return_value=[]),
         ):
             cmd_report(_args(str(tmp_path), json=True))
         # Must not raise
@@ -352,16 +353,16 @@ class TestCmdReport:
         flagged = ModuleMetrics(file_path="src/a.py", fan_in=1.0, fan_out=4.0, instability=0.8)
         clean = ModuleMetrics(file_path="src/b.py", fan_in=5.0, fan_out=1.0, instability=0.167)
         with (
-            patch("debtector.cli.compute_metrics", return_value=[flagged, clean]),
+            patch("debtector.cli.report.compute_metrics", return_value=[flagged, clean]),
             patch("debtector.cli.common.god_modules", return_value=[]),
             patch(
                 "debtector.cli.common.sdp_violations",
                 return_value=[SdpViolation("src/b.py", "src/a.py", 0.167, 0.8)],
             ),
-            patch("debtector.cli.find_cycles", return_value=[]),
-            patch("debtector.cli.compute_hotspots", return_value=[]),
-            patch("debtector.cli.compute_temporal_coupling", return_value=[]),
-            patch("debtector.cli.compute_bus_factor", return_value=[]),
+            patch("debtector.cli.report.find_cycles", return_value=[]),
+            patch("debtector.cli.report.compute_hotspots", return_value=[]),
+            patch("debtector.cli.report.compute_temporal_coupling", return_value=[]),
+            patch("debtector.cli.report.compute_bus_factor", return_value=[]),
         ):
             cmd_report(_args(str(tmp_path), json=True))
         data = json.loads(capsys.readouterr().out)
@@ -375,9 +376,9 @@ class TestCmdReport:
         zero_score = HotspotMetrics(file_path="src/a.py", churn=5, coupling=0.0, hotspot_score=0.0)
         nonzero = HotspotMetrics(file_path="src/b.py", churn=3, coupling=2.0, hotspot_score=6.0)
         with (
-            patch("debtector.cli.compute_hotspots", return_value=[zero_score, nonzero]),
-            patch("debtector.cli.compute_temporal_coupling", return_value=[]),
-            patch("debtector.cli.compute_bus_factor", return_value=[]),
+            patch("debtector.cli.report.compute_hotspots", return_value=[zero_score, nonzero]),
+            patch("debtector.cli.report.compute_temporal_coupling", return_value=[]),
+            patch("debtector.cli.report.compute_bus_factor", return_value=[]),
         ):
             cmd_report(_args(str(tmp_path), json=True))
         data = json.loads(capsys.readouterr().out)
@@ -395,9 +396,9 @@ class TestCmdReport:
             file_path="src/b.py", top_author="Bob", top_author_pct=55.0, bus_factor=2
         )
         with (
-            patch("debtector.cli.compute_hotspots", return_value=[]),
-            patch("debtector.cli.compute_temporal_coupling", return_value=[]),
-            patch("debtector.cli.compute_bus_factor", return_value=[risky, safe]),
+            patch("debtector.cli.report.compute_hotspots", return_value=[]),
+            patch("debtector.cli.report.compute_temporal_coupling", return_value=[]),
+            patch("debtector.cli.report.compute_bus_factor", return_value=[risky, safe]),
         ):
             cmd_report(_args(str(tmp_path), json=True))
         data = json.loads(capsys.readouterr().out)

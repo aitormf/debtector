@@ -1,7 +1,7 @@
 ---
 id: T9
 title: Informe combinado en cli/report.py
-status: todo
+status: done
 depends_on: [T8]
 examples: []
 verification: uv run pytest -q && uv run ruff check .
