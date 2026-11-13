@@ -1,7 +1,7 @@
 ---
 id: T1
 title: Paquete cli/ y helpers compartidos en cli/common.py
-status: todo
+status: done
 depends_on: []
 examples: []
 verification: uv run pytest -q && uv run ruff check .

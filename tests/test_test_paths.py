@@ -10,7 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from debtector.cli import _get_store, cmd_audit, cmd_index
+from debtector.cli import cmd_audit, cmd_index
+from debtector.cli.common import _get_store
 from debtector.config import load_config
 from debtector.logging import configure_logging
 from debtector.metrics import compute_metrics

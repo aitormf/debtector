@@ -22,6 +22,6 @@ def test_source_has_no_spanish_characters() -> None:
 
 def test_cli_has_no_common_spanish_words() -> None:
     """The CLI module has no common Spanish words in its text."""
-    text = (SRC / "cli.py").read_text(encoding="utf-8")
+    text = "\n".join(p.read_text(encoding="utf-8") for p in sorted((SRC / "cli").glob("*.py")))
     words = r"Sin cambios|guardado|Regresiones|Ciclos|Archivos|Errores|Ejecuta|sin datos"
     assert not re.search(words, text, re.IGNORECASE)

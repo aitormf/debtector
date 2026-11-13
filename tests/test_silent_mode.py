@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from debtector.cli import _get_store, cmd_baseline, cmd_metrics
+from debtector.cli import cmd_baseline, cmd_metrics
+from debtector.cli.common import _get_store
 from debtector.logging import configure_logging
 from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
