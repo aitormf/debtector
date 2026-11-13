@@ -131,7 +131,7 @@ class TestComputeMetrics:
         """E9: the Ca/Ce computation changed, so the version is 2 (D-0014)."""
         from debtector.metrics import METRICS_VERSION
 
-        assert METRICS_VERSION == 2
+        assert METRICS_VERSION >= 2  # bumped to 3 by T3 (E12)
 
     def test_fan_in_counts_incoming_imports(self, tmp_db: GraphStore) -> None:
         """Ca counts how many files import this one."""

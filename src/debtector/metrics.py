@@ -12,7 +12,8 @@ Computes structural metrics at module (file) level:
   and with an absolute minimum Ca (``god_module_min_ca``).
 - SDP violations: dependencies from a stable module to a more unstable one.
 
-Metrics are computed over the graph's IMPORTS_FROM edges. Ca and Ce count
+Metrics are computed over the graph's IMPORTS_FROM edges (USES_TYPE edges do
+not count: the import of a type already counts its module, D-0012). Ca and Ce count
 distinct internal modules: imports that do not resolve to an indexed File
 (external packages) are ignored, and each (importer, imported) pair counts
 once however many import statements there are (D-0012).
@@ -30,7 +31,7 @@ from .models import EdgeKind, NodeKind
 
 # Version of the Ca/Ce computation. Bump it when a change makes the numbers
 # incomparable with those of an older baseline (D-0014).
-METRICS_VERSION = 2
+METRICS_VERSION = 3
 
 # Edge kinds considered for cycle detection
 _CYCLE_EDGE_KINDS = (EdgeKind.IMPORTS_FROM, EdgeKind.CALLS)
@@ -46,12 +47,6 @@ _CYCLE_EDGE_KINDS = (EdgeKind.IMPORTS_FROM, EdgeKind.CALLS)
 #: Weight of IMPORTS_FROM edges: explicit structural coupling.
 IMPORTS_FROM_WEIGHT: float = 1.0
 
-#: Weight of USES_TYPE edges: coupling through type hints in signatures.
-#: Set equal to IMPORTS_FROM because a type hint implies a real dependency
-#: at import time (for type checkers, and at runtime with
-#: ``from __future__ import annotations`` disabled).
-USES_TYPE_WEIGHT: float = 1.0
-
 
 @dataclass
 class ModuleMetrics:
@@ -60,7 +55,7 @@ class ModuleMetrics:
     Args:
         file_path: Relative path of the file.
         fan_in: Fan-in (Ca) — weighted sum of incoming edges. IMPORTS_FROM
-            edges count 1.0; USES_TYPE edges count ``USES_TYPE_WEIGHT``.
+            edges count 1.0; USES_TYPE edges do not count.
         fan_out: Fan-out (Ce) — weighted sum of outgoing edges. Same weighting
             scheme as ``fan_in``.
         instability: I = Ce / (Ca + Ce). 0.0 if the module is isolated.
@@ -214,29 +209,6 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
         seen_pairs.add((src, resolved))
         ce_map[src] = ce_map.get(src, 0.0) + IMPORTS_FROM_WEIGHT
         ca_map[resolved] = ca_map.get(resolved, 0.0) + IMPORTS_FROM_WEIGHT
-
-    # Additional Ce: outgoing USES_TYPE edges (peso USES_TYPE_WEIGHT)
-    ut_ce_rows = conn.execute(
-        "SELECT source_qualified, COUNT(*) AS cnt FROM edges"
-        " WHERE kind = ? AND file_path NOT LIKE '../%' GROUP BY source_qualified",
-        (EdgeKind.USES_TYPE,),
-    ).fetchall()
-    for r in ut_ce_rows:
-        ce_map[r["source_qualified"]] = (
-            ce_map.get(r["source_qualified"], 0.0) + r["cnt"] * USES_TYPE_WEIGHT
-        )
-
-    # Additional Ca: incoming USES_TYPE edges (weight USES_TYPE_WEIGHT).
-    # They only count if the target is an indexed File node (internal resolution).
-    ut_ca_rows = conn.execute(
-        "SELECT target_qualified, COUNT(*) AS cnt FROM edges"
-        " WHERE kind = ? AND file_path NOT LIKE '../%' GROUP BY target_qualified",
-        (EdgeKind.USES_TYPE,),
-    ).fetchall()
-    for r in ut_ca_rows:
-        ca_map[r["target_qualified"]] = (
-            ca_map.get(r["target_qualified"], 0.0) + r["cnt"] * USES_TYPE_WEIGHT
-        )
 
     results: list[ModuleMetrics] = []
     for row in file_rows:
