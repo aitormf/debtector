@@ -1,7 +1,7 @@
 ---
 id: T3
 title: `baseline status` informa y bloquea las regresiones de complejidad
-status: todo
+status: done
 depends_on: [T1, T2]
 examples: [E9, E10, E11, E12, E13, E14, E15, E16]
 verification: uv run pytest tests/test_baseline_status_complexity.py -q

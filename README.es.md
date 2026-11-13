@@ -298,6 +298,7 @@ El flujo típico en CI es:
 - Si no existe `baseline.json` → exit 0 (modo silencioso, no bloquea)
 - Si existe y las métricas mejoran o son iguales → exit 0
 - Si hay nuevos ciclos, nuevos god modules o la inestabilidad empeora → exit 1
+- Las funciones nuevas o empeoradas con complejidad >= `complexity_medium` se informan y, con `complexity = "error"`, dan exit 1. Un baseline sin datos de complejidad, o guardado con otro `complexity_medium`, no compara la complejidad y pide volver a ejecutar `debtector baseline save`
 
 ### Configuración de severidad (`debtector.toml`)
 

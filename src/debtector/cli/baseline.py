@@ -20,7 +20,7 @@ from .common import (
     _sdp_dict,
     _warns,
 )
-from .reporters import _emit_github_annotations, _emit_gitlab_report, _sdp_text
+from .reporters import _complexity_text, _emit_github_annotations, _emit_gitlab_report, _sdp_text
 
 _BASELINE_FILE = ".debtector/baseline.json"
 
@@ -96,7 +96,7 @@ def _baseline_save(args) -> None:
 def _baseline_status(args) -> None:
     """Compare current metrics to the stored baseline and report regressions.
 
-    Each issue type (cycles, god_modules, instability) is filtered through the
+    Each issue type (cycles, god_modules, instability, complexity) is filtered through the
     severity configured in ``debtector.toml``:
 
     - ``error``   — contributes to exit code 1 (blocks CI).
@@ -123,6 +123,7 @@ def _baseline_status(args) -> None:
     current_cycles = find_cycles(store)
     current_gods = _configured_god_modules(store, cfg)
     current_sdp = _configured_sdp_violations(store, cfg)
+    current_complexity = _function_complexity(store)
     store.close()
 
     # A baseline from another metric version has incomparable Ca/Ce (D-0014); the
@@ -159,12 +160,31 @@ def _baseline_status(args) -> None:
                 }
             )
 
+    # Complexity (D-0010): new or worse functions at or above the threshold. A baseline
+    # without it, or saved with another threshold, is not comparable (D-0019).
+    complexity_regs: list[dict] = []
+    complexity_skipped = None
+    saved_cx = baseline.get("complexity")
+    medium = cfg.audit.complexity_medium
+    if saved_cx is None:
+        complexity_skipped = "baseline has no complexity"
+    elif saved_cx.get("medium") != medium:
+        complexity_skipped = f"baseline saved with complexity_medium {saved_cx.get('medium')}"
+    else:
+        known_cx = saved_cx.get("functions", {})
+        complexity_regs = [
+            {"qualified_name": qn, "file_path": path, "before": known_cx.get(qn), "after": cx}
+            for qn, (cx, path) in current_complexity.items()
+            if cx >= medium and (qn not in known_cx or cx > known_cx[qn])
+        ]
+
     # Decide whether each regression type blocks CI according to its severity
     has_blocking = (
         _blocks(new_cycles, sev.cycles)
         or _blocks(new_gods, sev.god_modules)
         or _blocks(regressions, sev.instability)
         or _blocks(new_sdp, sev.instability)
+        or _blocks(complexity_regs, sev.complexity)
     )
 
     if args.json:
@@ -173,7 +193,10 @@ def _baseline_status(args) -> None:
             "new_cycles": new_cycles,
             "new_god_modules": new_gods,
             "new_sdp_violations": new_sdp,
+            "complexity_regressions": complexity_regs,
         }
+        if complexity_skipped:
+            result["complexity_skipped"] = complexity_skipped
         if mismatch:
             result["metrics_version_mismatch"] = {
                 "baseline": saved_version,
@@ -189,6 +212,7 @@ def _baseline_status(args) -> None:
         or _warns(new_gods, sev.god_modules)
         or _warns(regressions, sev.instability)
         or _warns(new_sdp, sev.instability)
+        or _warns(complexity_regs, sev.complexity)
     )
 
     reporter = getattr(args, "reporter", None)
@@ -199,14 +223,17 @@ def _baseline_status(args) -> None:
             f"v{_metrics.METRICS_VERSION}: run debtector baseline save"
         )
 
+    if complexity_skipped:
+        print(f"⚠  complexity not compared ({complexity_skipped}): run debtector baseline save")
+
     if not has_any_warning:
         print("✓  No changes from baseline")
         return
 
     if reporter == "github":
-        _emit_github_annotations(new_cycles, new_gods, regressions, sev, new_sdp)
+        _emit_github_annotations(new_cycles, new_gods, regressions, sev, new_sdp, complexity_regs)
     elif reporter == "gitlab":
-        _emit_gitlab_report(new_cycles, new_gods, regressions, sev, new_sdp)
+        _emit_gitlab_report(new_cycles, new_gods, regressions, sev, new_sdp, complexity_regs)
     else:
         if _warns(new_cycles, sev.cycles):
             label = "⛔" if sev.cycles == Severity.ERROR else "⚠"
@@ -231,6 +258,12 @@ def _baseline_status(args) -> None:
             print(f"\n{label}  New SDP violations ({len(new_sdp)}):")
             for v in new_sdp:
                 print(f"   {_sdp_text(v)}")
+
+        if _warns(complexity_regs, sev.complexity):
+            label = "⛔" if sev.complexity == Severity.ERROR else "⚠"
+            print(f"\n{label}  Complexity regressions ({len(complexity_regs)}):")
+            for c in complexity_regs:
+                print(f"   {_complexity_text(c)}")
 
     if has_blocking:
         sys.exit(1)

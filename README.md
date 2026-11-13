@@ -302,6 +302,7 @@ The typical CI flow is:
 - If it exists and metrics are equal or improve → exit 0
 - If there are new cycles, new god modules, new SDP violations, or instability worsens → exit 1
 - A baseline saved by an older version has no SDP data: SDP violations are not compared until you run `debtector baseline save` again
+- New or worsened functions with complexity >= `complexity_medium` are reported and, with `complexity = "error"`, exit 1. A baseline without complexity data, or saved with another `complexity_medium`, skips this comparison and asks you to run `debtector baseline save` again
 
 ### Severity configuration (`debtector.toml`)
 
