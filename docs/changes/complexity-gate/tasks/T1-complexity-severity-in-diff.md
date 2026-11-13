@@ -1,7 +1,7 @@
 ---
 id: T1
 title: La severidad `complexity` decide si `diff` bloquea por complejidad
-status: todo
+status: done
 depends_on: []
 examples: [E1, E2, E3, E4, E5, E6]
 verification: uv run pytest tests/test_complexity_severity.py -q

@@ -93,14 +93,15 @@ def blocks_ci(result: dict, severity: MetricsSeverity) -> bool:
         severity: The ``[metrics.severity]`` configuration.
 
     Returns:
-        ``True`` if a new cycle, god module, SDP violation or instability regression
-        belongs to a type configured as ``error``.
+        ``True`` if a new cycle, god module, SDP violation, instability regression or
+        worsened function belongs to a type configured as ``error``.
     """
     pairs = (
         ("new_cycles", severity.cycles),
         ("new_god_modules", severity.god_modules),
         ("new_sdp_violations", severity.instability),
         ("instability_regressions", severity.instability),
+        ("worsened_functions", severity.complexity),
     )
     return any(result[key] and sev == Severity.ERROR for key, sev in pairs)
 
