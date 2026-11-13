@@ -52,5 +52,6 @@ jobs:
       - name: Push bump commit and tag
         if: steps.cz.outputs.bumped == 'true'
         run: |
-          git push
-          git push origin "refs/tags/v${{ steps.cz.outputs.version }}"
+          # One atomic push: the bump commit and its tag land together or not at all.
+          # Two separate pushes left main bumped without the tag (and no PyPI release).
+          git push --atomic origin HEAD:refs/heads/main "refs/tags/v${{ steps.cz.outputs.version }}"
