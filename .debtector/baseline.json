@@ -1,6 +1,6 @@
 {
   "metrics_version": 12,
-  "saved_at": "2026-11-13T15:49:54.311388+00:00",
+  "saved_at": "2026-11-13T23:42:34.569724+00:00",
   "modules": [
     {
       "file_path": "scripts/action_publish.py",
@@ -233,5 +233,16 @@
       "source": "src/debtector/indexer.py",
       "target": "src/debtector/parser/__init__.py"
     }
-  ]
+  ],
+  "complexity": {
+    "medium": 21,
+    "functions": {
+      "src/debtector/cli/baseline.py::_baseline_status": 56,
+      "src/debtector/cli/quality.py::cmd_audit": 37,
+      "src/debtector/cli/report.py::cmd_report": 37,
+      "src/debtector/indexer.py::Indexer.index": 22,
+      "src/debtector/metrics.py::find_cycles": 21,
+      "src/debtector/parser/python_parser.py::PythonParser._parse_from_import": 21
+    }
+  }
 }

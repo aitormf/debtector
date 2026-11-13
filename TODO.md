@@ -31,7 +31,7 @@ ICP: dev/tech lead que usa agentes de código.
 - [x] **Parser `git log --numstat`** — churn por módulo (commits que tocan cada archivo)
 - [x] **Hotspot score** — churn × complejidad ciclomática (Tornhill); el acoplamiento estructural se muestra como contexto. Antes: churn × acoplamiento
 - [x] **Complejidad ciclomática por función** — McCabe con tree-sitter en `Function`/`Method` (`extra.complexity`), comando `debtector complexity`; `PARSER_VERSION` fuerza el reindexado cuando cambia la salida de los parsers
-- [ ] **Complejidad en baseline/ratcheting** — a medias: `debtector diff` ya compara la complejidad entre la rama base y la PR; falta guardarla en `baseline.json` y en `baseline status`
+- [x] **Complejidad en baseline/ratcheting** — `baseline save` guarda la complejidad de las funciones >= `complexity_medium` y `baseline status` bloquea según `[metrics.severity] complexity`
 - [x] **Temporal coupling** — archivos que cambian juntos en commits con frecuencia > umbral, aunque no tengan import entre ellos
 - [x] **Bus factor por módulo** — porcentaje de código escrito por un único autor vía `git blame`
 - [x] **Integración Karajan** — interfaz JSON disponible en todos los comandos (`--json`); Karajan puede invocar `debtector report --json` directamente

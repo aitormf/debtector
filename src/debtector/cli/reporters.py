@@ -16,6 +16,12 @@ def _sdp_text(v: dict) -> str:
     )
 
 
+def _complexity_text(c: dict) -> str:
+    """One-line description of a complexity regression dict (``before`` may be ``None``)."""
+    before = "new" if c["before"] is None else c["before"]
+    return f"{c['qualified_name']}  complexity: {before} → {c['after']}"
+
+
 def _annotation_level(severity: Severity) -> str:
     """Map a :class:`Severity` to its GitHub Annotation level string."""
     return "error" if severity == Severity.ERROR else "warning"
@@ -43,6 +49,7 @@ def _emit_github_annotations(
     regressions: list,
     sev,
     new_sdp: list | None = None,
+    complexity: list | None = None,
 ) -> None:
     """Print GitHub Actions workflow commands for each regression.
 
@@ -54,6 +61,8 @@ def _emit_github_annotations(
         regressions: List of instability regression dicts.
         sev: :class:`~debtector.config.MetricsSeverity` instance.
         new_sdp: List of new SDP violation dicts (see :func:`_sdp_dict`).
+        complexity: List of complexity regression dicts (``qualified_name``, ``file_path``,
+            ``before``, ``after``).
     """
     if _warns(new_cycles, sev.cycles):
         level = _annotation_level(sev.cycles)
@@ -85,6 +94,13 @@ def _emit_github_annotations(
             safe_path = _safe_annotation_path(v["source"])
             print(f"::{level} file={safe_path},line=1::SDP violation: {_sdp_text(v)}")
 
+    complexity = complexity or []
+    if _warns(complexity, sev.complexity):
+        level = _annotation_level(sev.complexity)
+        for c in complexity:
+            safe_path = _safe_annotation_path(c["file_path"])
+            print(f"::{level} file={safe_path},line=1::Complexity: {_complexity_text(c)}")
+
 
 def _emit_gitlab_report(
     new_cycles: list,
@@ -92,6 +108,7 @@ def _emit_gitlab_report(
     regressions: list,
     sev,
     new_sdp: list | None = None,
+    complexity: list | None = None,
 ) -> None:
     """Print a GitLab CI–friendly report for each regression.
 
@@ -104,6 +121,8 @@ def _emit_gitlab_report(
         regressions: List of instability regression dicts.
         sev: :class:`~debtector.config.MetricsSeverity` instance.
         new_sdp: List of new SDP violation dicts (see :func:`_sdp_dict`).
+        complexity: List of complexity regression dicts (``qualified_name``, ``file_path``,
+            ``before``, ``after``).
     """
     ts = int(time.time())
 
@@ -143,3 +162,14 @@ def _emit_gitlab_report(
         for v in new_sdp:
             print(f"  {_sdp_text(v)}")
         print(f"\x1b[0Ksection_end:{ts}:sdp\r\x1b[0K")
+
+    complexity = complexity or []
+    if _warns(complexity, sev.complexity):
+        label = "ERROR" if sev.complexity == Severity.ERROR else "WARNING"
+        print(
+            f"\x1b[0Ksection_start:{ts}:complexity\r\x1b[0K"
+            f"[{label}] Complexity regressions ({len(complexity)})"
+        )
+        for c in complexity:
+            print(f"  {_complexity_text(c)}")
+        print(f"\x1b[0Ksection_end:{ts}:complexity\r\x1b[0K")
