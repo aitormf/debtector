@@ -1,7 +1,7 @@
 ---
 id: T4
 title: Cualquier require("<literal>") crea un import
-status: todo
+status: done
 depends_on: []
 examples: [E14, E15, E16, E17]
 verification: uv run pytest tests/parser/test_js_require.py -q
