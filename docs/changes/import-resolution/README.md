@@ -20,7 +20,7 @@ Además, los ficheros de test cuentan como módulos: salen como god modules (`te
 - Alias de rutas de `tsconfig.json` (`paths`), workspaces y monorepos que importan su propio paquete por nombre (`import { z } from "zod"` dentro de zod).
 - Namespace packages de Python sin `__init__.py` (PEP 420).
 - `import()` dinámico y `require()` con argumento que no es un literal.
-- Sacar de las métricas `scripts/`, `docs/` o benchmarks: para eso está `.codeindexignore`.
+- Sacar de las métricas `scripts/`, `docs/` o benchmarks: para eso está `.debtectorignore`.
 
 ## Mapa de ejemplos
 
