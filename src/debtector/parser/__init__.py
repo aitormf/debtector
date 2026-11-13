@@ -15,7 +15,9 @@ from .python_parser import PythonParser
 #: leading dots (``.c``, ``..util``), so they never match an absolute import;
 #: 6 = JS/TS ``require("<literal>")`` is an import wherever it is.
 #: 7 = JS/TS ``export ... from "<module>"`` reexports are imports.
-PARSER_VERSION = 7
+#: 8 = test files also follow ``test/``, ``__tests__/`` and .tsx/.jsx/.mjs/.cjs
+#:     suffixes; re-parse so their CALLS become COVERS.
+PARSER_VERSION = 8
 
 
 class ParserRegistry:
