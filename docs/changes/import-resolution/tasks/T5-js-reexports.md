@@ -1,7 +1,7 @@
 ---
 id: T5
 title: Un reexport export ... from crea un import
-status: todo
+status: done
 depends_on: []
 examples: [E18, E19, E20, E21]
 verification: uv run pytest tests/parser/test_js_reexports.py -q

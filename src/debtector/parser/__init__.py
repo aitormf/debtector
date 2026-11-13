@@ -14,7 +14,8 @@ from .python_parser import PythonParser
 #: inside blocks and methods of local classes; 5 = Python relative imports keep their
 #: leading dots (``.c``, ``..util``), so they never match an absolute import;
 #: 6 = JS/TS ``require("<literal>")`` is an import wherever it is.
-PARSER_VERSION = 6
+#: 7 = JS/TS ``export ... from "<module>"`` reexports are imports.
+PARSER_VERSION = 7
 
 
 class ParserRegistry:
