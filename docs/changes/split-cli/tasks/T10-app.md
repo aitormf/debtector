@@ -1,7 +1,7 @@
 ---
 id: T10
 title: Argparse en cli/app.py
-status: todo
+status: done
 depends_on: [T9]
 examples: []
 verification: uv run pytest -q && uv run ruff check .
