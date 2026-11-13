@@ -1,7 +1,7 @@
 ---
 id: T1
 title: El baseline guarda la versión de la métrica
-status: todo
+status: done
 depends_on: []
 examples: [E1, E2, E3, E4]
 verification: uv run pytest -q tests/test_cli_baseline.py tests/test_ratcheting.py
