@@ -112,8 +112,8 @@ class JavaScriptParser(LanguageParser):
     ):
         """Walk the AST and append IMPORTS_FROM edges for every import statement.
 
-        Handles ES module ``import`` statements and CommonJS ``require()`` calls
-        anywhere in the file (``var``, chained, nested).
+        Handles ES module ``import`` statements, ``export ... from`` reexports and
+        CommonJS ``require()`` calls anywhere in the file (``var``, chained, nested).
 
         Args:
             root: The root tree-sitter node of the parsed file.
@@ -124,7 +124,10 @@ class JavaScriptParser(LanguageParser):
                 objects are appended in-place.
         """
         for node in self._walk(root):
-            if node.type == "import_statement":
+            if node.type in ("import_statement", "export_statement"):
+                # ``export ... from "<module>"`` has a ``source``; local exports do not.
+                if node.type == "export_statement" and node.child_by_field_name("source") is None:
+                    continue
                 module = self._get_import_source(node, source)
                 if module:
                     edges.append(
