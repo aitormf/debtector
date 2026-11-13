@@ -1,7 +1,7 @@
 ---
 id: T3
 title: Un import .js/.jsx resuelve también al fichero .ts/.tsx
-status: todo
+status: done
 depends_on: []
 examples: [E10, E11, E12, E13]
 verification: uv run pytest tests/test_metrics_js_extensions.py -q
