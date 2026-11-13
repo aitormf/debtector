@@ -9,9 +9,10 @@ from unittest.mock import patch
 
 import pytest
 
-from debtector.cli import cmd_coupling, cmd_report
+from debtector.cli import cmd_report
 from debtector.cli.baseline import cmd_baseline
 from debtector.cli.common import _get_store
+from debtector.cli.coupling import cmd_coupling
 from debtector.logging import configure_logging
 from debtector.models import EdgeInfo, EdgeKind, NodeInfo, NodeKind
 
