@@ -27,3 +27,4 @@ Por qué el sistema es como es: decisiones de arquitectura, reglas de negocio y 
 | [D-0015](0015-tests-out-of-coupling-metrics.md) | Los ficheros de test no cuentan en las métricas de acoplamiento | rule | accepted | src/debtector/metrics.py, docs/audit-schema.md, docs/diff-schema.md |
 | [D-0016](0016-python-imports-by-package-root.md) | Los imports absolutos de Python se resuelven desde la raíz del paquete | architecture | accepted | src/debtector/metrics.py |
 | [D-0017](0017-js-barrels-are-facades.md) | Las fachadas puras de paquete, Python o JS/TS, no participan en las violaciones SDP | rule | accepted | src/debtector/metrics.py, docs/audit-schema.md, docs/diff-schema.md |
+| [D-0018](0018-from-import-resolves-submodules.md) | `from X import a` depende del submódulo `X.a` si existe; si no, de `X` | rule | accepted | src/debtector/metrics.py, src/debtector/parser/python_parser.py |
