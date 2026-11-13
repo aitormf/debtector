@@ -4,7 +4,7 @@ title: "debtector diff compara dos índices con las reglas de baseline status"
 type: rule
 status: accepted
 date: 2026-11-12
-affects: [src/debtector/diff.py, src/debtector/cli.py, docs/diff-schema.md]
+affects: [src/debtector/diff.py, src/debtector/cli/, docs/diff-schema.md]
 supersedes: null
 superseded_by: null
 issue: null

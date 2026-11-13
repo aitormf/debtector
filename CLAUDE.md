@@ -41,7 +41,7 @@ src/debtector/
 ├── graph_store.py    # GraphStore: SQLite + NetworkX cache en memoria
 ├── indexer.py        # Orquestador: recorre archivos, detecta cambios por SHA-256, parsea
 ├── metrics.py        # [Fase 1] Ca, Ce, inestabilidad, ciclos, god modules — TODO
-├── cli.py            # CLI: index, search, summary, impact, imports, status, callers, metrics, baseline
+├── cli/              # CLI (paquete, D-0011): index, search, summary, impact, imports, status, callers, metrics, baseline
 ├── logging.py        # Configuración structlog (dev vs prod)
 └── parser/
     ├── base.py           # LanguageParser (abstracta)

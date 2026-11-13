@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from debtector.cli import (
+from debtector.cli.app import main
+from debtector.cli.common import _get_store
+from debtector.cli.graph import (
     cmd_callers,
     cmd_impact,
     cmd_imports,
@@ -16,9 +18,7 @@ from debtector.cli import (
     cmd_search,
     cmd_status,
     cmd_summary,
-    main,
 )
-from debtector.cli.common import _get_store
 
 # ──────────────────────────────────────────────
 # Helpers
@@ -497,9 +497,9 @@ class TestGlobalOptionsPosition:
         """Run main() with ``argv`` and return the Namespace given to the handler."""
         captured: dict[str, argparse.Namespace] = {}
         monkeypatch.setattr(
-            f"debtector.cli.cmd_{command}", lambda args: captured.setdefault("args", args)
+            f"debtector.cli.app.cmd_{command}", lambda args: captured.setdefault("args", args)
         )
-        monkeypatch.setattr("debtector.cli.configure_logging", lambda **kwargs: None)
+        monkeypatch.setattr("debtector.cli.app.configure_logging", lambda **kwargs: None)
         monkeypatch.setattr(sys, "argv", ["debtector", *argv])
         main()
         return captured["args"]

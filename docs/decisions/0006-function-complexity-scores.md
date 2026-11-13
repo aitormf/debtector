@@ -4,7 +4,7 @@ title: "Las funciones con complejidad alta puntúan en el health score"
 type: rule
 status: accepted
 date: 2026-11-10
-affects: [src/debtector/cli.py, src/debtector/audit/, src/debtector/config.py, docs/audit-schema.md]
+affects: [src/debtector/cli/, src/debtector/audit/, src/debtector/config.py, docs/audit-schema.md]
 supersedes: null
 superseded_by: null
 issue: null

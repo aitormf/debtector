@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from debtector.cli import cmd_index
+from debtector.cli.graph import cmd_index
 from debtector.cli.pr_diff import cmd_diff
 from debtector.logging import configure_logging
 
