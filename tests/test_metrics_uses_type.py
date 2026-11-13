@@ -62,8 +62,9 @@ class TestUsesTypeWeight:
         tmp_db.store_file(
             "src/a.py",
             [_file("src/a.py")],
-            [_import("src/a.py", "flask")],
+            [_import("src/a.py", "src/b.py")],
         )
+        tmp_db.store_file("src/b.py", [_file("src/b.py")], [])
 
         metrics = {m.file_path: m for m in compute_metrics(tmp_db)}
         assert metrics["src/a.py"].fan_out == pytest.approx(1.0)
@@ -74,11 +75,12 @@ class TestUsesTypeWeight:
             "src/a.py",
             [_file("src/a.py")],
             [
-                _import("src/a.py", "flask"),
+                _import("src/a.py", "src/b.py"),
                 _uses_type("src/a.py", "User"),
                 _uses_type("src/a.py", "Response"),
             ],
         )
+        tmp_db.store_file("src/b.py", [_file("src/b.py")], [])
 
         metrics = {m.file_path: m for m in compute_metrics(tmp_db)}
         # 1 * 1.0 + 2 * 1.0 = 3.0

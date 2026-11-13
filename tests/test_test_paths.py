@@ -17,9 +17,11 @@ from debtector.config import load_config
 from debtector.logging import configure_logging
 from debtector.metrics import compute_metrics
 
-_HIGH_CE_MODULE = "".join(f"import mod{i}\n" for i in range(12)) + (
+_HIGH_CE_MODULE = "".join(f"from .mod{i} import v{i}\n" for i in range(12)) + (
     "\n\ndef risky():\n    return 1\n"
 )
+
+_SRC_MODULES = {"service.py", "risky.py", *(f"mod{i}.py" for i in range(12))}
 
 _TEST_MODULE = "from service import helper\n\n\ndef test_helper():\n    assert helper() == 1\n"
 
@@ -35,6 +37,8 @@ def _make_project(
     (root / "src").mkdir(parents=True)
     (root / "src" / "service.py").write_text("def helper():\n    return 1\n", encoding="utf-8")
     (root / "src" / "risky.py").write_text(_HIGH_CE_MODULE, encoding="utf-8")
+    for i in range(12):
+        (root / "src" / f"mod{i}.py").write_text(f"v{i} = 1\n", encoding="utf-8")
     if with_tests:
         (root / tests_dir).mkdir(parents=True)
         (root / tests_dir / "test_service.py").write_text(_TEST_MODULE, encoding="utf-8")
@@ -109,7 +113,7 @@ class TestIndexingTestPaths:
             metrics = compute_metrics(store)
         finally:
             store.close()
-        assert {m.file_path for m in metrics} == {"service.py", "risky.py"}
+        assert {m.file_path for m in metrics} == _SRC_MODULES
         # the test's import of ``service`` does not raise its Ca
         assert {m.file_path: m.fan_in for m in metrics}["service.py"] == 0
 
@@ -212,8 +216,8 @@ class TestAuditTestRisk:
         _make_project(tmp_path, with_tests=True, toml='test_paths = ["tests"]\n')
         _index(tmp_path, "src")
         out = _audit_json(tmp_path, capsys)
-        assert out["summary"]["modules"] == 2
-        assert {c["file_path"] for c in out["coupling"]} == {"service.py", "risky.py"}
+        assert out["summary"]["modules"] == len(_SRC_MODULES)
+        assert {c["file_path"] for c in out["coupling"]} == _SRC_MODULES
 
     def test_no_warning_when_tests_exist(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]

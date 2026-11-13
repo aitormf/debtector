@@ -50,8 +50,8 @@ Array of module-level coupling entries, sorted by `fan_in` descending.
 | field         | type    | meaning                                                |
 |---------------|---------|--------------------------------------------------------|
 | `file_path`   | string  | Relative path of the module.                           |
-| `fan_in`      | number  | Ca: weighted incoming imports.                         |
-| `fan_out`     | number  | Ce: weighted outgoing imports.                         |
+| `fan_in`      | number  | Ca: distinct internal modules importing this one.                       |
+| `fan_out`     | number  | Ce: distinct internal modules this one imports.                       |
 | `instability` | number  | `Ce / (Ca + Ce)` in `[0.0, 1.0]`.                      |
 | `god_module`  | boolean | `true` when `fan_in` is above the project's percentile and at least `god_module_min_ca` (default 10). |
 

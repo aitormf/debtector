@@ -12,13 +12,15 @@ Computes structural metrics at module (file) level:
   and with an absolute minimum Ca (``god_module_min_ca``).
 - SDP violations: dependencies from a stable module to a more unstable one.
 
-Metrics are computed over the graph's IMPORTS_FROM edges.
-Imports of external packages (with no File node in the index) also
-contribute to the importing module's fan-out.
+Metrics are computed over the graph's IMPORTS_FROM edges. Ca and Ce count
+distinct internal modules: imports that do not resolve to an indexed File
+(external packages) are ignored, and each (importer, imported) pair counts
+once however many import statements there are (D-0012).
 """
 
 from __future__ import annotations
 
+import posixpath
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass
@@ -28,7 +30,7 @@ from .models import EdgeKind, NodeKind
 
 # Version of the Ca/Ce computation. Bump it when a change makes the numbers
 # incomparable with those of an older baseline (D-0014).
-METRICS_VERSION = 1
+METRICS_VERSION = 2
 
 # Edge kinds considered for cycle detection
 _CYCLE_EDGE_KINDS = (EdgeKind.IMPORTS_FROM, EdgeKind.CALLS)
@@ -146,6 +148,15 @@ def _resolve_import_target(
         if abs_module in module_map:
             return module_map[abs_module]
 
+    # JS/TS relative path: "./b", "../lib/b" (with or without extension or index file)
+    if target.startswith(("./", "../")):
+        base = posixpath.normpath(posixpath.join(posixpath.dirname(source_file), target))
+        values = set(module_map.values())
+        for ext in ("", ".js", ".ts", ".jsx", ".tsx"):
+            for cand in (base + ext, f"{base}/index{ext}"):
+                if cand in values:
+                    return cand
+
     return target  # unresolved → external package
 
 
@@ -153,8 +164,8 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
     """Compute Ca, Ce and I for all indexed modules.
 
     Only ``File`` nodes take part as units of analysis. Imports of external
-    packages (e.g. ``"flask"``) increase the importer's Ce even though they
-    have no node of their own in the index.
+    packages (e.g. ``"flask"``) have no File node and are ignored; repeated
+    imports of the same module count once.
 
     IMPORTS_FROM edge targets are resolved from module name to file path
     via :func:`_resolve_import_target`, so that Ca correctly reflects the
@@ -194,14 +205,15 @@ def compute_metrics(store: GraphStore) -> list[ModuleMetrics]:
         (EdgeKind.IMPORTS_FROM,),
     ).fetchall()
 
+    seen_pairs: set[tuple[str, str]] = set()
     for r in import_rows:
         src = r["source_qualified"]
-        raw_tgt = r["target_qualified"]
-        resolved = _resolve_import_target(raw_tgt, r["file_path"], module_map)
-
+        resolved = _resolve_import_target(r["target_qualified"], r["file_path"], module_map)
+        if resolved not in file_paths or (src, resolved) in seen_pairs:
+            continue
+        seen_pairs.add((src, resolved))
         ce_map[src] = ce_map.get(src, 0.0) + IMPORTS_FROM_WEIGHT
-        if resolved in file_paths:
-            ca_map[resolved] = ca_map.get(resolved, 0.0) + IMPORTS_FROM_WEIGHT
+        ca_map[resolved] = ca_map.get(resolved, 0.0) + IMPORTS_FROM_WEIGHT
 
     # Additional Ce: outgoing USES_TYPE edges (peso USES_TYPE_WEIGHT)
     ut_ce_rows = conn.execute(
