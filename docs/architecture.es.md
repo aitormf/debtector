@@ -6,7 +6,7 @@
 
 Debtector analiza repositorios de código fuente, extrae su estructura (clases, funciones, métodos, imports, llamadas) y la almacena como un **grafo en SQLite**. El objetivo es **detectar acoplamiento de código en pipelines de CI y PR reviews**, dando al desarrollador contexto arquitectónico antes de mergear.
 
-ICP: desarrollador o tech lead que usa agentes de código (Claude Code, Copilot, Codex). Los agentes generan acoplamiento oculto a una velocidad que ningún humano alcanza; codeIndex actúa como guardarraíl arquitectónico en el pipeline.
+ICP: desarrollador o tech lead que usa agentes de código (Claude Code, Copilot, Codex). Los agentes generan acoplamiento oculto a una velocidad que ningún humano alcanza; Debtector actúa como guardarraíl arquitectónico en el pipeline.
 
 Ver [D-0002](decisions/0002-pivot-ci-coupling.md) para el contexto completo del pivote.
 
@@ -17,18 +17,31 @@ Ver [D-0002](decisions/0002-pivot-ci-coupling.md) para el contexto completo del 
 ```
 src/debtector/
 ├── models.py         # Tipos de datos: NodeInfo, EdgeInfo, GraphNode, GraphEdge, enums
-├── graph_store.py    # Persistencia: SQLite + NetworkX cache en memoria
+├── graph_store.py    # Persistencia: SQLite + FTS5 + NetworkX cache en memoria; clasificación de tests
 ├── indexer.py        # Orquestación: recorre archivos, detecta cambios, llama a parsers
-├── metrics.py        # Ca, Ce, inestabilidad, ciclos, god modules, herencia
+├── metrics.py        # Ca, Ce, inestabilidad, ciclos, god modules, SDP, herencia
 ├── git_history.py    # Análisis behavioral: churn, hotspots, temporal coupling, bus factor
+├── diff.py           # Diff arquitectónico entre dos índices (base vs. PR)
 ├── config.py         # Carga y valida debtector.toml (umbrales y severidad)
-├── cli.py            # CLI: index, search, summary, impact, imports, callers,
-│                     #       untested, status, coupling, baseline,
-│                     #       hotspots, temporal-coupling, bus-factor, git-coupling, report
 ├── utils.py          # Utilidades compartidas: is_test_file()
 ├── logging.py        # Configuración structlog (dev coloreado / prod JSON)
+├── cli/              # Paquete CLI, un módulo por grupo de comandos (D-0011)
+│   ├── app.py            # argparse y despacho
+│   ├── common.py         # helpers compartidos (store, raíz del índice, test paths, salida)
+│   ├── graph.py          # index, search, summary, impact, imports, status, callers
+│   ├── coupling.py       # coupling (y el alias obsoleto metrics)
+│   ├── baseline.py       # baseline save / status
+│   ├── reporters.py      # anotaciones de GitHub e informe de GitLab
+│   ├── quality.py        # complexity, untested, audit
+│   ├── git.py            # hotspots, temporal-coupling, bus-factor, git-coupling
+│   ├── report.py         # report
+│   └── pr_diff.py        # diff
+├── audit/            # Superficie audit (D-0003): health score, LCOM4, testRisk, prioridad de ciclos, complejidad
+├── render/
+│   └── diff_markdown.py  # Markdown del diff para el comentario de PR
 └── parser/
     ├── base.py           # LanguageParser — clase abstracta
+    ├── complexity.py     # Complejidad ciclomática (McCabe) sobre árboles tree-sitter (D-0004)
     ├── python_parser.py  # PythonParser — Tree-sitter Python
     └── js_parser.py      # JavaScriptParser — Tree-sitter JS/TS
 ```
@@ -40,12 +53,14 @@ src/debtector/
 | `models.py` | Define los tipos de entrada (`NodeInfo`, `EdgeInfo`) y salida (`GraphNode`, `GraphEdge`) sin dependencias internas |
 | `graph_store.py` | Única fuente de verdad. Escribe en SQLite, mantiene un DiGraph de NetworkX como cache para traversals |
 | `indexer.py` | Recorre el sistema de archivos, detecta cambios por SHA-256, delega el parseo y llama a `GraphStore.store_file()`. Genera aristas COVERS tras cada indexación (no-fatal) |
-| `metrics.py` | Computa métricas de acoplamiento **estructural** sobre el grafo: Ca, Ce, inestabilidad, ciclos (Tarjan), god modules (p90), profundidad de herencia |
+| `metrics.py` | Computa métricas de acoplamiento **estructural** sobre el grafo: Ca, Ce, inestabilidad, ciclos (Tarjan), god modules (p90), violaciones SDP, profundidad de herencia |
 | `git_history.py` | Computa métricas de acoplamiento **behavioral** sobre el historial git: churn (`git log --numstat`), hotspot score, temporal coupling, bus factor (`git blame`). Solo lectura; no escribe en DB |
+| `diff.py` | Compara dos índices con las reglas de `baseline status` (D-0008) y decide si el resultado bloquea CI (`blocks_ci`). Schema en [diff-schema.md](diff-schema.md) |
+| `audit/` | Segundo presentador sobre el mismo grafo (D-0003): health score, LCOM4, testRisk, prioridad de ciclos, complejidad de funciones. Schema en [audit-schema.md](audit-schema.md) |
 | `config.py` | Lee `debtector.toml` con `tomllib` (stdlib). Expone `DebtectorConfig` con umbrales y severidades configurables |
 | `utils.py` | Utilidades compartidas sin dependencias internas: `is_test_file()` |
 | `parser/*` | Transforman un archivo fuente en `(list[NodeInfo], list[EdgeInfo])` usando Tree-sitter. Sin acceso a la DB |
-| `cli.py` | Traduce argumentos de línea de comandos a llamadas al GraphStore, metrics y git_history. Sin lógica de negocio propia. Auto-indexa silenciosamente antes de cada comando de análisis |
+| `cli/` | Traduce argumentos de línea de comandos a llamadas al GraphStore, metrics y git_history. Sin lógica de negocio propia. Auto-indexa silenciosamente antes de cada comando de análisis |
 
 ---
 
@@ -85,7 +100,9 @@ CLI / CI pipeline
     │     ├── temporal coupl. → git log --name-only, pares co-cambiantes
     │     └── bus factor      → git blame --line-porcelain
     ├── Informe completo      → coupling + git-coupling   (debtector report)
-    └── Baseline / ratcheting → baseline.json + delta     (debtector baseline)
+    ├── Audit                 → audit/ + metrics + git    (debtector audit)
+    ├── Baseline / ratcheting → baseline.json + delta     (debtector baseline)
+    └── Diff de PR            → diff.py, ref base indexada en un worktree temporal (debtector diff)
 ```
 
 ---
@@ -147,8 +164,9 @@ idx_edges_file       ON edges(file_path)
 
 ```sql
 CREATE VIRTUAL TABLE nodes_fts USING fts5(
+    node_id UNINDEXED,
     name, qualified_name, signature, docstring,
-    content='nodes', content_rowid='id'
+    tokenize = 'unicode61'
 );
 ```
 
@@ -162,16 +180,21 @@ Ranking BM25 con camelCase splitting: `"UserService"` → tokens `user`, `servic
 
 ```json
 {
+  "metrics_version": 12,
   "saved_at": "2026-04-24T10:00:00+00:00",
   "modules": [
     { "file_path": "src/auth.py", "fan_in": 8.0, "fan_out": 3.0, "instability": 0.2727 }
   ],
   "cycles": [["src/auth.py", "src/user.py"]],
-  "god_modules": ["src/models.py"]
+  "god_modules": ["src/models.py"],
+  "sdp_violations": [{ "source": "src/auth.py", "target": "src/user.py" }],
+  "complexity": { "medium": 21, "functions": { "src/auth.py::login": 24 } }
 }
 ```
 
-El `.debtector/.gitignore` es gestionado por codeIndex (siempre sobreescrito): ignora todo excepto `baseline.json` y el propio `.gitignore`.
+`metrics_version` es la versión de las métricas de acoplamiento (D-0014): un baseline guardado con otra versión no compara god modules, SDP ni inestabilidad. `complexity` guarda las funciones en o por encima de `complexity_medium` (D-0019).
+
+El `.debtector/.gitignore` es gestionado por Debtector (siempre sobreescrito): ignora todo excepto `baseline.json` y el propio `.gitignore`.
 
 ---
 
@@ -196,7 +219,7 @@ El `.debtector/.gitignore` es gestionado por codeIndex (siempre sobreescrito): i
 | `INHERITS` | Clase hereda de otra | `app.py::AdminService` → `UserService` |
 | `CALLS` | Función/método llama a otro símbolo | `app.py::create_app` → `app.py::UserService.__init__` |
 | `COVERS` | Test ejerce a símbolo de producción | `tests/test_auth.py::test_login` → `src/auth.py::login` |
-| `USES_TYPE` | Función referencia un tipo en sus type hints (no cuenta en Ca/Ce) | `app.py::get_user` → `User` |
+| `USES_TYPE` | Función referencia un tipo en sus type hints (no cuenta en Ca/Ce, D-0012) | `app.py::get_user` → `User` |
 | `DEPENDS_ON` | Dependencia genérica (uso futuro) | — |
 
 ---
@@ -224,7 +247,9 @@ src/auth/service.py::create_app            → Function
 | Fan-out (Ce) | Módulos internos distintos que importa este módulo (IMPORTS_FROM) | ≥ 0 |
 | Inestabilidad (I) | Ce / (Ca + Ce) | [0, 1] |
 
-Las aristas `USES_TYPE` no cuentan en Ca ni en Ce (D-0012). `IMPORTS_FROM_WEIGHT` es una constante pública en `metrics.py`.
+Un módulo solo se marca **inestable** si es el destino de una violación del Stable Dependencies Principle: una arista `IMPORTS_FROM` `A → B` entre módulos indexados con `I(B) > I(A) + sdp_margin`. Una I alta en una hoja es normal y no se marca. Un **god module** necesita Ca por encima del `god_module_percentile` **y** `Ca >= god_module_min_ca`.
+
+Solo cuentan las aristas `IMPORTS_FROM` que se resuelven a un fichero del índice (D-0012): los imports de la librería estándar y de terceros, los imports repetidos del mismo módulo y las aristas `USES_TYPE` no cuentan. Los imports absolutos de Python se resuelven desde la raíz del paquete (D-0016) y `from X import a` depende del submódulo `X.a` si existe (D-0018). Los ficheros de test no son módulos ni dependientes (D-0015). Las fachadas puras de paquete (`__init__.py` o `index.*` de JS/TS sin clases ni funciones) no participan en las violaciones SDP (D-0017).
 
 ### Ciclos
 
@@ -232,7 +257,7 @@ Detección mediante el **algoritmo de Tarjan iterativo** (evita RecursionError e
 
 ### God modules
 
-Outlier estadístico en Ca: módulos cuyo fan-in supera el **percentil 90** del proyecto (umbral relativo, no absoluto). Configurable en `debtector.toml`.
+Outlier estadístico en Ca: módulos cuyo fan-in supera el **percentil 90** del proyecto **y** alcanza `god_module_min_ca` (10). Ambos configurables en `debtector.toml`.
 
 ### Herencia
 
@@ -280,6 +305,7 @@ cycles      = "error"    # error | warning | info (default: error)
 god_modules = "warning"  # (default: warning)
 instability = "warning"  # (default: warning)
 inheritance = "info"     # (default: info)
+complexity  = "warning"  # funciones empeoradas en diff / baseline status (default: warning)
 ```
 
 **Severidades:**
@@ -295,8 +321,10 @@ inheritance = "info"     # (default: info)
 
 - **Nuevos ciclos** no presentes en baseline → según `severity.cycles`
 - **Nuevos god modules** → según `severity.god_modules`
-- **Regresión de inestabilidad** > `_INSTABILITY_TOLERANCE` (0.05) → según `severity.instability`
+- **Regresión de inestabilidad** > `INSTABILITY_TOLERANCE` (0.05, en `diff.py`) → según `severity.instability`
 - **Nuevas violaciones SDP** (`A → B` con `I(B) > I(A) + sdp_margin`) → según `severity.instability`. Solo se comparan si el baseline contiene `sdp_violations`; un baseline antiguo no se marca
+- **Funciones nuevas o empeoradas** con complejidad >= `complexity_medium` → según `severity.complexity`. Se omite (`complexity_skipped`) si el baseline no tiene `complexity` o se guardó con otro `complexity_medium`
+- **Baseline de otra `metrics_version`** → no se comparan god modules, SDP ni inestabilidad (los ciclos sí)
 - **Sin baseline** → siempre exit code 0 (modo silencioso)
 
 ### CI reporter
@@ -351,3 +379,5 @@ El extractor de type hints mantiene un `set[str]` compartido por archivo (`uses_
 |---|---|
 | [D-0001](decisions/0001-semantic-search.md) | FTS5 + sqlite-vec + fastembed para búsqueda semántica (implementado, congelado y después eliminado; FTS5 se mantiene) |
 | [D-0002](decisions/0002-pivot-ci-coupling.md) | Pivote: de navegación para IA a análisis de acoplamiento para CI/PR |
+
+La lista completa y actualizada está en [decisions/README.md](decisions/README.md).

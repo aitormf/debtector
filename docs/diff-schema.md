@@ -1,10 +1,24 @@
 # `debtector diff` schema
 
 `debtector diff <db_base> <db_pr> [--json]` compares two indexes with the rules of
-`baseline status` (D-0008). Thresholds come from `debtector.toml` of `--project`.
+`baseline status` (D-0008). `debtector diff --base <ref>` instead indexes the git ref in
+a temporary worktree and compares it with the (refreshed) index of `--project`; it cannot
+be combined with index paths. Thresholds and severities come from `debtector.toml` of
+`--project`.
 
 With `--json` it prints one object with one key per section, each a list (empty if
 nothing changed). Without changes the text output is `No architectural changes`.
+`--format markdown` prints the PR comment that the GitHub Action publishes.
+
+Exit codes (the output is printed first, whatever the code):
+
+| Code | Meaning |
+|---|---|
+| `0` | Nothing new has `error` severity (the diff may still list changes) |
+| `1` | A non-empty section configured as `error` in `[metrics.severity]`: `new_cycles` (`cycles`), `new_god_modules` (`god_modules`), `new_sdp_violations` or `instability_regressions` (`instability`), `worsened_functions` (`complexity`) |
+| `2` | Invalid input: an index that is missing or not valid, `--base` combined with index paths, an unknown git ref or failing `git` command, or indexes built by different parser versions |
+
+Resolved items, `improved_functions` and hotspots never change the exit code.
 
 | Key | Item |
 |---|---|

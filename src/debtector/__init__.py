@@ -1,4 +1,4 @@
-"""Debtector — Code graph on SQLite to reduce AI token usage."""
+"""Debtector — coupling guardrail for CI and PR reviews, built on a code graph in SQLite."""
 
 from debtector.graph_store import GraphStore
 from debtector.indexer import Indexer

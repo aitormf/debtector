@@ -26,6 +26,7 @@ Example of ``debtector.toml``:
     god_modules = "warning"
     instability = "warning"
     inheritance = "info"
+    complexity  = "warning"  # "error" makes `debtector diff` block on worsened functions
 
     # Calibration of ``debtector audit`` (all optional; default values).
     [audit.thresholds]

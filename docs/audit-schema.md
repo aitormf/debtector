@@ -20,11 +20,12 @@ not.
   "testRisk": {...},
   "hotspots": [...],
   "busFactor": [...],
-  "inheritance": [...]
+  "inheritance": [...],
+  "complexity": [...]
 }
 ```
 
-The eight sections appear in this exact order. List sections are capped to
+The nine sections appear in this exact order (`complexity`, added with health score version 4, is last). List sections are capped to
 the CLI's `--top-n` (default: 10) unless `--full` is passed.
 
 ## `schema_version`
@@ -41,7 +42,7 @@ Object. Aggregate counts and the health score for the whole index.
 | `cycles`       | int  | Number of strongly-connected components of size > 1.    |
 | `classes`      | int  | Number of indexed `Class` nodes.                        |
 | `health_score` | int  | Aggregate score in `[0, 100]` (see Health score below). |
-| `health_score_version` | int | Meaning of `health_score`; currently `4`. Absent in version 1. |
+| `health_score_version` | int | Meaning of `health_score`; currently `5`. Absent in version 1. |
 
 ## `coupling`
 
